@@ -14755,6 +14755,7 @@ const PCSummary = ({ section }) => {
   const [rows, setRows] = useState(null);
   const [error, setError] = useState(null);
   const [selectedBuilding, setSelectedBuilding] = useState(null);
+  const [editing, setEditing] = useState(null); // { kind: 'building' | 'resident' | 'security', record }
 
   const reload = async () => {
     setError(null); setRows(null);
@@ -14857,7 +14858,8 @@ const PCSummary = ({ section }) => {
                     <td>{floors}</td>
                     <td>{(b.units||[]).length}</td>
                     <td>{b.created_at ? new Date(b.created_at).toLocaleDateString() : '—'}</td>
-                    <td style={{textAlign:'right'}}>
+                    <td style={{textAlign:'right',whiteSpace:'nowrap'}}>
+                      <button onClick={(e) => { e.stopPropagation(); setEditing({ kind: 'building', record: b }); }} style={{padding:'4px 10px',fontSize:11,background:'#fff',border:'1px solid #d5cfc8',borderRadius:4,color:'var(--text-dark)',cursor:'pointer',marginRight:6}}>Edit</button>
                       <button onClick={(e) => {
                         e.stopPropagation();
                         if (!window.confirm('Delete "' + b.name + '" and all its ' + (b.units||[]).length + ' unit(s)? This cannot be undone.')) return;
@@ -14873,19 +14875,21 @@ const PCSummary = ({ section }) => {
           </table>
         </div>
         {selectedBuilding && <BuildingDetailModal building={selectedBuilding} onClose={() => setSelectedBuilding(null)}/>}
+        {editing && <EditRecordModal kind={editing.kind} record={editing.record} onClose={() => setEditing(null)} onSaved={reload}/>}
       </>
     );
   }
 
   if (section === 'residents') {
     return (
+      <>
       <div className="card">
         <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:12}}>
           <div style={{fontSize:12,color:'var(--text-secondary)'}}>{rows.length} resident{rows.length===1?'':'s'}</div>
           <button className="btn btn-sm" onClick={reload}>Refresh</button>
         </div>
         <table className="data-table">
-          <thead><tr><th>Name</th><th>Phone</th><th>Building</th><th>Floor</th><th>Unit</th><th>Created</th></tr></thead>
+          <thead><tr><th>Name</th><th>Phone</th><th>Building</th><th>Floor</th><th>Unit</th><th>Created</th><th style={{textAlign:'right'}}>Actions</th></tr></thead>
           <tbody>
             {rows.map(r => (
               <tr key={r.id}>
@@ -14895,22 +14899,35 @@ const PCSummary = ({ section }) => {
                 <td>{r.floor}</td>
                 <td>{r.unit_number}</td>
                 <td>{r.created_at ? new Date(r.created_at).toLocaleDateString() : '—'}</td>
+                <td style={{textAlign:'right',whiteSpace:'nowrap'}}>
+                  <button onClick={() => setEditing({ kind: 'resident', record: r })} style={{padding:'4px 10px',fontSize:11,background:'#fff',border:'1px solid #d5cfc8',borderRadius:4,color:'var(--text-dark)',cursor:'pointer',marginRight:6}}>Edit</button>
+                  <button onClick={async () => {
+                    if (!window.confirm('Delete resident "' + r.full_name + '"? This removes their login too.')) return;
+                    const out = await deleteUsersViaFunction([r.id]);
+                    const first = out && out.results && out.results[0];
+                    if (!first || !first.ok) alert('Delete failed: ' + ((first && first.error) || (out && out.error) || 'Unknown'));
+                    reload();
+                  }} style={{padding:'4px 10px',fontSize:11,background:'#fff',border:'1px solid #d5cfc8',borderRadius:4,color:'#8b4a42',cursor:'pointer'}}>Delete</button>
+                </td>
               </tr>
             ))}
           </tbody>
         </table>
       </div>
+      {editing && <EditRecordModal kind={editing.kind} record={editing.record} onClose={() => setEditing(null)} onSaved={reload}/>}
+      </>
     );
   }
 
   return (
+    <>
     <div className="card">
       <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:12}}>
         <div style={{fontSize:12,color:'var(--text-secondary)'}}>{rows.length} guard{rows.length===1?'':'s'}</div>
         <button className="btn btn-sm" onClick={reload}>Refresh</button>
       </div>
       <table className="data-table">
-        <thead><tr><th>Name</th><th>Phone</th><th>Building</th><th>Shift</th><th>Created</th></tr></thead>
+        <thead><tr><th>Name</th><th>Phone</th><th>Building</th><th>Shift</th><th>Created</th><th style={{textAlign:'right'}}>Actions</th></tr></thead>
         <tbody>
           {rows.map(r => (
             <tr key={r.id}>
@@ -14919,11 +14936,23 @@ const PCSummary = ({ section }) => {
               <td>{r.building_name}</td>
               <td>{r.shift}</td>
               <td>{r.created_at ? new Date(r.created_at).toLocaleDateString() : '—'}</td>
+              <td style={{textAlign:'right',whiteSpace:'nowrap'}}>
+                <button onClick={() => setEditing({ kind: 'security', record: r })} style={{padding:'4px 10px',fontSize:11,background:'#fff',border:'1px solid #d5cfc8',borderRadius:4,color:'var(--text-dark)',cursor:'pointer',marginRight:6}}>Edit</button>
+                <button onClick={async () => {
+                  if (!window.confirm('Delete guard "' + r.full_name + '"? This removes their login too.')) return;
+                  const out = await deleteUsersViaFunction([r.id]);
+                  const first = out && out.results && out.results[0];
+                  if (!first || !first.ok) alert('Delete failed: ' + ((first && first.error) || (out && out.error) || 'Unknown'));
+                  reload();
+                }} style={{padding:'4px 10px',fontSize:11,background:'#fff',border:'1px solid #d5cfc8',borderRadius:4,color:'#8b4a42',cursor:'pointer'}}>Delete</button>
+              </td>
             </tr>
           ))}
         </tbody>
       </table>
     </div>
+    {editing && <EditRecordModal kind={editing.kind} record={editing.record} onClose={() => setEditing(null)} onSaved={reload}/>}
+    </>
   );
 };
 
@@ -15527,6 +15556,102 @@ const UnitAttachmentsModal = ({ unit, buildingName, onClose }) => {
   );
 };
 
+// ==================== EDIT MODAL + DELETE HELPER ====================
+
+async function deleteUsersViaFunction(profileIds) {
+  const { data: { session } } = await supabaseClient.auth.getSession();
+  const headers = { 'Content-Type': 'application/json' };
+  if (session && session.access_token) headers['Authorization'] = 'Bearer ' + session.access_token;
+  const resp = await fetch(SUPABASE_URL + '/functions/v1/delete-user', {
+    method: 'POST', headers,
+    body: JSON.stringify({ profile_ids: profileIds }),
+  });
+  return resp.json();
+}
+
+const EditRecordModal = ({ kind, record, onClose, onSaved }) => {
+  const initial = (() => {
+    if (kind === 'building') return { name: record.name || '', address: record.address || '', notes: record.notes || '' };
+    if (kind === 'resident') return { full_name: record.full_name || '', phone: record.phone || '' };
+    return { full_name: record.full_name || '', phone: record.phone || '', shift: record.shift || 'Day' };
+  })();
+  const [form, setForm] = useState(initial);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState(null);
+
+  const save = async () => {
+    setBusy(true); setError(null);
+    try {
+      if (kind === 'building') {
+        const { error: e } = await supabaseClient.from('buildings').update({
+          name: form.name.trim(),
+          address: form.address.trim() || null,
+          notes: form.notes.trim() || null,
+        }).eq('id', record.id);
+        if (e) throw e;
+      } else if (kind === 'resident' || kind === 'security') {
+        const { error: e } = await supabaseClient.from('profiles').update({
+          full_name: form.full_name.trim(),
+          phone: form.phone.trim() || null,
+        }).eq('id', record.id);
+        if (e) throw e;
+        if (kind === 'security' && form.shift !== record.shift) {
+          const { error: se } = await supabaseClient.from('security_assignments').update({
+            shift: form.shift,
+          }).eq('profile_id', record.id);
+          if (se) throw se;
+        }
+      }
+      if (onSaved) onSaved();
+      onClose();
+    } catch (e) {
+      setError(String(e.message || e));
+    }
+    setBusy(false);
+  };
+
+  return (
+    <div className="modal-overlay" onClick={onClose} style={{zIndex:1050}}>
+      <div className="modal" onClick={e => e.stopPropagation()} style={{maxWidth:500}}>
+        <div className="modal-header">
+          <div>
+            <div style={{fontSize:10,letterSpacing:'0.08em',textTransform:'uppercase',color:'var(--text-muted)',marginBottom:4}}>Edit {kind}</div>
+            <h2>{kind === 'building' ? record.name : record.full_name}</h2>
+          </div>
+          <button className="modal-close" onClick={onClose}>×</button>
+        </div>
+        {kind === 'building' && (
+          <div>
+            <div style={{marginBottom:14}}><PCField label="Building name" required value={form.name} onChange={v => setForm(f => ({...f, name: v}))}/></div>
+            <div style={{marginBottom:14}}><PCField label="Address" value={form.address} onChange={v => setForm(f => ({...f, address: v}))}/></div>
+            <div style={{marginBottom:14}}><PCField label="Notes" value={form.notes} onChange={v => setForm(f => ({...f, notes: v}))} textarea/></div>
+          </div>
+        )}
+        {kind === 'resident' && (
+          <div>
+            <div style={{marginBottom:14}}><PCField label="Full name" required value={form.full_name} onChange={v => setForm(f => ({...f, full_name: v}))}/></div>
+            <div style={{marginBottom:14}}><PCField label="Phone" value={form.phone} onChange={v => setForm(f => ({...f, phone: v}))}/></div>
+            <div style={{fontSize:11,color:'var(--text-muted)',marginBottom:14,padding:10,background:'var(--bg-page)',borderRadius:6}}>Email, building, and unit cannot be changed here. Delete and re-add the resident to move them to a different unit.</div>
+          </div>
+        )}
+        {kind === 'security' && (
+          <div>
+            <div style={{marginBottom:14}}><PCField label="Full name" required value={form.full_name} onChange={v => setForm(f => ({...f, full_name: v}))}/></div>
+            <div style={{marginBottom:14}}><PCField label="Phone" value={form.phone} onChange={v => setForm(f => ({...f, phone: v}))}/></div>
+            <div style={{marginBottom:14}}><PCSelect label="Shift" value={form.shift} onChange={v => setForm(f => ({...f, shift: v}))} options={[{value:'Day',label:'Day'},{value:'Night',label:'Night'},{value:'24h',label:'24h'}]}/></div>
+            <div style={{fontSize:11,color:'var(--text-muted)',marginBottom:14,padding:10,background:'var(--bg-page)',borderRadius:6}}>Email and building cannot be changed here. Delete and re-add to move the guard to a different building.</div>
+          </div>
+        )}
+        {error && <div style={{padding:10,background:'#fdf2f1',color:'#8b4a42',borderRadius:6,fontSize:12,marginBottom:14}}>{error}</div>}
+        <div style={{display:'flex',gap:10,justifyContent:'flex-end',marginTop:8}}>
+          <button className="btn" onClick={onClose}>Cancel</button>
+          <button className="btn btn-primary" disabled={busy} onClick={save}>{busy ? 'Saving…' : 'Save changes'}</button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 // ==================== UPCOMING PRE-APPROVALS (security dashboard) ====================
 // Shown to security users (authenticated via Supabase Auth) on their dashboard.
 // Pulls live from the new `visits` table — independent of the legacy JSON blob.
@@ -15538,6 +15663,7 @@ const UpcomingVisitsPanel = () => {
   useEffect(() => {
     if (!supabaseClient) { setHasAuth(false); return; }
     let mounted = true;
+    let channel = null;
     const load = async () => {
       const { data: { session } } = await supabaseClient.auth.getSession();
       if (!mounted) return;
@@ -15553,8 +15679,20 @@ const UpcomingVisitsPanel = () => {
       if (mounted && !error) setVisits(data || []);
     };
     load();
-    const id = setInterval(load, 8000);
-    return () => { mounted = false; clearInterval(id); };
+    // Supabase Realtime — sub-second updates on any visits change (RLS still applies).
+    try {
+      channel = supabaseClient
+        .channel('visits-realtime')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'visits' }, () => load())
+        .subscribe();
+    } catch (_) { /* fall back to polling if realtime unavailable */ }
+    // Slow fallback poll (15s) in case the realtime channel drops
+    const id = setInterval(load, 15000);
+    return () => {
+      mounted = false;
+      clearInterval(id);
+      if (channel) { try { supabaseClient.removeChannel(channel); } catch(_) {} }
+    };
   }, []);
 
   if (hasAuth === null) return null;
@@ -15565,7 +15703,7 @@ const UpcomingVisitsPanel = () => {
       <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:12,paddingBottom:10,borderBottom:'1px solid var(--border-light)'}}>
         <div>
           <div className="sec-kpi-label" style={{marginBottom:4}}>UPCOMING PRE-APPROVALS</div>
-          <div style={{fontSize:10,color:'#a89a92'}}>Live from new visits table · refreshes every 8s</div>
+          <div style={{fontSize:10,color:'#a89a92'}}>Live from new visits table · realtime stream + 15s fallback</div>
         </div>
         <div style={{fontSize:24,fontWeight:700,color:'#1a1a1a'}}>{visits.length}</div>
       </div>
