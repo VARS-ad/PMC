@@ -4426,12 +4426,11 @@ const Sidebar = ({ page, setPage, isOpen, onClose, onLogout }) => {
 };
 
 // ==================== TOP BAR ====================
-const ALL_PROPERTIES = [
-  { id: 'pinnacle', name: 'The Pinnacle Residences', location: 'Al Reem Island', towers: 4, units: 1240 },
-  { id: 'raha', name: 'Al Raha Gardens', location: 'Al Raha Beach', towers: 3, units: 680 },
-  { id: 'saadiyat', name: 'Saadiyat Grove Residences', location: 'Saadiyat Island', towers: 2, units: 920 },
-  { id: 'yas', name: 'Yas Bay Residences', location: 'Yas Island', towers: 1, units: 340 },
-  { id: 'bloom', name: 'Bloom Living', location: 'Casares, Abu Dhabi', towers: 5, units: 1560 }
+// The property dropdown is populated from Supabase (the user's actual buildings)
+// plus two "Coming soon" placeholders to convey future scope.
+const COMING_SOON_PROPERTIES = [
+  { id: 'soon-commercial', name: 'Commercial Land', location: 'Coming soon · multi-use development', towers: 0, units: 0, comingSoon: true },
+  { id: 'soon-villa',      name: 'Villa Compound',  location: 'Coming soon · low-rise residential', towers: 0, units: 0, comingSoon: true },
 ];
 
 const TopBar = ({ onCreateClick, onMenuToggle, onLogout, onSearchSelect }) => {
@@ -4439,7 +4438,33 @@ const TopBar = ({ onCreateClick, onMenuToggle, onLogout, onSearchSelect }) => {
   const [showCreate, setShowCreate] = useState(false);
   const [showPmProfile, setShowPmProfile] = useState(false);
   const [showPropertyDropdown, setShowPropertyDropdown] = useState(false);
-  const [selectedProperties, setSelectedProperties] = useState(['pinnacle']);
+  const [allProperties, setAllProperties] = useState(COMING_SOON_PROPERTIES);
+  const [selectedProperties, setSelectedProperties] = useState([]);
+  useEffect(() => {
+    if (!supabaseClient) return;
+    let mounted = true;
+    (async () => {
+      try {
+        const { data: buildings } = await supabaseClient.from('buildings').select('id,name,address').order('name');
+        if (!mounted) return;
+        const ids = (buildings || []).map(b => b.id);
+        const unitCounts = {};
+        if (ids.length) {
+          const { data: units } = await supabaseClient.from('units').select('building_id').in('building_id', ids);
+          (units || []).forEach(u => { unitCounts[u.building_id] = (unitCounts[u.building_id] || 0) + 1; });
+        }
+        const real = (buildings || []).map(b => ({
+          id: b.id, name: b.name, location: b.address || '—',
+          towers: 1, units: unitCounts[b.id] || 0,
+        }));
+        if (!mounted) return;
+        setAllProperties([...real, ...COMING_SOON_PROPERTIES]);
+        if (real.length > 0) setSelectedProperties(prev => prev.length ? prev : [real[0].id]);
+      } catch (_) { /* keep fallback */ }
+    })();
+    return () => { mounted = false; };
+  }, []);
+  const realProps = allProperties.filter(p => !p.comingSoon);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchFocused, setSearchFocused] = useState(false);
   const [showMyProfileModal, setShowMyProfileModal] = useState(false);
@@ -4479,8 +4504,8 @@ const TopBar = ({ onCreateClick, onMenuToggle, onLogout, onSearchSelect }) => {
   };
 
   const propertyLabel = selectedProperties.length === 1
-    ? ALL_PROPERTIES.find(p => p.id === selectedProperties[0])?.name
-    : selectedProperties.length === ALL_PROPERTIES.length
+    ? (allProperties.find(p => p.id === selectedProperties[0])?.name || '—')
+    : selectedProperties.length === realProps.length && realProps.length > 0
     ? 'All Properties'
     : selectedProperties.length + ' Properties Selected';
 
@@ -4543,7 +4568,7 @@ const TopBar = ({ onCreateClick, onMenuToggle, onLogout, onSearchSelect }) => {
         <div className="property-select" onClick={() => setShowPropertyDropdown(!showPropertyDropdown)} style={{cursor:'pointer'}}>
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#8a8a8a" strokeWidth="1.5"><path d="M3 21h18M5 21V7l7-4 7 4v14M9 21v-6h6v6"/></svg>
           <span>{propertyLabel}</span>
-          {selectedProperties.length > 1 && selectedProperties.length < ALL_PROPERTIES.length && (
+          {selectedProperties.length > 1 && selectedProperties.length < realProps.length && (
             <span style={{background:'#928989',color:'#fff',fontSize:10,padding:'1px 6px',borderRadius:10,fontWeight:600}}>{selectedProperties.length}</span>
           )}
           <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#8a8a8a" strokeWidth="2" style={{transform: showPropertyDropdown ? 'rotate(180deg)' : 'rotate(0deg)',transition:'transform 0.2s'}}><polyline points="6 9 12 15 18 9"/></svg>
@@ -4556,13 +4581,13 @@ const TopBar = ({ onCreateClick, onMenuToggle, onLogout, onSearchSelect }) => {
               <div style={{padding:'12px 16px',borderBottom:'1px solid #ebe7e3',display:'flex',justifyContent:'space-between',alignItems:'center'}}>
                 <span style={{fontSize:12,fontWeight:600,color:'#1a1a1a',letterSpacing:'0.04em'}}>{t('pm.selectProperties')}</span>
                 <span style={{fontSize:11,color:'#a89a92',cursor:'pointer'}} onClick={() => {
-                  setSelectedProperties(selectedProperties.length === ALL_PROPERTIES.length ? ['pinnacle'] : ALL_PROPERTIES.map(p => p.id));
-                }}>{selectedProperties.length === ALL_PROPERTIES.length ? t('pm.deselectAll') : t('pm.selectAll')}</span>
+                  setSelectedProperties(selectedProperties.length === realProps.length ? (realProps[0] ? [realProps[0].id] : []) : realProps.map(p => p.id));
+                }}>{selectedProperties.length === realProps.length && realProps.length > 0 ? t('pm.deselectAll') : t('pm.selectAll')}</span>
               </div>
               <div style={{padding:'8px 0',maxHeight:300,overflowY:'auto'}}>
-                {ALL_PROPERTIES.map(p => {
+                {allProperties.map(p => {
                   const isSelected = selectedProperties.includes(p.id);
-                  const isComingSoon = p.id !== 'pinnacle';
+                  const isComingSoon = !!p.comingSoon;
                   return (
                     <div key={p.id} onClick={() => !isComingSoon && toggleProperty(p.id)}
                       style={{display:'flex',alignItems:'center',gap:12,padding:'10px 16px',cursor: isComingSoon ? 'default' : 'pointer',background: isSelected ? '#f8f8f8' : 'transparent',transition:'background 0.15s',opacity: isComingSoon ? 0.5 : 1}}>
@@ -4579,7 +4604,7 @@ const TopBar = ({ onCreateClick, onMenuToggle, onLogout, onSearchSelect }) => {
                 })}
               </div>
               <div style={{padding:'10px 16px',borderTop:'1px solid #f0f0f0',fontSize:11,color:'#a89a92'}}>
-                {selectedProperties.length} of {ALL_PROPERTIES.length} properties selected
+                {selectedProperties.length} of {realProps.length} properties selected
               </div>
             </div>
           </>
