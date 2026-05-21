@@ -18487,10 +18487,17 @@ const App = () => {
   const [role, setRole] = useState(() => {
     try { return localStorage.getItem('varspm_role') || null; } catch(e) { return null; }
   });
-  // Sync URL hash with the current role so each tab's URL reflects its view —
-  // bookmarkable as /#/pmc, /#/resident, /#/security. Updates on login + logout.
+  // Sync URL hash + document.title with the current role so each tab's URL
+  // and browser tab label reflect its view (bookmarkable, distinguishable).
   useEffect(() => {
     try {
+      const titles = {
+        manager:  'VARS — Property Manager',
+        pmc:      'VARS — Property Manager',
+        resident: 'VARS — Resident',
+        security: 'VARS — Security',
+      };
+      document.title = role ? (titles[role] || 'VARS') : 'VARS';
       if (role) {
         const slug = role === 'manager' ? 'pmc' : role;
         const desired = '#/' + slug;
