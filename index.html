@@ -8236,6 +8236,40 @@ const PreApproveForm = ({ onBack, showToast, data, setData }) => {
   const qrRef = useRef(null);
   const qrInstance = useRef(null);
 
+  // If signed in as a real resident, pull their actual name/flat/building from Supabase Auth
+  // so the QR payload, visitor entry, and schedule entries carry true values instead of legacy
+  // hardcoded "B-102 / Nitin Sharma / Sky Tower". Falls back to those defaults for demo logins.
+  const [authResident, setAuthResident] = useState(null);
+  useEffect(() => {
+    if (!supabaseClient) return;
+    let mounted = true;
+    (async () => {
+      try {
+        const { data: { session } } = await supabaseClient.auth.getSession();
+        const userId = session && session.user && session.user.id;
+        const role = session && session.user && session.user.app_metadata && session.user.app_metadata.role;
+        if (!userId || role !== 'resident') return;
+        const [{ data: profile }, { data: ra }] = await Promise.all([
+          supabaseClient.from('profiles').select('id,full_name').eq('id', userId).maybeSingle(),
+          supabaseClient.from('resident_assignments').select('unit_id').eq('profile_id', userId).maybeSingle(),
+        ]);
+        if (!mounted || !ra) return;
+        const { data: unit } = await supabaseClient.from('units').select('id,floor,unit_number,building_id').eq('id', ra.unit_id).maybeSingle();
+        const { data: building } = unit ? await supabaseClient.from('buildings').select('name').eq('id', unit.building_id).maybeSingle() : { data: null };
+        if (mounted) setAuthResident({
+          name: (profile && profile.full_name) || 'Resident',
+          flat: (unit && unit.unit_number) || 'B-102',
+          building: (building && building.name) || 'Sky Tower - The Pinnacle Residences',
+          floor: unit && unit.floor,
+        });
+      } catch (_) { /* fall back to defaults */ }
+    })();
+    return () => { mounted = false; };
+  }, []);
+  const r_flat = (authResident && authResident.flat) || 'B-102';
+  const r_name = (authResident && authResident.name) || 'Nitin Sharma';
+  const r_building = (authResident && authResident.building) || 'Sky Tower - The Pinnacle Residences';
+
   const generatePermitRef = () => {
     const d = new Date();
     const num = Math.floor(Math.random() * 9000) + 1000;
@@ -8271,9 +8305,9 @@ const PreApproveForm = ({ onBack, showToast, data, setData }) => {
     }
     const qrPayload = {
       permit: permitRef,
-      property: 'Sky Tower - The Pinnacle Residences',
-      unit: 'B-102',
-      resident: 'Nitin Sharma',
+      property: r_building,
+      unit: r_flat,
+      resident: r_name,
       visitor: fullName.trim(),
       mobile: mobile.trim(),
       type: visitorType,
@@ -8300,8 +8334,8 @@ const PreApproveForm = ({ onBack, showToast, data, setData }) => {
     const visitorEntry = {
       id: 'PA-' + Date.now() + '-' + Math.random().toString(36).substr(2, 5),
       name: qrData.visitor,
-      resident: 'Nitin Sharma',
-      flat: 'B-102',
+      resident: r_name,
+      flat: r_flat,
       contact: qrData.mobile,
       type: qrData.type,
       purpose: 'Personal visit',
@@ -8319,8 +8353,8 @@ const PreApproveForm = ({ onBack, showToast, data, setData }) => {
     };
     // Pre-approved visitors do NOT go into the entry log — entry log is only for people who actually entered the building.
     // They will be added to the entry log by security when they physically arrive and pass the gate.
-    const scheduleEntry = { time: qrData.time, description: qrData.visitor + ' — ' + qrData.type, flat: 'B-102', type: qrData.type };
-    const pmScheduleEntry = { time: qrData.time, name: qrData.visitor + ' (' + qrData.type + ')', flat: 'B-102', type: qrData.type };
+    const scheduleEntry = { time: qrData.time, description: qrData.visitor + ' — ' + qrData.type, flat: r_flat, type: qrData.type };
+    const pmScheduleEntry = { time: qrData.time, name: qrData.visitor + ' (' + qrData.type + ')', flat: r_flat, type: qrData.type };
     setData(prev => ({
       ...prev,
       visitors: [visitorEntry, ...prev.visitors],
@@ -14614,6 +14648,9 @@ const PC_TEMPLATES = {
       'Re-running the upload is safe: existing buildings/units are skipped (matched on Building + Unit).',
     ],
   },
+  amenities:   { label: 'Amenities',   readOnly: true },
+  maintenance: { label: 'Maintenance', readOnly: true },
+  payments:    { label: 'Payments',    readOnly: true },
 };
 
 function downloadAsXlsx(filename, headers, rows) {
@@ -14687,6 +14724,8 @@ const ProfileCreationPage = () => {
   const [inner, setInner] = useState('summary');
   const [authChecked, setAuthChecked] = useState(false);
   const [pmcSession, setPmcSession] = useState(null);
+  const isReadOnly = !!(PC_TEMPLATES[section] && PC_TEMPLATES[section].readOnly);
+  const effectiveInner = isReadOnly ? 'summary' : inner;
 
   useEffect(() => {
     if (!supabaseClient) { setAuthChecked(true); return; }
@@ -14734,19 +14773,21 @@ const ProfileCreationPage = () => {
         ))}
       </div>
 
-      <div style={{display:'flex',gap:8,marginBottom:24}}>
-        {['summary','bulk','manual'].map(id => (
-          <div key={id}
-            onClick={() => setInner(id)}
-            style={{padding:'7px 14px',cursor:'pointer',fontSize:12,fontWeight:inner===id?500:400,color:inner===id?'var(--text-dark)':'var(--text-secondary)',border: inner===id ? '1.5px solid var(--bg-warm-dark)' : '1px solid var(--border-light)',borderRadius:8,background:inner===id?'var(--bg-surface)':'#fff',letterSpacing:'-0.01em'}}>
-            {id === 'bulk' ? 'Bulk upload' : id === 'manual' ? 'Manual upload' : 'Summary'}
-          </div>
-        ))}
-      </div>
+      {!isReadOnly && (
+        <div style={{display:'flex',gap:8,marginBottom:24}}>
+          {['summary','bulk','manual'].map(id => (
+            <div key={id}
+              onClick={() => setInner(id)}
+              style={{padding:'7px 14px',cursor:'pointer',fontSize:12,fontWeight:inner===id?500:400,color:inner===id?'var(--text-dark)':'var(--text-secondary)',border: inner===id ? '1.5px solid var(--bg-warm-dark)' : '1px solid var(--border-light)',borderRadius:8,background:inner===id?'var(--bg-surface)':'#fff',letterSpacing:'-0.01em'}}>
+              {id === 'bulk' ? 'Bulk upload' : id === 'manual' ? 'Manual upload' : 'Summary'}
+            </div>
+          ))}
+        </div>
+      )}
 
-      {inner === 'summary' && <PCSummary section={section}/>}
-      {inner === 'bulk'    && <PCBulkUpload section={section}/>}
-      {inner === 'manual'  && <PCManualUpload section={section}/>}
+      {effectiveInner === 'summary' && <PCSummary section={section}/>}
+      {effectiveInner === 'bulk'    && <PCBulkUpload section={section}/>}
+      {effectiveInner === 'manual'  && <PCManualUpload section={section}/>}
     </div>
   );
 };
@@ -14802,7 +14843,7 @@ const PCSummary = ({ section }) => {
             unit_number: unit ? unit.unit_number : '—',
           };
         });
-      } else {
+      } else if (section === 'security') {
         const { data: profs, error: pe } = await supabaseClient.from('profiles').select('id,full_name,phone,created_at').eq('role','security').order('full_name');
         if (pe) throw pe;
         const ids = (profs || []).map(p => p.id);
@@ -14826,6 +14867,72 @@ const PCSummary = ({ section }) => {
             shift: sa ? sa.shift : '—',
           };
         });
+      } else if (section === 'amenities') {
+        const { data: bookings, error: e1 } = await supabaseClient.from('amenity_bookings').select('id,amenity_name,booking_date,start_time,end_time,guests,status,building_id,unit_id,resident_profile_id,created_at').order('booking_date', { ascending: false });
+        if (e1) throw e1;
+        const bIds = [...new Set((bookings || []).map(b => b.building_id))];
+        const uIds = [...new Set((bookings || []).map(b => b.unit_id).filter(Boolean))];
+        const rIds = [...new Set((bookings || []).map(b => b.resident_profile_id).filter(Boolean))];
+        const [bRes, uRes, rRes] = await Promise.all([
+          bIds.length ? supabaseClient.from('buildings').select('id,name').in('id', bIds) : Promise.resolve({ data: [] }),
+          uIds.length ? supabaseClient.from('units').select('id,unit_number').in('id', uIds) : Promise.resolve({ data: [] }),
+          rIds.length ? supabaseClient.from('profiles').select('id,full_name').in('id', rIds) : Promise.resolve({ data: [] }),
+        ]);
+        const bMap = Object.fromEntries((bRes.data || []).map(b => [b.id, b]));
+        const uMap = Object.fromEntries((uRes.data || []).map(u => [u.id, u]));
+        const rMap = Object.fromEntries((rRes.data || []).map(r => [r.id, r]));
+        data = (bookings || []).map(b => ({
+          ...b,
+          building_name: (bMap[b.building_id] && bMap[b.building_id].name) || '—',
+          unit_label: (b.unit_id && uMap[b.unit_id] && uMap[b.unit_id].unit_number) || '—',
+          resident_name: (b.resident_profile_id && rMap[b.resident_profile_id] && rMap[b.resident_profile_id].full_name) || '—',
+        }));
+      } else if (section === 'maintenance') {
+        const { data: srs, error: e1 } = await supabaseClient.from('service_requests').select('id,category,description,priority,status,preferred_date,unit_id,resident_profile_id,created_at').order('created_at', { ascending: false });
+        if (e1) throw e1;
+        const uIds = [...new Set((srs || []).map(s => s.unit_id).filter(Boolean))];
+        const rIds = [...new Set((srs || []).map(s => s.resident_profile_id).filter(Boolean))];
+        const [uRes, rRes] = await Promise.all([
+          uIds.length ? supabaseClient.from('units').select('id,unit_number,building_id').in('id', uIds) : Promise.resolve({ data: [] }),
+          rIds.length ? supabaseClient.from('profiles').select('id,full_name').in('id', rIds) : Promise.resolve({ data: [] }),
+        ]);
+        const bIds = [...new Set((uRes.data || []).map(u => u.building_id))];
+        const bRes = bIds.length ? await supabaseClient.from('buildings').select('id,name').in('id', bIds) : { data: [] };
+        const uMap = Object.fromEntries((uRes.data || []).map(u => [u.id, u]));
+        const rMap = Object.fromEntries((rRes.data || []).map(r => [r.id, r]));
+        const bMap = Object.fromEntries((bRes.data || []).map(b => [b.id, b]));
+        data = (srs || []).map(s => {
+          const u = s.unit_id && uMap[s.unit_id];
+          return {
+            ...s,
+            unit_label: u ? u.unit_number : '—',
+            building_name: (u && bMap[u.building_id] && bMap[u.building_id].name) || '—',
+            resident_name: (s.resident_profile_id && rMap[s.resident_profile_id] && rMap[s.resident_profile_id].full_name) || '—',
+          };
+        });
+      } else if (section === 'payments') {
+        const { data: invs, error: e1 } = await supabaseClient.from('invoices').select('id,invoice_number,description,amount_aed,due_date,status,source_type,unit_id,resident_profile_id,created_at').order('created_at', { ascending: false });
+        if (e1) throw e1;
+        const uIds = [...new Set((invs || []).map(i => i.unit_id).filter(Boolean))];
+        const rIds = [...new Set((invs || []).map(i => i.resident_profile_id).filter(Boolean))];
+        const [uRes, rRes] = await Promise.all([
+          uIds.length ? supabaseClient.from('units').select('id,unit_number,building_id').in('id', uIds) : Promise.resolve({ data: [] }),
+          rIds.length ? supabaseClient.from('profiles').select('id,full_name').in('id', rIds) : Promise.resolve({ data: [] }),
+        ]);
+        const bIds = [...new Set((uRes.data || []).map(u => u.building_id))];
+        const bRes = bIds.length ? await supabaseClient.from('buildings').select('id,name').in('id', bIds) : { data: [] };
+        const uMap = Object.fromEntries((uRes.data || []).map(u => [u.id, u]));
+        const rMap = Object.fromEntries((rRes.data || []).map(r => [r.id, r]));
+        const bMap = Object.fromEntries((bRes.data || []).map(b => [b.id, b]));
+        data = (invs || []).map(i => {
+          const u = i.unit_id && uMap[i.unit_id];
+          return {
+            ...i,
+            unit_label: u ? u.unit_number : '—',
+            building_name: (u && bMap[u.building_id] && bMap[u.building_id].name) || '—',
+            resident_name: (i.resident_profile_id && rMap[i.resident_profile_id] && rMap[i.resident_profile_id].full_name) || '—',
+          };
+        });
       }
       setRows(data);
     } catch (e) {
@@ -14836,7 +14943,10 @@ const PCSummary = ({ section }) => {
 
   if (error) return (<div className="card"><div style={{color:'#8b4a42',fontSize:13}}>{error}</div></div>);
   if (rows === null) return (<div className="card"><div style={{color:'var(--text-muted)',fontSize:13,padding:24}}>Loading…</div></div>);
-  if (rows.length === 0) return (<div className="card"><div style={{color:'var(--text-muted)',fontSize:13,padding:32,textAlign:'center'}}>No {section} yet. Use the <strong>Bulk upload</strong> tab to add some.</div></div>);
+  if (rows.length === 0) {
+    const ro = !!(PC_TEMPLATES[section] && PC_TEMPLATES[section].readOnly);
+    return (<div className="card"><div style={{color:'var(--text-muted)',fontSize:13,padding:32,textAlign:'center'}}>No {section} yet.{ro ? '' : <> Use the <strong>Bulk upload</strong> tab to add some.</>}</div></div>);
+  }
 
   if (section === 'buildings') {
     return (
@@ -14916,6 +15026,89 @@ const PCSummary = ({ section }) => {
       </div>
       {editing && <EditRecordModal kind={editing.kind} record={editing.record} onClose={() => setEditing(null)} onSaved={reload}/>}
       </>
+    );
+  }
+
+  if (section === 'amenities') {
+    return (
+      <div className="card">
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:12}}>
+          <div style={{fontSize:12,color:'var(--text-secondary)'}}>{rows.length} booking{rows.length===1?'':'s'} · read-only</div>
+          <button className="btn btn-sm" onClick={reload}>Refresh</button>
+        </div>
+        <table className="data-table">
+          <thead><tr><th>Amenity</th><th>Building</th><th>Unit</th><th>Resident</th><th>Date</th><th>Time</th><th>Status</th></tr></thead>
+          <tbody>
+            {rows.map(r => (
+              <tr key={r.id}>
+                <td style={{fontWeight:500}}>{r.amenity_name}</td>
+                <td>{r.building_name}</td>
+                <td>{r.unit_label}</td>
+                <td>{r.resident_name}</td>
+                <td>{r.booking_date}</td>
+                <td>{r.start_time ? (r.start_time + (r.end_time ? '–' + r.end_time : '')) : '—'}</td>
+                <td>{r.status}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    );
+  }
+
+  if (section === 'maintenance') {
+    return (
+      <div className="card">
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:12}}>
+          <div style={{fontSize:12,color:'var(--text-secondary)'}}>{rows.length} request{rows.length===1?'':'s'} · read-only</div>
+          <button className="btn btn-sm" onClick={reload}>Refresh</button>
+        </div>
+        <table className="data-table">
+          <thead><tr><th>Category</th><th>Description</th><th>Building</th><th>Unit</th><th>Resident</th><th>Priority</th><th>Status</th><th>Created</th></tr></thead>
+          <tbody>
+            {rows.map(r => (
+              <tr key={r.id}>
+                <td style={{fontWeight:500}}>{r.category}</td>
+                <td style={{maxWidth:220,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}} title={r.description}>{r.description}</td>
+                <td>{r.building_name}</td>
+                <td>{r.unit_label}</td>
+                <td>{r.resident_name}</td>
+                <td>{r.priority}</td>
+                <td>{r.status}</td>
+                <td>{r.created_at ? new Date(r.created_at).toLocaleDateString() : '—'}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    );
+  }
+
+  if (section === 'payments') {
+    return (
+      <div className="card">
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:12}}>
+          <div style={{fontSize:12,color:'var(--text-secondary)'}}>{rows.length} invoice{rows.length===1?'':'s'} · read-only</div>
+          <button className="btn btn-sm" onClick={reload}>Refresh</button>
+        </div>
+        <table className="data-table">
+          <thead><tr><th>Invoice #</th><th>Description</th><th>Building</th><th>Unit</th><th>Resident</th><th style={{textAlign:'right'}}>Amount (AED)</th><th>Due</th><th>Status</th></tr></thead>
+          <tbody>
+            {rows.map(r => (
+              <tr key={r.id}>
+                <td style={{fontWeight:500}}>{r.invoice_number || '—'}</td>
+                <td style={{maxWidth:220,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}} title={r.description}>{r.description}</td>
+                <td>{r.building_name}</td>
+                <td>{r.unit_label}</td>
+                <td>{r.resident_name}</td>
+                <td style={{textAlign:'right'}}>{Number(r.amount_aed).toLocaleString()}</td>
+                <td>{r.due_date || '—'}</td>
+                <td>{r.status}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     );
   }
 
