@@ -1,1 +1,4 @@
 .DS_Store
+
+# Real client data — never push this folder
+client database/

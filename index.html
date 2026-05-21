@@ -4094,8 +4094,25 @@ const LoginPage = ({ onLogin, syncStatus }) => {
     setError('');
   }, [selectedRole]);
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
+    setError('');
+
+    // First try Supabase Auth (real account with email/password)
+    if (supabaseClient) {
+      try {
+        const { data, error: authErr } = await supabaseClient.auth.signInWithPassword({ email, password });
+        if (!authErr && data && data.session) {
+          const authRole = data.session.user && data.session.user.app_metadata && data.session.user.app_metadata.role;
+          const mapped = authRole === 'pmc' ? 'manager' : authRole;
+          if (mapped) { onLogin(mapped); return; }
+        }
+      } catch (err) {
+        // fall through to demo credentials
+      }
+    }
+
+    // Demo-credentials fallback (legacy role-pick flow)
     const cred = credentials[selectedRole];
     if (email === cred.email && password === cred.password) {
       onLogin(selectedRole);
@@ -4369,6 +4386,7 @@ const Sidebar = ({ page, setPage, isOpen, onClose, onLogout }) => {
   const { t } = useApp();
   const items = [
     { id: 'overview', label: t('nav.overview'), icon: 'overview' },
+    { id: 'profileCreation', label: 'Profile Creation', icon: 'reports' },
     { id: 'service', label: t('nav.service'), icon: 'service' },
     { id: 'payment', label: t('nav.payment'), icon: 'payment' },
     { id: 'escalations', label: t('nav.escalations'), icon: 'escalations' },
@@ -14500,6 +14518,602 @@ const loadPersistedData = () => {
   return { ...initialData, _dataVersion: DATA_VERSION };
 };
 
+// ==================== PROFILE CREATION (PMC admin) ====================
+
+const PC_TEMPLATES = {
+  residents: {
+    label: 'Residents',
+    headers: ['Full name','Email','Phone','Building name','Floor','Unit number','Temporary password'],
+    examples: [
+      ['Aisha Al Mansoori','aisha.almansoori@example.ae','+971 50 412 8839','Aljil Tower',12,'B-1204','Welcome2026!'],
+      ['Mohammed Al Hammadi','mohammed.alhammadi@example.ae','+971 55 234 1187','Aljil Tower',8,'A-803','Welcome2026!'],
+    ],
+    filename: 'residents-template',
+    rules: [
+      'Building name must match an existing building exactly (e.g. \'Aljil Tower\').',
+      'Unit number must match an existing unit in that building.',
+      'Temporary password is what the resident uses on first sign-in. They can change it afterwards.',
+      'Email must be unique across all VARS users.',
+    ],
+  },
+  security: {
+    label: 'Security',
+    headers: ['Full name','Email','Phone','Building name','Shift','Temporary password'],
+    examples: [
+      ['Ivan Petrov','ivan.petrov@example.ae','+971 50 111 2233','Aljil Tower','Day','Welcome2026!'],
+      ['Hassan Al Marri','hassan.almarri@example.ae','+971 55 778 4412','Al Qurm View','Night','Welcome2026!'],
+    ],
+    filename: 'security-template',
+    rules: [
+      'Building name must match an existing building exactly.',
+      'Shift must be one of: Day, Night, 24h.',
+      'Email must be unique across all VARS users.',
+    ],
+  },
+  buildings: {
+    label: 'Buildings',
+    headers: ['Building name','Floor','Unit','Address','Notes'],
+    examples: [
+      ['Aljil Tower',1,'A-101','Sheikh Zayed Rd, Dubai, UAE','Mixed residential/commercial.'],
+      ['Aljil Tower',1,'A-102','',''],
+      ['Aljil Tower',2,'A-201','',''],
+      ['Al Qurm View',1,'Q-101','Shams Abu Dhabi, Al Reem Island, Abu Dhabi','Low-rise residential.'],
+    ],
+    filename: 'buildings-template',
+    rules: [
+      'One row per unit. A building with 100 units = 100 rows; the same building name repeats on every row.',
+      'Address and Notes are optional. Fill them on the FIRST row of each building; subsequent rows can leave them blank.',
+      'Re-running the upload is safe: existing buildings/units are skipped (matched on Building + Unit).',
+    ],
+  },
+};
+
+function downloadAsXlsx(filename, headers, rows) {
+  if (!window.XLSX) { alert('XLSX library not available'); return; }
+  const ws = window.XLSX.utils.aoa_to_sheet([headers, ...rows]);
+  const wb = window.XLSX.utils.book_new();
+  window.XLSX.utils.book_append_sheet(wb, ws, 'Template');
+  window.XLSX.writeFile(wb, filename + '.xlsx');
+}
+
+function downloadAsCsv(filename, headers, rows) {
+  const esc = (v) => {
+    if (v == null) return '';
+    const s = String(v);
+    return /[,"\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+  };
+  const csv = [headers, ...rows].map(r => r.map(esc).join(',')).join('\n');
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = filename + '.csv';
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+}
+
+async function parseUploadedFile(file) {
+  if (!window.XLSX) throw new Error('XLSX library not available');
+  const isCsv = /\.csv$/i.test(file.name);
+  if (isCsv) {
+    const text = await file.text();
+    const wb = window.XLSX.read(text, { type: 'string' });
+    const ws = wb.Sheets[wb.SheetNames[0]];
+    return window.XLSX.utils.sheet_to_json(ws, { header: 1, defval: null });
+  }
+  const buffer = await file.arrayBuffer();
+  const wb = window.XLSX.read(buffer, { type: 'array' });
+  const ws = wb.Sheets[wb.SheetNames[0]];
+  return window.XLSX.utils.sheet_to_json(ws, { header: 1, defval: null });
+}
+
+function findHeaderRowIndex(rows, expectedHeaders) {
+  for (let i = 0; i < Math.min(rows.length, 20); i++) {
+    const row = (rows[i] || []).map(c => c == null ? '' : String(c).trim().toLowerCase());
+    const allFound = expectedHeaders.every(h => row.includes(h.toLowerCase()));
+    if (allFound) return i;
+  }
+  return -1;
+}
+
+function rowsToObjects(parsedRows, headers) {
+  const idx = findHeaderRowIndex(parsedRows, headers);
+  if (idx < 0) throw new Error('Header row not found. Expected columns: ' + headers.join(', '));
+  const headerRow = parsedRows[idx].map(c => c == null ? '' : String(c).trim());
+  const colIndex = {};
+  headers.forEach(h => {
+    colIndex[h] = headerRow.findIndex(hh => hh.toLowerCase() === h.toLowerCase());
+  });
+  const dataRows = parsedRows.slice(idx + 1).filter(r => r && r.some(c => c != null && String(c).trim() !== ''));
+  return dataRows.map(r => {
+    const obj = {};
+    headers.forEach(h => {
+      const v = r[colIndex[h]];
+      obj[h] = (v == null || v === '') ? null : (typeof v === 'string' ? v.trim() : v);
+    });
+    return obj;
+  });
+}
+
+const ProfileCreationPage = () => {
+  const [section, setSection] = useState('buildings');
+  const [inner, setInner] = useState('summary');
+  const [authChecked, setAuthChecked] = useState(false);
+  const [pmcSession, setPmcSession] = useState(null);
+
+  useEffect(() => {
+    if (!supabaseClient) { setAuthChecked(true); return; }
+    supabaseClient.auth.getSession().then(({ data }) => {
+      setPmcSession(data?.session || null);
+      setAuthChecked(true);
+    });
+  }, []);
+
+  if (!authChecked) {
+    return <div className="card"><div style={{padding:24,color:'var(--text-muted)',fontSize:13}}>Checking session…</div></div>;
+  }
+
+  const authRole = pmcSession?.user?.app_metadata?.role;
+  if (!pmcSession || authRole !== 'pmc') {
+    return (
+      <div>
+        <div className="page-header"><div><h1>Profile Creation</h1><div className="subtitle">Sign in with your PMC account to manage buildings, residents, and security.</div></div></div>
+        <div className="card" style={{padding:32,textAlign:'center'}}>
+          <div style={{fontSize:13,color:'var(--text-secondary)',marginBottom:14}}>
+            {pmcSession ? 'Your account does not have PMC privileges.' : 'You are not signed in to a real VARS account yet.'}
+          </div>
+          <div style={{fontSize:12,color:'var(--text-muted)'}}>Log out (top-right) and sign in with email <strong>pmc@vars.ae</strong> / <strong>Welcome2026!</strong> to access this section.</div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      <div className="page-header">
+        <div>
+          <h1>Profile Creation</h1>
+          <div className="subtitle">Onboard buildings, residents, and security staff. Bulk via Excel/CSV or one by one.</div>
+        </div>
+      </div>
+
+      <div style={{display:'flex',gap:8,marginBottom:20,borderBottom:'1px solid var(--border-light)'}}>
+        {Object.entries(PC_TEMPLATES).map(([id, cfg]) => (
+          <div key={id}
+            onClick={() => { setSection(id); setInner('summary'); }}
+            style={{padding:'10px 18px',cursor:'pointer',fontSize:13,fontWeight:section===id?500:400,color:section===id?'var(--text-dark)':'var(--text-secondary)',borderBottom: section===id ? '2px solid var(--bg-warm-dark)' : '2px solid transparent',marginBottom:-1,letterSpacing:'-0.01em'}}>
+            {cfg.label}
+          </div>
+        ))}
+      </div>
+
+      <div style={{display:'flex',gap:8,marginBottom:24}}>
+        {['summary','bulk','manual'].map(id => (
+          <div key={id}
+            onClick={() => setInner(id)}
+            style={{padding:'7px 14px',cursor:'pointer',fontSize:12,fontWeight:inner===id?500:400,color:inner===id?'var(--text-dark)':'var(--text-secondary)',border: inner===id ? '1.5px solid var(--bg-warm-dark)' : '1px solid var(--border-light)',borderRadius:8,background:inner===id?'var(--bg-surface)':'#fff',letterSpacing:'-0.01em'}}>
+            {id === 'bulk' ? 'Bulk upload' : id === 'manual' ? 'Manual upload' : 'Summary'}
+          </div>
+        ))}
+      </div>
+
+      {inner === 'summary' && <PCSummary section={section}/>}
+      {inner === 'bulk'    && <PCBulkUpload section={section}/>}
+      {inner === 'manual'  && <PCManualUpload section={section}/>}
+    </div>
+  );
+};
+
+const PCSummary = ({ section }) => {
+  const [rows, setRows] = useState(null);
+  const [error, setError] = useState(null);
+  const [selectedBuilding, setSelectedBuilding] = useState(null);
+
+  const reload = async () => {
+    setError(null); setRows(null);
+    if (!supabaseClient) { setError('Supabase not initialized'); return; }
+    try {
+      let data;
+      if (section === 'buildings') {
+        const { data: buildings, error: be } = await supabaseClient.from('buildings').select('id,name,address,notes,created_at').order('name');
+        if (be) throw be;
+        const { data: units, error: ue } = await supabaseClient.from('units').select('id,building_id,floor,unit_number').order('floor').order('unit_number');
+        if (ue) throw ue;
+        data = (buildings || []).map(b => ({ ...b, units: (units || []).filter(u => u.building_id === b.id) }));
+      } else if (section === 'residents') {
+        const { data: profs, error: pe } = await supabaseClient.from('profiles').select('id,full_name,phone,created_at').eq('role','resident').order('full_name');
+        if (pe) throw pe;
+        const ids = (profs || []).map(p => p.id);
+        let assignments = [];
+        if (ids.length) {
+          const { data: ras } = await supabaseClient.from('resident_assignments').select('profile_id,unit_id').in('profile_id', ids);
+          assignments = ras || [];
+        }
+        const unitIds = assignments.map(a => a.unit_id);
+        let units = [];
+        if (unitIds.length) {
+          const { data: us } = await supabaseClient.from('units').select('id,floor,unit_number,building_id').in('id', unitIds);
+          units = us || [];
+        }
+        const buildingIds = [...new Set(units.map(u => u.building_id))];
+        let buildings = [];
+        if (buildingIds.length) {
+          const { data: bs } = await supabaseClient.from('buildings').select('id,name').in('id', buildingIds);
+          buildings = bs || [];
+        }
+        const unitById = Object.fromEntries(units.map(u => [u.id, u]));
+        const buildingById = Object.fromEntries(buildings.map(b => [b.id, b]));
+        data = (profs || []).map(p => {
+          const ra = assignments.find(a => a.profile_id === p.id);
+          const unit = ra && unitById[ra.unit_id];
+          const building = unit && buildingById[unit.building_id];
+          return {
+            id: p.id, full_name: p.full_name, phone: p.phone, created_at: p.created_at,
+            building_name: building ? building.name : '—',
+            floor: unit ? unit.floor : '—',
+            unit_number: unit ? unit.unit_number : '—',
+          };
+        });
+      } else {
+        const { data: profs, error: pe } = await supabaseClient.from('profiles').select('id,full_name,phone,created_at').eq('role','security').order('full_name');
+        if (pe) throw pe;
+        const ids = (profs || []).map(p => p.id);
+        let assignments = [];
+        if (ids.length) {
+          const { data: sas } = await supabaseClient.from('security_assignments').select('profile_id,building_id,shift').in('profile_id', ids);
+          assignments = sas || [];
+        }
+        const buildingIds = [...new Set(assignments.map(a => a.building_id))];
+        let buildings = [];
+        if (buildingIds.length) {
+          const { data: bs } = await supabaseClient.from('buildings').select('id,name').in('id', buildingIds);
+          buildings = bs || [];
+        }
+        const buildingById = Object.fromEntries(buildings.map(b => [b.id, b]));
+        data = (profs || []).map(p => {
+          const sa = assignments.find(a => a.profile_id === p.id);
+          return {
+            id: p.id, full_name: p.full_name, phone: p.phone, created_at: p.created_at,
+            building_name: sa && buildingById[sa.building_id] ? buildingById[sa.building_id].name : '—',
+            shift: sa ? sa.shift : '—',
+          };
+        });
+      }
+      setRows(data);
+    } catch (e) {
+      setError(String(e.message || e));
+    }
+  };
+  useEffect(() => { reload(); }, [section]);
+
+  if (error) return (<div className="card"><div style={{color:'#8b4a42',fontSize:13}}>{error}</div></div>);
+  if (rows === null) return (<div className="card"><div style={{color:'var(--text-muted)',fontSize:13,padding:24}}>Loading…</div></div>);
+  if (rows.length === 0) return (<div className="card"><div style={{color:'var(--text-muted)',fontSize:13,padding:32,textAlign:'center'}}>No {section} yet. Use the <strong>Bulk upload</strong> tab to add some.</div></div>);
+
+  if (section === 'buildings') {
+    return (
+      <>
+        <div className="card">
+          <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:12}}>
+            <div style={{fontSize:12,color:'var(--text-secondary)'}}>{rows.length} building{rows.length===1?'':'s'} · click a row to see floors & units</div>
+            <button className="btn btn-sm" onClick={reload}>Refresh</button>
+          </div>
+          <table className="data-table">
+            <thead><tr><th>Name</th><th>Address</th><th>Floors</th><th>Units</th><th>Created</th></tr></thead>
+            <tbody>
+              {rows.map(b => {
+                const floors = new Set((b.units||[]).map(u => u.floor)).size;
+                return (
+                  <tr key={b.id} style={{cursor:'pointer'}} onClick={() => setSelectedBuilding(b)}>
+                    <td style={{fontWeight:500}}>{b.name}</td>
+                    <td>{b.address || '—'}</td>
+                    <td>{floors}</td>
+                    <td>{(b.units||[]).length}</td>
+                    <td>{b.created_at ? new Date(b.created_at).toLocaleDateString() : '—'}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+        {selectedBuilding && <BuildingDetailModal building={selectedBuilding} onClose={() => setSelectedBuilding(null)}/>}
+      </>
+    );
+  }
+
+  if (section === 'residents') {
+    return (
+      <div className="card">
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:12}}>
+          <div style={{fontSize:12,color:'var(--text-secondary)'}}>{rows.length} resident{rows.length===1?'':'s'}</div>
+          <button className="btn btn-sm" onClick={reload}>Refresh</button>
+        </div>
+        <table className="data-table">
+          <thead><tr><th>Name</th><th>Phone</th><th>Building</th><th>Floor</th><th>Unit</th><th>Created</th></tr></thead>
+          <tbody>
+            {rows.map(r => (
+              <tr key={r.id}>
+                <td style={{fontWeight:500}}>{r.full_name}</td>
+                <td>{r.phone || '—'}</td>
+                <td>{r.building_name}</td>
+                <td>{r.floor}</td>
+                <td>{r.unit_number}</td>
+                <td>{r.created_at ? new Date(r.created_at).toLocaleDateString() : '—'}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    );
+  }
+
+  return (
+    <div className="card">
+      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:12}}>
+        <div style={{fontSize:12,color:'var(--text-secondary)'}}>{rows.length} guard{rows.length===1?'':'s'}</div>
+        <button className="btn btn-sm" onClick={reload}>Refresh</button>
+      </div>
+      <table className="data-table">
+        <thead><tr><th>Name</th><th>Phone</th><th>Building</th><th>Shift</th><th>Created</th></tr></thead>
+        <tbody>
+          {rows.map(r => (
+            <tr key={r.id}>
+              <td style={{fontWeight:500}}>{r.full_name}</td>
+              <td>{r.phone || '—'}</td>
+              <td>{r.building_name}</td>
+              <td>{r.shift}</td>
+              <td>{r.created_at ? new Date(r.created_at).toLocaleDateString() : '—'}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+};
+
+const BuildingDetailModal = ({ building, onClose }) => {
+  const byFloor = {};
+  (building.units || []).forEach(u => { (byFloor[u.floor] = byFloor[u.floor] || []).push(u); });
+  Object.keys(byFloor).forEach(f => byFloor[f].sort((a,b) => String(a.unit_number).localeCompare(String(b.unit_number))));
+  const floors = Object.keys(byFloor).map(Number).sort((a,b) => a-b);
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal" onClick={e => e.stopPropagation()} style={{maxWidth:680}}>
+        <div className="modal-header">
+          <div>
+            <div style={{fontSize:11,letterSpacing:'0.08em',textTransform:'uppercase',color:'var(--text-muted)',marginBottom:4}}>Building</div>
+            <h2>{building.name}</h2>
+            <div className="modal-sub">{building.address || ''}</div>
+            <div style={{fontSize:12,color:'var(--text-secondary)',marginTop:6}}>{floors.length} floor{floors.length===1?'':'s'} · {(building.units||[]).length} units</div>
+          </div>
+          <button className="modal-close" onClick={onClose}>×</button>
+        </div>
+        <div style={{maxHeight:480,overflowY:'auto'}}>
+          {floors.map(f => (
+            <div key={f} style={{marginBottom:18,paddingBottom:14,borderBottom:'1px solid var(--border-light)'}}>
+              <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:10}}>
+                <div style={{fontSize:13,fontWeight:600,color:'var(--text-dark)'}}>Floor {f}</div>
+                <div style={{fontSize:11,color:'var(--text-muted)'}}>{byFloor[f].length} unit{byFloor[f].length===1?'':'s'}</div>
+              </div>
+              <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill, minmax(110px, 1fr))',gap:6}}>
+                {byFloor[f].map(u => (
+                  <div key={u.id} style={{padding:'8px 10px',border:'1px solid var(--border-light)',borderRadius:6,fontSize:12,background:'var(--bg-surface)',textAlign:'center'}}>{u.unit_number}</div>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const PCBulkUpload = ({ section }) => {
+  const cfg = PC_TEMPLATES[section];
+  const fileInputRef = useRef(null);
+  const [parsedRows, setParsedRows] = useState(null);
+  const [uploading, setUploading] = useState(false);
+  const [results, setResults] = useState(null);
+  const [error, setError] = useState(null);
+
+  const handleFile = async (e) => {
+    setError(null); setResults(null); setParsedRows(null);
+    const file = e.target.files && e.target.files[0];
+    if (!file) return;
+    try {
+      const rows = await parseUploadedFile(file);
+      const objs = rowsToObjects(rows, cfg.headers);
+      setParsedRows(objs);
+    } catch (err) {
+      setError(String(err.message || err));
+    }
+  };
+
+  const submit = async () => {
+    if (!parsedRows || parsedRows.length === 0) return;
+    setUploading(true); setError(null); setResults(null);
+    try {
+      if (section === 'buildings') {
+        const res = await uploadBuildingsBulk(parsedRows);
+        setResults(res);
+      } else {
+        const records = parsedRows.map(r => {
+          if (section === 'residents') {
+            return {
+              email: r['Email'], password: r['Temporary password'], full_name: r['Full name'],
+              phone: r['Phone'], role: 'resident',
+              building_name: r['Building name'], unit_number: r['Unit number'],
+            };
+          }
+          return {
+            email: r['Email'], password: r['Temporary password'], full_name: r['Full name'],
+            phone: r['Phone'], role: 'security',
+            building_name: r['Building name'], shift: r['Shift'],
+          };
+        });
+        const { data: { session } } = await supabaseClient.auth.getSession();
+        const headers = { 'Content-Type': 'application/json' };
+        if (session && session.access_token) headers['Authorization'] = 'Bearer ' + session.access_token;
+        const resp = await fetch(SUPABASE_URL + '/functions/v1/bulk-onboard', {
+          method: 'POST', headers, body: JSON.stringify({ records }),
+        });
+        const out = await resp.json();
+        setResults(out);
+      }
+    } catch (e) {
+      setError(String(e.message || e));
+    }
+    setUploading(false);
+  };
+
+  return (
+    <div>
+      <div className="card" style={{background:'var(--accent-warm-light)',border:'1px solid var(--border-medium)'}}>
+        <div style={{fontSize:13,fontWeight:600,marginBottom:8}}>How bulk onboarding works</div>
+        <ol style={{fontSize:12,color:'var(--text-secondary)',paddingLeft:18,lineHeight:1.8,margin:0}}>
+          <li>Download the template (.xlsx or .csv).</li>
+          <li>Open it in Excel, Google Sheets, or any spreadsheet tool. Replace the example rows with your real data.</li>
+          <li>Save and upload it back. We'll preview the rows, flag duplicates and errors, then create the records in batch.</li>
+        </ol>
+      </div>
+
+      <div className="card">
+        <div style={{fontSize:11,letterSpacing:'0.06em',textTransform:'uppercase',color:'var(--text-secondary)',marginBottom:12}}>1. Example data</div>
+        <div style={{fontSize:12,color:'var(--text-secondary)',marginBottom:12}}>The template is pre-populated with rows that look like this. Replace them with your real data before uploading.</div>
+        <div style={{overflowX:'auto'}}>
+          <table className="data-table" style={{fontSize:12}}>
+            <thead><tr>{cfg.headers.map(h => <th key={h}>{h}</th>)}</tr></thead>
+            <tbody>{cfg.examples.map((row,i) => (<tr key={i}>{row.map((v,j) => <td key={j}>{v == null || v === '' ? '—' : v}</td>)}</tr>))}</tbody>
+          </table>
+        </div>
+        <ul style={{fontSize:12,color:'var(--text-secondary)',paddingLeft:20,marginTop:14,marginBottom:0,lineHeight:1.8}}>
+          {cfg.rules.map((r,i) => <li key={i}>{r}</li>)}
+        </ul>
+      </div>
+
+      <div className="card">
+        <div style={{fontSize:11,letterSpacing:'0.06em',textTransform:'uppercase',color:'var(--text-secondary)',marginBottom:6}}>2. Download template</div>
+        <div style={{fontSize:12,color:'var(--text-secondary)',marginBottom:14}}>Same example rows as above, in the format you prefer.</div>
+        <div style={{display:'flex',gap:10}}>
+          <button className="btn btn-primary" onClick={() => downloadAsXlsx(cfg.filename, cfg.headers, cfg.examples)}>Download .xlsx</button>
+          <button className="btn" onClick={() => downloadAsCsv(cfg.filename, cfg.headers, cfg.examples)}>Download .csv</button>
+        </div>
+      </div>
+
+      <div className="card">
+        <div style={{fontSize:11,letterSpacing:'0.06em',textTransform:'uppercase',color:'var(--text-secondary)',marginBottom:12}}>3. Upload completed file</div>
+        <input ref={fileInputRef} type="file" accept=".xlsx,.csv" onChange={handleFile} style={{fontSize:12}}/>
+        {error && <div style={{color:'#8b4a42',fontSize:12,marginTop:12,padding:10,background:'#fdf2f1',borderRadius:6}}>Error: {error}</div>}
+        {parsedRows && (
+          <div style={{marginTop:16}}>
+            <div style={{fontSize:12,fontWeight:500,marginBottom:8}}>Preview — {parsedRows.length} row{parsedRows.length===1?'':'s'}</div>
+            <div style={{maxHeight:280,overflowY:'auto',border:'1px solid var(--border-light)',borderRadius:6}}>
+              <table className="data-table" style={{fontSize:11}}>
+                <thead><tr>{cfg.headers.map(h => <th key={h}>{h}</th>)}</tr></thead>
+                <tbody>{parsedRows.slice(0,50).map((r,i) => (<tr key={i}>{cfg.headers.map(h => <td key={h}>{r[h] == null ? '—' : String(r[h])}</td>)}</tr>))}</tbody>
+              </table>
+              {parsedRows.length > 50 && <div style={{padding:8,fontSize:11,color:'var(--text-muted)',textAlign:'center'}}>… and {parsedRows.length - 50} more rows.</div>}
+            </div>
+            <button className="btn btn-primary" style={{marginTop:14}} disabled={uploading} onClick={submit}>
+              {uploading ? 'Uploading…' : 'Create ' + parsedRows.length + ' record' + (parsedRows.length === 1 ? '' : 's')}
+            </button>
+          </div>
+        )}
+        {results && (
+          <div style={{marginTop:16,padding:14,background:'var(--bg-surface)',borderRadius:8,border:'1px solid var(--border-light)'}}>
+            <div style={{fontSize:13,fontWeight:600,marginBottom:8}}>Upload results</div>
+            <BulkUploadResults section={section} results={results}/>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+async function uploadBuildingsBulk(parsedRows) {
+  const results = [];
+  const buildingMap = {};
+  for (const row of parsedRows) {
+    const bname = (row['Building name'] || '').toString().trim();
+    if (!bname) { results.push({ row: JSON.stringify(row), ok: false, error: 'Missing building name' }); continue; }
+    if (!buildingMap[bname]) {
+      buildingMap[bname] = { name: bname, address: row['Address'] || null, notes: row['Notes'] || null, units: [] };
+    }
+    if (!buildingMap[bname].address && row['Address']) buildingMap[bname].address = row['Address'];
+    if (!buildingMap[bname].notes && row['Notes']) buildingMap[bname].notes = row['Notes'];
+    buildingMap[bname].units.push({
+      floor: row['Floor'] != null ? Number(row['Floor']) : null,
+      unit_number: row['Unit'] != null ? String(row['Unit']).trim() : null,
+    });
+  }
+  for (const bname of Object.keys(buildingMap)) {
+    const b = buildingMap[bname];
+    const { data: existing } = await supabaseClient.from('buildings').select('id').eq('name', bname).maybeSingle();
+    let buildingId;
+    if (existing) {
+      buildingId = existing.id;
+    } else {
+      const { data: newB, error: bErr } = await supabaseClient.from('buildings').insert({ name: bname, address: b.address, notes: b.notes }).select('id').single();
+      if (bErr) { results.push({ building: bname, ok: false, error: 'building insert: ' + bErr.message }); continue; }
+      buildingId = newB.id;
+    }
+    const { data: existingUnits } = await supabaseClient.from('units').select('unit_number').eq('building_id', buildingId);
+    const existingNumbers = new Set((existingUnits || []).map(u => u.unit_number));
+    const toInsert = b.units
+      .filter(u => u.unit_number && !existingNumbers.has(u.unit_number) && u.floor != null && !isNaN(u.floor))
+      .map(u => ({ building_id: buildingId, floor: u.floor, unit_number: u.unit_number }));
+    let unitsAdded = 0;
+    if (toInsert.length) {
+      const { error: uErr } = await supabaseClient.from('units').insert(toInsert);
+      if (uErr) { results.push({ building: bname, ok: false, error: 'units insert: ' + uErr.message }); continue; }
+      unitsAdded = toInsert.length;
+    }
+    results.push({ building: bname, ok: true, units_added: unitsAdded, units_skipped: b.units.length - unitsAdded });
+  }
+  return { results };
+}
+
+const BulkUploadResults = ({ section, results }) => {
+  if (results.error) return <div style={{color:'#8b4a42',fontSize:12}}>{results.error}</div>;
+  const arr = results.results || [];
+  const okCount = arr.filter(r => r.ok).length;
+  const errCount = arr.filter(r => !r.ok).length;
+  return (
+    <div>
+      <div style={{display:'flex',gap:16,marginBottom:10,fontSize:12}}>
+        <div style={{color:'#4a7a4a',fontWeight:500}}>✓ {okCount} succeeded</div>
+        {errCount > 0 && <div style={{color:'#8b4a42',fontWeight:500}}>✗ {errCount} failed</div>}
+      </div>
+      {section === 'buildings' && arr.filter(r => r.ok).length > 0 && (
+        <div style={{fontSize:11,color:'var(--text-secondary)',marginBottom:8}}>
+          {arr.filter(r => r.ok).map((r,i) => (
+            <div key={i}>{r.building}: +{r.units_added} units{r.units_skipped > 0 ? ' (' + r.units_skipped + ' already existed)' : ''}</div>
+          ))}
+        </div>
+      )}
+      {errCount > 0 && (
+        <div style={{maxHeight:200,overflowY:'auto',marginTop:6}}>
+          {arr.filter(r => !r.ok).map((r,i) => (
+            <div key={i} style={{fontSize:11,color:'#8b4a42',padding:'4px 0'}}>
+              {r.email || r.building || ('Row ' + (i+1))}: {r.error}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
+
+const PCManualUpload = ({ section }) => {
+  return (
+    <div className="card">
+      <div style={{padding:32,textAlign:'center',color:'var(--text-secondary)',fontSize:13}}>
+        Manual one-by-one form coming in the next iteration.<br/>
+        For now, use <strong>Bulk upload</strong> — even a file with just one row works.
+      </div>
+    </div>
+  );
+};
+
 // ==================== MAIN APP ====================
 const App = () => {
   const [role, setRole] = useState(() => {
@@ -14714,6 +15328,7 @@ const App = () => {
 
   const handleLogout = () => {
     try { localStorage.removeItem('varspm_role'); } catch(e) {}
+    if (supabaseClient) { try { supabaseClient.auth.signOut(); } catch(e) {} }
     setRole(null);
   };
 
@@ -14762,6 +15377,7 @@ const App = () => {
     const clearSel = () => setSearchSelectedItem(null);
     switch (page) {
       case 'overview': return <OverviewPage setPage={setPage}/>;
+      case 'profileCreation': return <ProfileCreationPage/>;
       case 'payment': return <PlaceholderPage title="Payment Summary" description="Payment tracking and billing management. Coming soon!"/>;
       case 'visitors': return <VisitorsPage/>;
       case 'service': return <ServiceRequestsPage/>;
