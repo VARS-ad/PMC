@@ -8295,7 +8295,7 @@ const PreApproveForm = ({ onBack, showToast, data, setData }) => {
   };
 
   // Called when resident confirms pre-approval on the review page
-  const confirmPreApproval = () => {
+  const confirmPreApproval = async () => {
     if (!qrData) return;
     const visitorEntry = {
       id: 'PA-' + Date.now() + '-' + Math.random().toString(36).substr(2, 5),
@@ -8327,6 +8327,51 @@ const PreApproveForm = ({ onBack, showToast, data, setData }) => {
       todayScheduleSecurity: [...prev.todayScheduleSecurity, scheduleEntry].sort((a, b) => a.time.localeCompare(b.time)),
       todaySchedule: [...prev.todaySchedule, pmScheduleEntry].sort((a, b) => a.time.localeCompare(b.time))
     }));
+
+    // Dual-write: if signed in as a real Supabase resident, ALSO insert into the new visits table
+    // so the security side's UpcomingVisitsPanel can render it. Legacy JSON flow still works either way.
+    if (supabaseClient) {
+      try {
+        const { data: { session } } = await supabaseClient.auth.getSession();
+        const userId = session && session.user && session.user.id;
+        const role = session && session.user && session.user.app_metadata && session.user.app_metadata.role;
+        if (userId && role === 'resident') {
+          const { data: ra } = await supabaseClient.from('resident_assignments').select('unit_id').eq('profile_id', userId).maybeSingle();
+          if (ra && ra.unit_id) {
+            const typeMap = {
+              'Resident Guest': 'Resident Guest',
+              'Service Vendor': 'Service Vendor',
+              'Delivery / Courier': 'Delivery',
+              'Delivery': 'Delivery',
+              'Contractor / Worker': 'Contractor',
+              'Contractor': 'Contractor',
+            };
+            const dbType = typeMap[qrData.type] || 'Resident Guest';
+            let visitDateIso;
+            try {
+              const parts = (qrData.date || '').split('/');
+              if (parts.length === 3) {
+                visitDateIso = parts[2] + '-' + String(parts[1]).padStart(2,'0') + '-' + String(parts[0]).padStart(2,'0');
+              } else {
+                visitDateIso = new Date().toISOString().slice(0,10);
+              }
+            } catch (_) { visitDateIso = new Date().toISOString().slice(0,10); }
+            await supabaseClient.from('visits').insert({
+              unit_id: ra.unit_id,
+              type: dbType,
+              visitor_name: qrData.visitor,
+              visitor_phone: qrData.mobile || null,
+              visit_date: visitDateIso,
+              status: 'Pre-Approved',
+              permit_ref: qrData.permit,
+              created_by: userId,
+              vehicle: (qrData.vehicle && qrData.vehicle !== 'N/A') ? qrData.vehicle : null,
+            });
+          }
+        }
+      } catch (e) { /* silent — legacy flow still works */ }
+    }
+
     showToast('Pre-approval confirmed and saved!');
     setStep('qr');
   };
@@ -12831,6 +12876,9 @@ const SecurityApp = ({ onLogout }) => {
             </div>
           </div>
 
+          {/* New: pre-approvals from visits table (Supabase Auth users only) */}
+          <UpcomingVisitsPanel/>
+
           {/* 3-COLUMN GRID */}
           <div className="sec-grid-3">
             {/* LEFT COLUMN — Today's Summary */}
@@ -14871,11 +14919,13 @@ const PCSummary = ({ section }) => {
 };
 
 const BuildingDetailModal = ({ building, onClose }) => {
+  const [unitForAttachments, setUnitForAttachments] = useState(null);
   const byFloor = {};
   (building.units || []).forEach(u => { (byFloor[u.floor] = byFloor[u.floor] || []).push(u); });
   Object.keys(byFloor).forEach(f => byFloor[f].sort((a,b) => String(a.unit_number).localeCompare(String(b.unit_number))));
   const floors = Object.keys(byFloor).map(Number).sort((a,b) => a-b);
   return (
+    <>
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal" onClick={e => e.stopPropagation()} style={{maxWidth:680}}>
         <div className="modal-header">
@@ -14896,7 +14946,7 @@ const BuildingDetailModal = ({ building, onClose }) => {
               </div>
               <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill, minmax(110px, 1fr))',gap:6}}>
                 {byFloor[f].map(u => (
-                  <div key={u.id} style={{padding:'8px 10px',border:'1px solid var(--border-light)',borderRadius:6,fontSize:12,background:'var(--bg-surface)',textAlign:'center'}}>{u.unit_number}</div>
+                  <div key={u.id} onClick={() => setUnitForAttachments(u)} style={{padding:'8px 10px',border:'1px solid var(--border-light)',borderRadius:6,fontSize:12,background:'var(--bg-surface)',textAlign:'center',cursor:'pointer',transition:'background 0.15s'}} onMouseEnter={e => e.currentTarget.style.background='var(--accent-warm-light)'} onMouseLeave={e => e.currentTarget.style.background='var(--bg-surface)'} title="Click to manage attachments">{u.unit_number}</div>
                 ))}
               </div>
             </div>
@@ -14904,6 +14954,8 @@ const BuildingDetailModal = ({ building, onClose }) => {
         </div>
       </div>
     </div>
+    {unitForAttachments && <UnitAttachmentsModal unit={unitForAttachments} buildingName={building.name} onClose={() => setUnitForAttachments(null)}/>}
+    </>
   );
 };
 
@@ -15110,6 +15162,198 @@ const PCManualUpload = ({ section }) => {
         Manual one-by-one form coming in the next iteration.<br/>
         For now, use <strong>Bulk upload</strong> — even a file with just one row works.
       </div>
+    </div>
+  );
+};
+
+// ==================== UNIT ATTACHMENTS ====================
+
+const UnitAttachmentRow = ({ file, onDelete, canDelete }) => {
+  const [url, setUrl] = useState(null);
+  useEffect(() => {
+    if (!supabaseClient) return;
+    let mounted = true;
+    supabaseClient.storage.from('unit-attachments').createSignedUrl(file.storage_path, 300)
+      .then(({ data }) => { if (mounted) setUrl(data && data.signedUrl); });
+    return () => { mounted = false; };
+  }, [file.storage_path]);
+  return (
+    <div style={{display:'flex',alignItems:'center',gap:12,padding:'8px 10px',background:'#fff',border:'1px solid var(--border-light)',borderRadius:6,marginBottom:6,fontSize:12}}>
+      <div style={{flex:1,minWidth:0,overflow:'hidden'}}>
+        {url ? (
+          <a href={url} target="_blank" rel="noopener" style={{color:'var(--accent-warm-dark)',textDecoration:'none',fontWeight:500,wordBreak:'break-all'}}>{file.filename}</a>
+        ) : (
+          <span style={{color:'var(--text-muted)'}}>{file.filename}</span>
+        )}
+        <div style={{fontSize:10,color:'var(--text-muted)',marginTop:2}}>{new Date(file.created_at).toLocaleString()}</div>
+      </div>
+      {canDelete && <button onClick={onDelete} style={{background:'none',border:'none',cursor:'pointer',color:'#8b4a42',fontSize:11,padding:'4px 8px'}}>Delete</button>}
+    </div>
+  );
+};
+
+const UnitAttachmentSection = ({ section, files, uploading, onUpload, onDelete }) => {
+  const inputRef = useRef(null);
+  const canAddMore = section.multiple || files.length === 0;
+  return (
+    <div style={{marginBottom:18,paddingBottom:14,borderBottom:'1px solid var(--border-light)'}}>
+      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}}>
+        <div>
+          <div style={{fontSize:13,fontWeight:600,color:'var(--text-dark)'}}>{section.label}</div>
+          {!section.multiple && <div style={{fontSize:10,color:'var(--text-muted)',marginTop:2}}>One file only</div>}
+        </div>
+        {canAddMore && (
+          <div>
+            <input ref={inputRef} type="file" accept={section.accept} style={{display:'none'}} onChange={e => { const f = e.target.files && e.target.files[0]; onUpload(section.kind, f); if (inputRef.current) inputRef.current.value = ''; }}/>
+            <button className="btn btn-sm" disabled={uploading} onClick={() => inputRef.current && inputRef.current.click()}>
+              {uploading ? 'Uploading…' : '+ Upload'}
+            </button>
+          </div>
+        )}
+      </div>
+      {files.length === 0 && <div style={{fontSize:12,color:'var(--text-muted)',padding:'4px 0 0'}}>No files yet.</div>}
+      {files.map(f => <UnitAttachmentRow key={f.id} file={f} onDelete={() => onDelete(f)} canDelete={true}/>)}
+    </div>
+  );
+};
+
+const UnitAttachmentsModal = ({ unit, buildingName, onClose }) => {
+  const [attachments, setAttachments] = useState(null);
+  const [uploadingKind, setUploadingKind] = useState(null);
+  const [error, setError] = useState(null);
+
+  const reload = async () => {
+    if (!supabaseClient) return;
+    const { data, error: e } = await supabaseClient.from('unit_attachments')
+      .select('id,kind,filename,storage_path,created_at')
+      .eq('unit_id', unit.id)
+      .order('created_at', { ascending: false });
+    if (e) setError(e.message); else { setAttachments(data || []); setError(null); }
+  };
+  useEffect(() => { reload(); }, [unit.id]);
+
+  const handleUpload = async (kind, file) => {
+    if (!file || !supabaseClient) return;
+    setUploadingKind(kind); setError(null);
+    const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+    const path = unit.id + '/' + kind + '-' + Date.now() + '-' + safeName;
+    const { error: upErr } = await supabaseClient.storage.from('unit-attachments').upload(path, file);
+    if (upErr) { setError('Upload failed: ' + upErr.message); setUploadingKind(null); return; }
+    const { error: insErr } = await supabaseClient.from('unit_attachments').insert({
+      unit_id: unit.id, kind, filename: file.name, storage_path: path,
+    });
+    if (insErr) setError('Metadata insert: ' + insErr.message);
+    setUploadingKind(null);
+    await reload();
+  };
+
+  const handleDelete = async (att) => {
+    if (!supabaseClient) return;
+    if (!window.confirm('Delete ' + att.filename + '?')) return;
+    await supabaseClient.storage.from('unit-attachments').remove([att.storage_path]);
+    await supabaseClient.from('unit_attachments').delete().eq('id', att.id);
+    await reload();
+  };
+
+  const sections = [
+    { kind: 'photo',      label: 'Photos',              accept: 'image/*',      multiple: true  },
+    { kind: 'title_deed', label: 'Title Deed',          accept: '.pdf,image/*', multiple: false },
+    { kind: 'layout',     label: 'Layout / Floor Plan', accept: '.pdf,image/*', multiple: false },
+    { kind: 'other',      label: 'Other Documents',     accept: '*/*',          multiple: true  },
+  ];
+
+  const grouped = (attachments || []).reduce((acc, a) => {
+    (acc[a.kind] = acc[a.kind] || []).push(a);
+    return acc;
+  }, {});
+
+  return (
+    <div className="modal-overlay" onClick={onClose} style={{zIndex:1100}}>
+      <div className="modal" onClick={e => e.stopPropagation()} style={{maxWidth:680,maxHeight:'85vh',overflowY:'auto'}}>
+        <div className="modal-header">
+          <div>
+            <div style={{fontSize:10,letterSpacing:'0.08em',textTransform:'uppercase',color:'var(--text-muted)',marginBottom:4}}>Unit attachments</div>
+            <h2>{unit.unit_number}</h2>
+            <div className="modal-sub">{buildingName} · Floor {unit.floor}</div>
+          </div>
+          <button className="modal-close" onClick={onClose}>×</button>
+        </div>
+        {error && <div style={{padding:10,background:'#fdf2f1',color:'#8b4a42',borderRadius:6,fontSize:12,marginBottom:14}}>{error}</div>}
+        {attachments === null ? (
+          <div style={{padding:24,color:'var(--text-muted)',fontSize:13}}>Loading…</div>
+        ) : (
+          <div>
+            {sections.map(s => (
+              <UnitAttachmentSection key={s.kind} section={s} files={grouped[s.kind] || []} uploading={uploadingKind === s.kind} onUpload={handleUpload} onDelete={handleDelete}/>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+// ==================== UPCOMING PRE-APPROVALS (security dashboard) ====================
+// Shown to security users (authenticated via Supabase Auth) on their dashboard.
+// Pulls live from the new `visits` table — independent of the legacy JSON blob.
+
+const UpcomingVisitsPanel = () => {
+  const [visits, setVisits] = useState(null);
+  const [hasAuth, setHasAuth] = useState(null);
+
+  useEffect(() => {
+    if (!supabaseClient) { setHasAuth(false); return; }
+    let mounted = true;
+    const load = async () => {
+      const { data: { session } } = await supabaseClient.auth.getSession();
+      if (!mounted) return;
+      if (!session || !session.user) { setHasAuth(false); return; }
+      setHasAuth(true);
+      const today = new Date().toISOString().slice(0, 10);
+      const { data, error } = await supabaseClient
+        .from('visits')
+        .select('id,visitor_name,visitor_phone,type,visit_date,visit_time,status,permit_ref')
+        .eq('status', 'Pre-Approved')
+        .gte('visit_date', today)
+        .order('visit_date', { ascending: true });
+      if (mounted && !error) setVisits(data || []);
+    };
+    load();
+    const id = setInterval(load, 8000);
+    return () => { mounted = false; clearInterval(id); };
+  }, []);
+
+  if (hasAuth === null) return null;
+  if (!hasAuth || visits === null) return null;
+
+  return (
+    <div className="sec-kpi-block" style={{marginBottom:20}}>
+      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:12,paddingBottom:10,borderBottom:'1px solid var(--border-light)'}}>
+        <div>
+          <div className="sec-kpi-label" style={{marginBottom:4}}>UPCOMING PRE-APPROVALS</div>
+          <div style={{fontSize:10,color:'#a89a92'}}>Live from new visits table · refreshes every 8s</div>
+        </div>
+        <div style={{fontSize:24,fontWeight:700,color:'#1a1a1a'}}>{visits.length}</div>
+      </div>
+      {visits.length === 0 ? (
+        <div style={{fontSize:12,color:'var(--text-muted)',padding:'14px 0',textAlign:'center'}}>No upcoming pre-approvals.</div>
+      ) : (
+        <div style={{maxHeight:280,overflowY:'auto'}}>
+          {visits.map(v => (
+            <div key={v.id} style={{padding:'10px 12px',background:'#e8e3de',borderRadius:6,marginBottom:6,display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+              <div style={{minWidth:0,flex:1}}>
+                <div style={{fontSize:13,fontWeight:500,color:'#1a1a1a'}}>{v.visitor_name}</div>
+                <div style={{fontSize:11,color:'#6b6156',marginTop:2}}>
+                  {v.visit_date}{v.visit_time ? ' · ' + v.visit_time : ''} · {v.type}{v.visitor_phone ? ' · ' + v.visitor_phone : ''}
+                </div>
+              </div>
+              <div style={{fontSize:10,color:'#928989',background:'#fff',padding:'4px 8px',borderRadius:4,marginLeft:8,flexShrink:0}}>
+                {v.permit_ref || '—'}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 };
