@@ -15156,12 +15156,237 @@ const BulkUploadResults = ({ section, results }) => {
 };
 
 const PCManualUpload = ({ section }) => {
+  if (section === 'buildings') return <BuildingManualForm/>;
+  if (section === 'residents') return <ResidentManualForm/>;
+  return <SecurityManualForm/>;
+};
+
+const PCField = ({ label, value, onChange, type, placeholder, required, textarea }) => (
+  <div>
+    {label !== '' && <label style={{display:'block',fontSize:10,letterSpacing:'0.06em',textTransform:'uppercase',color:'var(--text-secondary)',marginBottom:6,fontWeight:500}}>{label}{required && ' *'}</label>}
+    {textarea ? (
+      <textarea value={value} onChange={e => onChange(e.target.value)} placeholder={placeholder || ''} className="form-input" style={{minHeight:60,resize:'vertical'}}/>
+    ) : (
+      <input type={type || 'text'} value={value} onChange={e => onChange(e.target.value)} placeholder={placeholder || ''} className="form-input"/>
+    )}
+  </div>
+);
+
+const PCSelect = ({ label, value, onChange, options, disabled, required }) => (
+  <div>
+    {label !== '' && <label style={{display:'block',fontSize:10,letterSpacing:'0.06em',textTransform:'uppercase',color:'var(--text-secondary)',marginBottom:6,fontWeight:500}}>{label}{required && ' *'}</label>}
+    <select className="form-input" value={value} onChange={e => onChange(e.target.value)} disabled={disabled} style={{cursor: disabled ? 'not-allowed' : 'pointer', background: disabled ? 'var(--bg-page)' : '#fff'}}>
+      <option value="">— Pick one —</option>
+      {options.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+    </select>
+  </div>
+);
+
+const FormBanner = ({ result }) => result ? (
+  <div style={{marginTop:14,padding:12,borderRadius:6,background:result.ok ? '#e6efe1' : '#fdf2f1',color:result.ok ? '#4a7a4a' : '#8b4a42',fontSize:12,fontWeight:500}}>
+    {result.ok ? '✓ ' + result.msg : '✗ ' + result.error}
+  </div>
+) : null;
+
+const BuildingManualForm = () => {
+  const [name, setName] = useState('');
+  const [address, setAddress] = useState('');
+  const [notes, setNotes] = useState('');
+  const [units, setUnits] = useState([{ floor: '', unit_number: '' }]);
+  const [busy, setBusy] = useState(false);
+  const [result, setResult] = useState(null);
+
+  const submit = async () => {
+    setBusy(true); setResult(null);
+    try {
+      const { data: existing } = await supabaseClient.from('buildings').select('id').eq('name', name).maybeSingle();
+      let buildingId = existing && existing.id;
+      if (!buildingId) {
+        const { data: b, error } = await supabaseClient.from('buildings').insert({ name: name.trim(), address: address.trim() || null, notes: notes.trim() || null }).select('id').single();
+        if (error) { setResult({ ok: false, error: 'building: ' + error.message }); setBusy(false); return; }
+        buildingId = b.id;
+      }
+      const validUnits = units
+        .filter(u => u.unit_number && u.floor !== '' && !isNaN(Number(u.floor)))
+        .map(u => ({ building_id: buildingId, floor: Number(u.floor), unit_number: String(u.unit_number).trim() }));
+      let inserted = 0;
+      if (validUnits.length) {
+        const { data: existingU } = await supabaseClient.from('units').select('unit_number').eq('building_id', buildingId);
+        const existingSet = new Set((existingU || []).map(u => u.unit_number));
+        const toInsert = validUnits.filter(u => !existingSet.has(u.unit_number));
+        if (toInsert.length) {
+          const { error } = await supabaseClient.from('units').insert(toInsert);
+          if (error) { setResult({ ok: false, error: 'units: ' + error.message }); setBusy(false); return; }
+          inserted = toInsert.length;
+        }
+      }
+      setResult({ ok: true, msg: 'Saved "' + name + '" with ' + inserted + ' new unit' + (inserted === 1 ? '' : 's') + '.' });
+      setName(''); setAddress(''); setNotes(''); setUnits([{ floor: '', unit_number: '' }]);
+    } catch (e) {
+      setResult({ ok: false, error: String(e.message || e) });
+    }
+    setBusy(false);
+  };
+
   return (
     <div className="card">
-      <div style={{padding:32,textAlign:'center',color:'var(--text-secondary)',fontSize:13}}>
-        Manual one-by-one form coming in the next iteration.<br/>
-        For now, use <strong>Bulk upload</strong> — even a file with just one row works.
+      <div style={{fontSize:13,fontWeight:600,marginBottom:14}}>Add a building</div>
+      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:14,marginBottom:14}}>
+        <PCField label="Building name" required value={name} onChange={setName} placeholder="e.g. Aljil Tower"/>
+        <PCField label="Address" value={address} onChange={setAddress} placeholder="Optional"/>
       </div>
+      <PCField label="Notes" value={notes} onChange={setNotes} textarea placeholder="Optional"/>
+      <div style={{margin:'20px 0 10px',fontSize:10,fontWeight:600,color:'var(--text-secondary)',textTransform:'uppercase',letterSpacing:'0.06em'}}>Units (optional — you can add them later via bulk upload)</div>
+      {units.map((u, i) => (
+        <div key={i} style={{display:'grid',gridTemplateColumns:'130px 1fr 40px',gap:10,marginBottom:8,alignItems:'start'}}>
+          <PCField label="" type="number" placeholder="Floor" value={u.floor} onChange={v => setUnits(us => us.map((x,j) => j===i ? {...x, floor:v} : x))}/>
+          <PCField label="" placeholder="Unit number (e.g. A-101)" value={u.unit_number} onChange={v => setUnits(us => us.map((x,j) => j===i ? {...x, unit_number:v} : x))}/>
+          <button className="btn btn-sm" style={{padding:'10px 8px'}} onClick={() => setUnits(us => us.length > 1 ? us.filter((_, j) => j !== i) : us)} title="Remove">×</button>
+        </div>
+      ))}
+      <button className="btn btn-sm" onClick={() => setUnits(us => [...us, { floor: '', unit_number: '' }])} style={{marginBottom:18}}>+ Add another unit</button>
+      <div>
+        <button className="btn btn-primary" disabled={busy || !name.trim()} onClick={submit}>{busy ? 'Saving…' : 'Create building'}</button>
+      </div>
+      <FormBanner result={result}/>
+    </div>
+  );
+};
+
+const ResidentManualForm = () => {
+  const [fullName, setFullName] = useState('');
+  const [email, setEmail] = useState('');
+  const [phone, setPhone] = useState('');
+  const [buildingId, setBuildingId] = useState('');
+  const [unitId, setUnitId] = useState('');
+  const [password, setPassword] = useState('Welcome2026!');
+  const [buildings, setBuildings] = useState([]);
+  const [units, setUnits] = useState([]);
+  const [busy, setBusy] = useState(false);
+  const [result, setResult] = useState(null);
+
+  useEffect(() => {
+    if (!supabaseClient) return;
+    supabaseClient.from('buildings').select('id,name').order('name').then(({ data }) => setBuildings(data || []));
+  }, []);
+  useEffect(() => {
+    if (!buildingId || !supabaseClient) { setUnits([]); setUnitId(''); return; }
+    supabaseClient.from('units').select('id,floor,unit_number').eq('building_id', buildingId).order('floor').order('unit_number').then(({ data }) => setUnits(data || []));
+  }, [buildingId]);
+
+  const submit = async () => {
+    setBusy(true); setResult(null);
+    try {
+      const building = buildings.find(b => b.id === buildingId);
+      const unit = units.find(u => u.id === unitId);
+      if (!building || !unit) { setResult({ ok: false, error: 'Pick a building and unit' }); setBusy(false); return; }
+      const { data: { session } } = await supabaseClient.auth.getSession();
+      const headers = { 'Content-Type': 'application/json' };
+      if (session && session.access_token) headers['Authorization'] = 'Bearer ' + session.access_token;
+      const resp = await fetch(SUPABASE_URL + '/functions/v1/bulk-onboard', {
+        method: 'POST', headers,
+        body: JSON.stringify({ records: [{
+          email: email.trim(), password, full_name: fullName.trim(), phone: phone.trim() || null,
+          role: 'resident', building_name: building.name, unit_number: unit.unit_number,
+        }]}),
+      });
+      const out = await resp.json();
+      const r = out.results && out.results[0];
+      if (r && r.ok) {
+        setResult({ ok: true, msg: 'Created resident ' + email + ' (sign in with the temp password to test)' });
+        setFullName(''); setEmail(''); setPhone(''); setUnitId('');
+      } else {
+        setResult({ ok: false, error: (r && r.error) || out.error || 'Unknown error' });
+      }
+    } catch (e) {
+      setResult({ ok: false, error: String(e.message || e) });
+    }
+    setBusy(false);
+  };
+
+  const canSubmit = fullName.trim() && email.trim() && buildingId && unitId && password;
+  return (
+    <div className="card">
+      <div style={{fontSize:13,fontWeight:600,marginBottom:14}}>Add a resident</div>
+      <div style={{fontSize:11,color:'var(--text-secondary)',marginBottom:18}}>Creates a Supabase Auth account so this person can immediately sign in with the temp password.</div>
+      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:14,marginBottom:14}}>
+        <PCField label="Full name" required value={fullName} onChange={setFullName}/>
+        <PCField label="Email" type="email" required value={email} onChange={setEmail}/>
+        <PCField label="Phone" value={phone} onChange={setPhone} placeholder="+971 …"/>
+        <PCField label="Temporary password" required value={password} onChange={setPassword}/>
+      </div>
+      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:14,marginBottom:20}}>
+        <PCSelect label="Building" required value={buildingId} onChange={setBuildingId} options={buildings.map(b => ({ value: b.id, label: b.name }))}/>
+        <PCSelect label="Unit" required value={unitId} onChange={setUnitId} disabled={!buildingId} options={units.map(u => ({ value: u.id, label: 'Floor ' + u.floor + ' · ' + u.unit_number }))}/>
+      </div>
+      <button className="btn btn-primary" disabled={busy || !canSubmit} onClick={submit}>{busy ? 'Creating…' : 'Create resident'}</button>
+      <FormBanner result={result}/>
+    </div>
+  );
+};
+
+const SecurityManualForm = () => {
+  const [fullName, setFullName] = useState('');
+  const [email, setEmail] = useState('');
+  const [phone, setPhone] = useState('');
+  const [buildingId, setBuildingId] = useState('');
+  const [shift, setShift] = useState('Day');
+  const [password, setPassword] = useState('Welcome2026!');
+  const [buildings, setBuildings] = useState([]);
+  const [busy, setBusy] = useState(false);
+  const [result, setResult] = useState(null);
+
+  useEffect(() => {
+    if (!supabaseClient) return;
+    supabaseClient.from('buildings').select('id,name').order('name').then(({ data }) => setBuildings(data || []));
+  }, []);
+
+  const submit = async () => {
+    setBusy(true); setResult(null);
+    try {
+      const building = buildings.find(b => b.id === buildingId);
+      if (!building) { setResult({ ok: false, error: 'Pick a building' }); setBusy(false); return; }
+      const { data: { session } } = await supabaseClient.auth.getSession();
+      const headers = { 'Content-Type': 'application/json' };
+      if (session && session.access_token) headers['Authorization'] = 'Bearer ' + session.access_token;
+      const resp = await fetch(SUPABASE_URL + '/functions/v1/bulk-onboard', {
+        method: 'POST', headers,
+        body: JSON.stringify({ records: [{
+          email: email.trim(), password, full_name: fullName.trim(), phone: phone.trim() || null,
+          role: 'security', building_name: building.name, shift,
+        }]}),
+      });
+      const out = await resp.json();
+      const r = out.results && out.results[0];
+      if (r && r.ok) {
+        setResult({ ok: true, msg: 'Created guard ' + email + ' assigned to ' + building.name + ' (' + shift + ' shift)' });
+        setFullName(''); setEmail(''); setPhone('');
+      } else {
+        setResult({ ok: false, error: (r && r.error) || out.error || 'Unknown error' });
+      }
+    } catch (e) {
+      setResult({ ok: false, error: String(e.message || e) });
+    }
+    setBusy(false);
+  };
+
+  const canSubmit = fullName.trim() && email.trim() && buildingId && shift && password;
+  return (
+    <div className="card">
+      <div style={{fontSize:13,fontWeight:600,marginBottom:14}}>Add a security guard</div>
+      <div style={{fontSize:11,color:'var(--text-secondary)',marginBottom:18}}>Creates a Supabase Auth account so this guard can immediately sign in with the temp password.</div>
+      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:14,marginBottom:14}}>
+        <PCField label="Full name" required value={fullName} onChange={setFullName}/>
+        <PCField label="Email" type="email" required value={email} onChange={setEmail}/>
+        <PCField label="Phone" value={phone} onChange={setPhone} placeholder="+971 …"/>
+        <PCField label="Temporary password" required value={password} onChange={setPassword}/>
+      </div>
+      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:14,marginBottom:20}}>
+        <PCSelect label="Building" required value={buildingId} onChange={setBuildingId} options={buildings.map(b => ({ value: b.id, label: b.name }))}/>
+        <PCSelect label="Shift" required value={shift} onChange={setShift} options={[{value:'Day',label:'Day'},{value:'Night',label:'Night'},{value:'24h',label:'24h'}]}/>
+      </div>
+      <button className="btn btn-primary" disabled={busy || !canSubmit} onClick={submit}>{busy ? 'Creating…' : 'Create guard'}</button>
+      <FormBanner result={result}/>
     </div>
   );
 };
