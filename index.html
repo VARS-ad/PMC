@@ -14738,16 +14738,18 @@ const PC_TEMPLATES = {
   },
   security: {
     label: 'Security',
-    headers: ['Full name','Email','Phone','Building name','Shift','Temporary password'],
+    headers: ['Full name','Email','Phone','Building name','Shift','Temporary password','Date of birth','Passport number'],
     examples: [
-      ['Ivan Petrov','ivan.petrov@example.ae','+971 50 111 2233','Aljil Tower','Day','Welcome2026!'],
-      ['Hassan Al Marri','hassan.almarri@example.ae','+971 55 778 4412','Al Qurm View','Night','Welcome2026!'],
+      ['Ivan Petrov','ivan.petrov@example.ae','+971 50 111 2233','Aljil Tower','Day','Welcome2026!','1985-07-14','AB1234567'],
+      ['Hassan Al Marri','hassan.almarri@example.ae','+971 55 778 4412','Al Qurm View','Night','Welcome2026!','1990-02-03','CD7654321'],
     ],
     filename: 'security-template',
     rules: [
       'Building name must match an existing building exactly.',
       'Shift must be one of: Day, Night, 24h.',
       'Email must be unique across all VARS users.',
+      'Date of birth — use ISO format YYYY-MM-DD.',
+      'Passport number — letters + digits, as printed on the document.',
     ],
   },
   buildings: {
@@ -14969,13 +14971,18 @@ const PCSummary = ({ section }) => {
           };
         });
       } else if (section === 'security') {
-        const { data: profs, error: pe } = await supabaseClient.from('profiles').select('id,full_name,phone,created_at').eq('role','security').order('full_name');
+        const { data: profs, error: pe } = await supabaseClient.from('profiles').select('id,full_name,phone,created_at,date_of_birth,passport_number').eq('role','security').order('full_name');
         if (pe) throw pe;
         const ids = (profs || []).map(p => p.id);
         let assignments = [];
+        let emailMap = {};
         if (ids.length) {
-          const { data: sas } = await supabaseClient.from('security_assignments').select('profile_id,building_id,shift').in('profile_id', ids);
+          const [{ data: sas }, { data: emails }] = await Promise.all([
+            supabaseClient.from('security_assignments').select('profile_id,building_id,shift').in('profile_id', ids),
+            supabaseClient.rpc('get_emails_for_profiles', { p_ids: ids }),
+          ]);
           assignments = sas || [];
+          emailMap = Object.fromEntries((emails || []).map(e => [e.id, e.email]));
         }
         const buildingIds = [...new Set(assignments.map(a => a.building_id))];
         let buildings = [];
@@ -14988,6 +14995,10 @@ const PCSummary = ({ section }) => {
           const sa = assignments.find(a => a.profile_id === p.id);
           return {
             id: p.id, full_name: p.full_name, phone: p.phone, created_at: p.created_at,
+            email: emailMap[p.id] || '—',
+            date_of_birth: p.date_of_birth,
+            passport_number: p.passport_number,
+            building_id: sa ? sa.building_id : null,
             building_name: sa && buildingById[sa.building_id] ? buildingById[sa.building_id].name : '—',
             shift: sa ? sa.shift : '—',
           };
@@ -15247,15 +15258,17 @@ const PCSummary = ({ section }) => {
         <button className="btn btn-sm" onClick={reload}>Refresh</button>
       </div>
       <table className="data-table">
-        <thead><tr><th>Name</th><th>Phone</th><th>Building</th><th>Shift</th><th>Created</th><th style={{textAlign:'right'}}>Actions</th></tr></thead>
+        <thead><tr><th>Name</th><th>Email</th><th>Phone</th><th>Passport</th><th>DOB</th><th>Building</th><th>Shift</th><th style={{textAlign:'right'}}>Actions</th></tr></thead>
         <tbody>
           {rows.map(r => (
             <tr key={r.id}>
               <td style={{fontWeight:500}}>{r.full_name}</td>
+              <td style={{fontSize:12,color:'var(--accent-warm-dark)'}}>{r.email}</td>
               <td>{r.phone || '—'}</td>
+              <td>{r.passport_number || '—'}</td>
+              <td>{r.date_of_birth || '—'}</td>
               <td>{r.building_name}</td>
               <td>{r.shift}</td>
-              <td>{r.created_at ? new Date(r.created_at).toLocaleDateString() : '—'}</td>
               <td style={{textAlign:'right',whiteSpace:'nowrap'}}>
                 <button onClick={() => setEditing({ kind: 'security', record: r })} style={{padding:'4px 10px',fontSize:11,background:'#fff',border:'1px solid #d5cfc8',borderRadius:4,color:'var(--text-dark)',cursor:'pointer',marginRight:6}}>Edit</button>
                 <button onClick={async () => {
@@ -15366,6 +15379,8 @@ const PCBulkUpload = ({ section }) => {
             email: r['Email'], password: r['Temporary password'], full_name: r['Full name'],
             phone: r['Phone'], role: 'security',
             building_name: r['Building name'], shift: r['Shift'],
+            date_of_birth: r['Date of birth'] || null,
+            passport_number: r['Passport number'] || null,
           };
         });
         const { data: { session } } = await supabaseClient.auth.getSession();
