@@ -4464,7 +4464,8 @@ const TopBar = ({ onCreateClick, onMenuToggle, onLogout, onSearchSelect }) => {
         }));
         if (!mounted) return;
         setAllProperties([...real, ...COMING_SOON_PROPERTIES]);
-        if (real.length > 0) setSelectedProperties(prev => prev.length ? prev : [real[0].id]);
+        // Default: select ALL real properties so every report shows the full portfolio out of the box.
+        if (real.length > 0) setSelectedProperties(prev => prev.length ? prev : real.map(r => r.id));
       } catch (_) { /* keep fallback */ }
     })();
     return () => { mounted = false; };
@@ -16971,6 +16972,76 @@ const PMCServiceChargesPage = () => {
         <div className="kpi-card"><div className="label">Pending</div><div className="value" style={{color:'#a07d3c'}}>{fmt(totals.pending)}</div></div>
         <div className="kpi-card"><div className="label">Overdue</div><div className="value" style={{color:'#8b4a42'}}>{fmt(totals.overdue)}</div></div>
       </div>
+
+      {/* Charts row — 2 col on desktop, stack on narrow */}
+      {invoices !== null && filtered.length > 0 && (() => {
+        // monthly bucket totals for last 12 months
+        const buckets = buildMonthlyBuckets(12);
+        const idxMap = Object.fromEntries(buckets.map((m, i) => [m.key, i]));
+        const monthly = { paid: new Array(12).fill(0), pending: new Array(12).fill(0), overdue: new Array(12).fill(0) };
+        filtered.forEach(i => {
+          const k = (i.created_at || i.due_date || '').slice(0, 7);
+          const idx = idxMap[k]; if (idx == null) return;
+          const amt = Number(i.amount_aed) || 0;
+          if (i.status === 'Paid') monthly.paid[idx] += amt;
+          else if (i.status === 'Pending') monthly.pending[idx] += amt;
+          else if (i.status === 'Overdue') monthly.overdue[idx] += amt;
+        });
+        // by source type
+        const bySource = {};
+        filtered.forEach(i => {
+          const key = ({ monthly_dues:'Monthly Dues', amenity_booking:'Amenity', service_request:'Maintenance', manual:'Other / Manual' })[i.source_type] || 'Other';
+          bySource[key] = (bySource[key] || 0) + Number(i.amount_aed);
+        });
+        return (
+          <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit, minmax(420px, 1fr))',gap:18}}>
+            <div className="card">
+              <div style={{marginBottom:6}}>
+                <div style={{fontSize:13,fontWeight:600}}>Invoices by Month</div>
+                <div style={{fontSize:11,color:'var(--text-secondary)',marginTop:2}}>Stacked Paid · Pending · Overdue across last 12 months.</div>
+              </div>
+              <ChartCanvas height={280} config={{
+                type: 'bar',
+                data: { labels: buckets.map(m => m.label), datasets: [
+                  { label: 'Paid', data: monthly.paid, backgroundColor: '#5a6b4f' },
+                  { label: 'Pending', data: monthly.pending, backgroundColor: '#c4b8b0' },
+                  { label: 'Overdue', data: monthly.overdue, backgroundColor: '#8b4a42' },
+                ]},
+                options: {
+                  responsive: true, maintainAspectRatio: false,
+                  interaction: { mode: 'index', intersect: false },
+                  plugins: {
+                    legend: { position: 'bottom', labels: { boxWidth: 12, font: { size: 11 } } },
+                    tooltip: { callbacks: { label: (ctx) => ctx.dataset.label + ': AED ' + Math.round(ctx.parsed.y).toLocaleString() } },
+                  },
+                  scales: { x: { stacked: true, grid: { display: false } }, y: { stacked: true, beginAtZero: true, ticks: { callback: (v) => 'AED ' + Math.round(v/1000) + 'K' } } },
+                },
+              }}/>
+            </div>
+            <div className="card">
+              <div style={{marginBottom:6}}>
+                <div style={{fontSize:13,fontWeight:600}}>Charges by Source</div>
+                <div style={{fontSize:11,color:'var(--text-secondary)',marginTop:2}}>Where invoiced amounts come from. Hover slices for AED.</div>
+              </div>
+              <ChartCanvas height={280} config={{
+                type: 'doughnut',
+                data: { labels: Object.keys(bySource), datasets: [{
+                  data: Object.values(bySource),
+                  backgroundColor: ['#928989','#a07d3c','#5a6b4f','#c4b8b0','#8b4a42','#7a6e60'],
+                  borderWidth: 0,
+                }]},
+                options: {
+                  responsive: true, maintainAspectRatio: false, cutout: '60%',
+                  plugins: {
+                    legend: { position: 'bottom', labels: { boxWidth: 12, font: { size: 11 } } },
+                    tooltip: { callbacks: { label: (ctx) => ctx.label + ': AED ' + Math.round(ctx.parsed).toLocaleString() } },
+                  },
+                },
+              }}/>
+            </div>
+          </div>
+        );
+      })()}
 
       <div className="card">
         <div style={{display:'flex',gap:14,flexWrap:'wrap',alignItems:'flex-end',marginBottom:14}}>
