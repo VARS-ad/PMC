@@ -16509,6 +16509,7 @@ const PMCPropertiesPage = ({ setPage }) => {
   const [buildings, setBuildings] = useState(null);
   const [error, setError] = useState(null);
   const [selectedBuilding, setSelectedBuilding] = useState(null);
+  const [drill, setDrill] = useState(null); // { building, view }
 
   useEffect(() => {
     let mounted = true;
@@ -16516,27 +16517,59 @@ const PMCPropertiesPage = ({ setPage }) => {
     (async () => {
       if (!supabaseClient) { setError('Supabase not initialized'); return; }
       try {
-        const [{ data: bs }, { data: units }, { data: ras }, { data: invoices }, { data: srs }] = await Promise.all([
+        const [{ data: bs }, { data: units }, { data: ras }, { data: invoices }, { data: srs }, { data: profiles }] = await Promise.all([
           supabaseClient.from('buildings').select('id,name,address,notes,created_at').order('name'),
           supabaseClient.from('units').select('id,building_id,floor,unit_number'),
-          supabaseClient.from('resident_assignments').select('profile_id,unit_id,tenure,monthly_payment_aed'),
-          supabaseClient.from('invoices').select('unit_id,amount_aed,status'),
-          supabaseClient.from('service_requests').select('unit_id,status'),
+          supabaseClient.from('resident_assignments').select('profile_id,unit_id,tenure,monthly_payment_aed,lease_start,lease_end,ownership_start'),
+          supabaseClient.from('invoices').select('id,invoice_number,description,amount_aed,due_date,status,source_type,unit_id,resident_profile_id,created_at'),
+          supabaseClient.from('service_requests').select('id,category,description,status,priority,created_at,unit_id,resident_profile_id,preferred_date'),
+          supabaseClient.from('profiles').select('id,full_name,phone'),
         ]);
         if (!mounted) return;
+        const profileMap = Object.fromEntries((profiles || []).map(p => [p.id, p]));
         const filterB = selectedProperties.length > 0 ? selectedProperties : null;
         const result = (bs || []).filter(b => !filterB || filterB.includes(b.id)).map(b => {
           const bUnits = (units || []).filter(u => u.building_id === b.id);
+          const unitMap = Object.fromEntries(bUnits.map(u => [u.id, u]));
           const unitIds = bUnits.map(u => u.id);
-          const occupied = (ras || []).filter(r => unitIds.includes(r.unit_id));
+          const occupied = (ras || [])
+            .filter(r => unitIds.includes(r.unit_id))
+            .map(r => ({
+              ...r,
+              resident_name: profileMap[r.profile_id]?.full_name || '—',
+              resident_phone: profileMap[r.profile_id]?.phone || null,
+              unit_number: unitMap[r.unit_id]?.unit_number || '—',
+              floor: unitMap[r.unit_id]?.floor ?? null,
+            }));
           const tenants = occupied.filter(o => o.tenure === 'Tenant');
           const monthlyRev = tenants.reduce((s, t) => s + Number(t.monthly_payment_aed || 0), 0);
-          const bInvoices = (invoices || []).filter(i => unitIds.includes(i.unit_id));
+          const bInvoices = (invoices || [])
+            .filter(i => unitIds.includes(i.unit_id))
+            .map(i => ({
+              ...i,
+              resident_name: i.resident_profile_id && profileMap[i.resident_profile_id] ? profileMap[i.resident_profile_id].full_name : '—',
+              unit_number: unitMap[i.unit_id]?.unit_number || '—',
+            }));
           const collected = bInvoices.filter(i => i.status === 'Paid').reduce((s, i) => s + Number(i.amount_aed), 0);
           const outstanding = bInvoices.filter(i => i.status === 'Pending' || i.status === 'Overdue').reduce((s, i) => s + Number(i.amount_aed), 0);
-          const bSRs = (srs || []).filter(s => unitIds.includes(s.unit_id));
+          const bSRs = (srs || [])
+            .filter(s => unitIds.includes(s.unit_id))
+            .map(s => ({
+              ...s,
+              resident_name: s.resident_profile_id && profileMap[s.resident_profile_id] ? profileMap[s.resident_profile_id].full_name : '—',
+              unit_number: unitMap[s.unit_id]?.unit_number || '—',
+            }));
           const openSRs = bSRs.filter(s => ['New','Acknowledged','In Progress'].includes(s.status)).length;
-          return { ...b, units: bUnits, unitCount: bUnits.length, occupiedCount: occupied.length, monthlyRev, collected, outstanding, openSRs, totalSRs: bSRs.length };
+          return {
+            ...b,
+            units: bUnits,
+            assignments: occupied, // alias for residents
+            tenants, // resident_assignments filtered to Tenant
+            invoices: bInvoices,
+            srs: bSRs,
+            unitCount: bUnits.length, occupiedCount: occupied.length,
+            monthlyRev, collected, outstanding, openSRs, totalSRs: bSRs.length,
+          };
         });
         setBuildings(result);
       } catch (e) { if (mounted) setError(String(e.message || e)); }
@@ -16577,13 +16610,13 @@ const PMCPropertiesPage = ({ setPage }) => {
                   </div>
                   {b.notes && <div style={{fontSize:12,color:'var(--text-muted)',marginBottom:14,padding:'10px 12px',background:'var(--bg-page)',borderRadius:6,lineHeight:1.5}}>{b.notes}</div>}
                   <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit, minmax(130px, 1fr))',gap:10}}>
-                    <PMCStat label="Units"             value={b.unitCount}                                                  onClick={open}                                  hint="View floors & units"/>
-                    <PMCStat label="Occupied"          value={b.occupiedCount + ' / ' + b.unitCount}                       onClick={open}                                  hint="View residents"/>
-                    <PMCStat label="Monthly Run-Rate"  value={'AED ' + Math.round(b.monthlyRev).toLocaleString()}          onClick={() => setPage && setPage('payment')}   hint="Sum of tenant leases"/>
-                    <PMCStat label="Total Billed"      value={'AED ' + Math.round(totalBilled).toLocaleString()}           onClick={() => setPage && setPage('payment')}   hint="Non-cancelled invoices"/>
-                    <PMCStat label="Collected"         value={'AED ' + Math.round(b.collected).toLocaleString()}           onClick={() => setPage && setPage('payment')}   color="#5a6b4f" hint="Status = Paid"/>
-                    <PMCStat label="Outstanding"       value={'AED ' + Math.round(b.outstanding).toLocaleString()}         onClick={() => setPage && setPage('payment')}   color={b.outstanding > 0 ? '#8b4a42' : null} hint="Pending + Overdue"/>
-                    <PMCStat label="Open SRs"          value={b.openSRs + ' open · ' + b.totalSRs + ' total'}              onClick={() => setPage && setPage('service')}   hint="View service requests"/>
+                    <PMCStat label="Units"             value={b.unitCount}                                                  onClick={open}                                                  hint="View floors & units"/>
+                    <PMCStat label="Occupied"          value={b.occupiedCount}                                              onClick={() => setDrill({ building: b, view: 'residents' })}      hint="Residents in this property"/>
+                    <PMCStat label="Monthly Run-Rate"  value={'AED ' + Math.round(b.monthlyRev).toLocaleString()}          onClick={() => setDrill({ building: b, view: 'tenants' })}        hint="Tenants + lease rates"/>
+                    <PMCStat label="Total Billed"      value={'AED ' + Math.round(totalBilled).toLocaleString()}           onClick={() => setDrill({ building: b, view: 'invoices' })}       hint="All invoices for this building"/>
+                    <PMCStat label="Collected"         value={'AED ' + Math.round(b.collected).toLocaleString()}           onClick={() => setDrill({ building: b, view: 'collected' })}      color="#5a6b4f" hint="Paid invoices only"/>
+                    <PMCStat label="Outstanding"       value={'AED ' + Math.round(b.outstanding).toLocaleString()}         onClick={() => setDrill({ building: b, view: 'outstanding' })}    color={b.outstanding > 0 ? '#8b4a42' : null} hint="Pending + Overdue"/>
+                    <PMCStat label="Open SRs"          value={b.openSRs + ' open · ' + b.totalSRs + ' total'}              onClick={() => setDrill({ building: b, view: 'srs' })}            hint="Service requests for this building"/>
                   </div>
                 </div>
               );
