@@ -17244,7 +17244,7 @@ const PMCReportsPage = () => {
       }
     })();
     return () => { mounted = false; };
-  }, [selectedProperties.join(',')]);
+  }, [selectedProperties.join(','), timeRange]);
 
   const fmt = (n) => 'AED ' + Math.round(n).toLocaleString();
   const fmtShort = (n) => {
