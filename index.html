@@ -4434,12 +4434,11 @@ const COMING_SOON_PROPERTIES = [
 ];
 
 const TopBar = ({ onCreateClick, onMenuToggle, onLogout, onSearchSelect }) => {
-  const { data, setData, t } = useApp();
+  const { data, setData, t, selectedProperties, setSelectedProperties } = useApp();
   const [showCreate, setShowCreate] = useState(false);
   const [showPmProfile, setShowPmProfile] = useState(false);
   const [showPropertyDropdown, setShowPropertyDropdown] = useState(false);
   const [allProperties, setAllProperties] = useState(COMING_SOON_PROPERTIES);
-  const [selectedProperties, setSelectedProperties] = useState([]);
   useEffect(() => {
     if (!supabaseClient) return;
     let mounted = true;
@@ -16148,10 +16147,10 @@ const UpcomingVisitsPanel = () => {
 // New: reads from the public.visits table (filterable), replaces the legacy blank page.
 
 const PMCVisitorsPage = () => {
+  const { selectedProperties = [] } = useApp();
   const [visits, setVisits] = useState(null);
   const [error, setError] = useState(null);
   const [buildings, setBuildings] = useState([]);
-  const [buildingFilter, setBuildingFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState('all');
   const [typeFilter, setTypeFilter] = useState('all');
   const [dateFromFilter, setDateFromFilter] = useState('');
@@ -16194,7 +16193,7 @@ const PMCVisitorsPage = () => {
   useEffect(() => { load(); }, []);
 
   const filtered = (visits || []).filter(v => {
-    if (buildingFilter !== 'all' && v.building_id !== buildingFilter) return false;
+    if (selectedProperties.length > 0 && !selectedProperties.includes(v.building_id)) return false;
     if (statusFilter !== 'all' && v.status !== statusFilter) return false;
     if (typeFilter !== 'all' && v.type !== typeFilter) return false;
     if (dateFromFilter && v.visit_date < dateFromFilter) return false;
@@ -16247,14 +16246,15 @@ const PMCVisitorsPage = () => {
       </div>
 
       <div className="card">
+        <div style={{fontSize:11,color:'var(--text-secondary)',marginBottom:14,padding:'8px 12px',background:'var(--bg-page)',borderRadius:6,border:'1px solid var(--border-light)'}}>
+          {selectedProperties.length === 0
+            ? 'Showing visitors across all buildings. Use the property selector in the top bar to scope to specific buildings.'
+            : selectedProperties.length === 1
+              ? 'Scoped to 1 building (from the top-bar property selector).'
+              : 'Scoped to ' + selectedProperties.length + ' buildings (from the top-bar property selector).'
+          }
+        </div>
         <div style={{display:'flex',gap:14,flexWrap:'wrap',alignItems:'flex-end'}}>
-          <div style={{flex:'1 1 180px'}}>
-            <label style={{fontSize:10,letterSpacing:'0.06em',textTransform:'uppercase',color:'var(--text-secondary)',marginBottom:6,display:'block',fontWeight:500}}>Building</label>
-            <select className="form-input" value={buildingFilter} onChange={e => setBuildingFilter(e.target.value)}>
-              <option value="all">All buildings</option>
-              {buildings.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
-            </select>
-          </div>
           <div style={{flex:'1 1 160px'}}>
             <label style={{fontSize:10,letterSpacing:'0.06em',textTransform:'uppercase',color:'var(--text-secondary)',marginBottom:6,display:'block',fontWeight:500}}>Status</label>
             <select className="form-input" value={statusFilter} onChange={e => setStatusFilter(e.target.value)}>
@@ -16283,7 +16283,7 @@ const PMCVisitorsPage = () => {
             <label style={{fontSize:10,letterSpacing:'0.06em',textTransform:'uppercase',color:'var(--text-secondary)',marginBottom:6,display:'block',fontWeight:500}}>Search</label>
             <input type="text" className="form-input" placeholder="Name, phone, unit, permit…" value={search} onChange={e => setSearch(e.target.value)}/>
           </div>
-          <button className="btn btn-sm" onClick={() => { setBuildingFilter('all'); setStatusFilter('all'); setTypeFilter('all'); setDateFromFilter(''); setDateToFilter(''); setSearch(''); }}>Clear filters</button>
+          <button className="btn btn-sm" onClick={() => { setStatusFilter('all'); setTypeFilter('all'); setDateFromFilter(''); setDateToFilter(''); setSearch(''); }}>Clear filters</button>
         </div>
       </div>
 
@@ -16330,10 +16330,10 @@ const PMCVisitorsPage = () => {
 // computes on-duty status from current Dubai time + shift, exposes Chat/Report stubs.
 
 const PMCGuardsPage = () => {
+  const { selectedProperties = [] } = useApp();
   const [guards, setGuards] = useState(null);
   const [error, setError] = useState(null);
   const [buildings, setBuildings] = useState([]);
-  const [buildingFilter, setBuildingFilter] = useState('all');
   const [shiftFilter, setShiftFilter] = useState('all');
   const [search, setSearch] = useState('');
 
@@ -16380,7 +16380,7 @@ const PMCGuardsPage = () => {
   };
 
   const filtered = (guards || []).filter(g => {
-    if (buildingFilter !== 'all' && g.building_id !== buildingFilter) return false;
+    if (selectedProperties.length > 0 && !selectedProperties.includes(g.building_id)) return false;
     if (shiftFilter !== 'all' && g.shift !== shiftFilter) return false;
     if (search && !(g.full_name || '').toLowerCase().includes(search.toLowerCase()) && !(g.phone || '').includes(search)) return false;
     return true;
@@ -16407,14 +16407,15 @@ const PMCGuardsPage = () => {
       </div>
 
       <div className="card">
+        <div style={{fontSize:11,color:'var(--text-secondary)',marginBottom:14,padding:'8px 12px',background:'var(--bg-page)',borderRadius:6,border:'1px solid var(--border-light)'}}>
+          {selectedProperties.length === 0
+            ? 'Showing guards across all buildings. Use the property selector in the top bar to scope to specific buildings.'
+            : selectedProperties.length === 1
+              ? 'Scoped to 1 building (from the top-bar property selector).'
+              : 'Scoped to ' + selectedProperties.length + ' buildings (from the top-bar property selector).'
+          }
+        </div>
         <div style={{display:'flex',gap:14,flexWrap:'wrap',alignItems:'flex-end'}}>
-          <div style={{flex:'1 1 180px'}}>
-            <label style={{fontSize:10,letterSpacing:'0.06em',textTransform:'uppercase',color:'var(--text-secondary)',marginBottom:6,display:'block',fontWeight:500}}>Building</label>
-            <select className="form-input" value={buildingFilter} onChange={e => setBuildingFilter(e.target.value)}>
-              <option value="all">All buildings</option>
-              {buildings.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
-            </select>
-          </div>
           <div style={{flex:'1 1 160px'}}>
             <label style={{fontSize:10,letterSpacing:'0.06em',textTransform:'uppercase',color:'var(--text-secondary)',marginBottom:6,display:'block',fontWeight:500}}>Shift</label>
             <select className="form-input" value={shiftFilter} onChange={e => setShiftFilter(e.target.value)}>
@@ -16426,7 +16427,7 @@ const PMCGuardsPage = () => {
             <label style={{fontSize:10,letterSpacing:'0.06em',textTransform:'uppercase',color:'var(--text-secondary)',marginBottom:6,display:'block',fontWeight:500}}>Search</label>
             <input type="text" className="form-input" placeholder="Name or phone…" value={search} onChange={e => setSearch(e.target.value)}/>
           </div>
-          <button className="btn btn-sm" onClick={() => { setBuildingFilter('all'); setShiftFilter('all'); setSearch(''); }}>Clear filters</button>
+          <button className="btn btn-sm" onClick={() => { setShiftFilter('all'); setSearch(''); }}>Clear filters</button>
         </div>
       </div>
 
@@ -16495,6 +16496,9 @@ const App = () => {
   }, [role]);
   const [page, setPage] = useState('overview');
   const [data, setData] = useState(loadPersistedData);
+  // Lifted from TopBar so other PMC pages (Visitors, Guards, future Overview) can
+  // filter their data by the currently-selected building ids.
+  const [selectedProperties, setSelectedProperties] = useState([]);
   const [toast, setToast] = useState(null);
   const [language, setLanguageState] = useState(getInitialLanguage);
   // Apply RTL/LTR to <html> + <body> whenever language changes
@@ -16708,7 +16712,7 @@ const App = () => {
 
   // If not logged in, show login page (with scan notice if QR was scanned)
   if (!role) return (
-    <AppContext.Provider value={{ data, setData, showToast, language, setLanguage, t }}>
+    <AppContext.Provider value={{ data, setData, showToast, language, setLanguage, t, selectedProperties, setSelectedProperties }}>
       <LoginPage onLogin={(selectedRole) => {
         try { localStorage.setItem('varspm_role', selectedRole); } catch(e) {}
         setRole(selectedRole);
@@ -16727,7 +16731,7 @@ const App = () => {
   // If logged in as resident, show resident app
   if (role === 'resident') {
     return (
-      <AppContext.Provider value={{ data, setData, showToast, language, setLanguage, t }}>
+      <AppContext.Provider value={{ data, setData, showToast, language, setLanguage, t, selectedProperties, setSelectedProperties }}>
         <ResidentApp onLogout={handleLogout}/>
         {toast && <div className="toast">{toast}</div>}
       </AppContext.Provider>
@@ -16737,7 +16741,7 @@ const App = () => {
   // If logged in as security, show security app
   if (role === 'security') {
     return (
-      <AppContext.Provider value={{ data, setData, showToast, language, setLanguage, t }}>
+      <AppContext.Provider value={{ data, setData, showToast, language, setLanguage, t, selectedProperties, setSelectedProperties }}>
         <SecurityApp onLogout={handleLogout}/>
         <SyncDot/>
         {toast && <div className="toast">{toast}</div>}
@@ -16768,7 +16772,7 @@ const App = () => {
   };
 
   return (
-    <AppContext.Provider value={{ data, setData, showToast, language, setLanguage, t }}>
+    <AppContext.Provider value={{ data, setData, showToast, language, setLanguage, t, selectedProperties, setSelectedProperties }}>
       <div className="app-layout">
         <div className={`sidebar-overlay ${sidebarOpen ? 'show' : ''}`} onClick={() => setSidebarOpen(false)}/>
         <Sidebar page={page} setPage={setPage} isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} onLogout={handleLogout}/>
