@@ -6334,9 +6334,9 @@ const AnnouncementsPage = () => {
       {/* Composer Modal */}
       {showComposer && (
         <div className="modal-overlay" onClick={()=>{setShowComposer(false);setEditingAnn(null)}}>
-          <div className="modal" style={{maxWidth:480}} onClick={e=>e.stopPropagation()}>
+          <div className="modal" style={{maxWidth:620}} onClick={e=>e.stopPropagation()}>
             <div className="modal-header" style={{marginBottom:4}}>
-              <div><div className="modal-sub">Announcement Composer</div><h2 style={{fontSize:18}}>{editingAnn ? t('pm.composerEditTitle') : t('pm.composerTitle')}</h2></div>
+              <div><div className="modal-sub" style={{fontSize:10,letterSpacing:'0.08em',textTransform:'uppercase',color:'var(--text-muted)',marginBottom:4}}>Announcement Composer</div><h2 style={{fontSize:22}}>{editingAnn ? t('pm.composerEditTitle') : t('pm.composerTitle')}</h2></div>
               <button className="modal-close" onClick={()=>{setShowComposer(false);setEditingAnn(null)}}>×</button>
             </div>
 
@@ -6351,10 +6351,10 @@ const AnnouncementsPage = () => {
                   <React.Fragment key={s}>
                     {i > 0 && <span style={{color:'#d0d0d0',fontSize:11}}>›</span>}
                     <span onClick={() => { if (isCompleted || isActive) setComposerStep(stepNum); }}
-                      style={{padding:'6px 14px',borderRadius:20,cursor: isActive || isCompleted ? 'pointer' : 'default',fontWeight: isActive ? 600 : 400,
-                        background: isActive ? '#1a1a1a' : 'transparent',
-                        color: isActive ? '#fff' : isCompleted ? '#1a1a1a' : '#8a8a8a',
-                        border: isActive ? 'none' : '1px solid transparent',fontSize:12,letterSpacing:'0.02em',whiteSpace:'nowrap'}}>
+                      style={{padding:'7px 16px',borderRadius:20,cursor: isActive || isCompleted ? 'pointer' : 'default',fontWeight: isActive ? 500 : 400,
+                        background: isActive ? 'var(--bg-warm-dark)' : 'transparent',
+                        color: isActive ? '#fff' : isCompleted ? 'var(--text-dark)' : 'var(--text-muted)',
+                        border: isActive ? 'none' : '1px solid var(--border-light)',fontSize:12,letterSpacing:'0.02em',whiteSpace:'nowrap'}}>
                       {circled} {s}
                     </span>
                   </React.Fragment>
@@ -6382,13 +6382,13 @@ const AnnouncementsPage = () => {
               </div>
               <div style={{marginBottom:20}}>
                 <label style={{fontSize:11,fontWeight:600,letterSpacing:'0.06em',textTransform:'uppercase',color:'#1a1a1a',display:'block',marginBottom:8}}>{t('pm.announcePriority')}</label>
-                <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
+                <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
                   <div onClick={() => setAnnForm(p => ({...p, priority:'Normal'}))}
-                    style={{padding:'12px 16px',textAlign:'center',border: annForm.priority==='Normal' ? '1.5px solid #1a1a1a' : '1px solid #d0d0d0',borderRadius:8,cursor:'pointer',background: annForm.priority==='Normal' ? '#1a1a1a' : '#fff',color: annForm.priority==='Normal' ? '#fff' : '#1a1a1a',fontWeight:600,fontSize:13}}>
+                    style={{padding:'14px 16px',textAlign:'center',border: annForm.priority==='Normal' ? '1.5px solid var(--bg-warm-dark)' : '1px solid var(--border-light)',borderRadius:8,cursor:'pointer',background: annForm.priority==='Normal' ? 'var(--bg-warm-dark)' : '#fff',color: annForm.priority==='Normal' ? '#fff' : 'var(--text-dark)',fontWeight:500,fontSize:13,transition:'all 0.15s'}}>
                     {t('pm.normalPriority')}
                   </div>
                   <div onClick={() => setAnnForm(p => ({...p, priority:'High'}))}
-                    style={{padding:'12px 16px',textAlign:'center',border: annForm.priority==='High' ? '1.5px solid #1a1a1a' : '1px solid #d0d0d0',borderRadius:8,cursor:'pointer',background: annForm.priority==='High' ? '#1a1a1a' : '#fff',color: annForm.priority==='High' ? '#fff' : '#1a1a1a',fontWeight:600,fontSize:13}}>
+                    style={{padding:'14px 16px',textAlign:'center',border: annForm.priority==='High' ? '1.5px solid #8b4a42' : '1px solid var(--border-light)',borderRadius:8,cursor:'pointer',background: annForm.priority==='High' ? '#8b4a42' : '#fff',color: annForm.priority==='High' ? '#fff' : 'var(--text-dark)',fontWeight:500,fontSize:13,transition:'all 0.15s'}}>
                     △ {t('pm.highPriorityLabel')}
                   </div>
                 </div>
@@ -6422,15 +6422,15 @@ const AnnouncementsPage = () => {
                 {label:t('pm.ownersOnly'),sub:'Property owners',val:'Owners Only'}
               ].map((a,i) => (
                 <div key={i} onClick={() => setAnnForm(p => ({...p, audience: a.val}))}
-                  style={{display:'flex',alignItems:'center',gap:12,marginBottom:8,cursor:'pointer',background: annForm.audience===a.val ? '#f5f5f5' : '#fff',borderRadius:6,padding:'12px 14px',border: annForm.audience===a.val ? '1.5px solid #1a1a1a' : '1px solid #e0e0e0',transition:'all 0.15s'}}>
-                  <div style={{width:34,height:34,background: annForm.audience===a.val ? '#1a1a1a' : '#f0f0f0',borderRadius:'50%',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={annForm.audience===a.val ? '#fff' : '#8a8a8a'} strokeWidth="2"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg>
+                  style={{display:'flex',alignItems:'center',gap:12,marginBottom:8,cursor:'pointer',background: annForm.audience===a.val ? 'var(--accent-warm-light)' : '#fff',borderRadius:8,padding:'14px 16px',border: annForm.audience===a.val ? '1.5px solid var(--bg-warm-dark)' : '1px solid var(--border-light)',transition:'all 0.15s'}}>
+                  <div style={{width:36,height:36,background: annForm.audience===a.val ? 'var(--bg-warm-dark)' : 'var(--bg-surface)',borderRadius:'50%',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,border: annForm.audience===a.val ? 'none' : '1px solid var(--border-light)'}}>
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke={annForm.audience===a.val ? '#fff' : 'var(--text-secondary)'} strokeWidth="1.6"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg>
                   </div>
                   <div style={{flex:1}}>
-                    <div style={{fontSize:13,fontWeight: annForm.audience===a.val ? 600 : 400,color:'#1a1a1a'}}>{a.label}</div>
-                    <div style={{fontSize:11,color:'#a89a92'}}>{a.sub}</div>
+                    <div style={{fontSize:13,fontWeight: annForm.audience===a.val ? 600 : 500,color:'var(--text-dark)'}}>{a.label}</div>
+                    <div style={{fontSize:11,color:'var(--text-muted)',marginTop:2}}>{a.sub}</div>
                   </div>
-                  {annForm.audience===a.val && <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#1a1a1a" strokeWidth="2.5"><path d="M20 6L9 17l-5-5"/></svg>}
+                  {annForm.audience===a.val && <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--bg-warm-dark)" strokeWidth="2.5"><path d="M20 6L9 17l-5-5"/></svg>}
                 </div>
               ))}
               <div className="grid-2" style={{marginTop:20}}>
@@ -6449,10 +6449,10 @@ const AnnouncementsPage = () => {
                   {key:'draft',label:t('pm.saveAsDraft'),sub:t('pm.editLater')}
                 ].map(opt => (
                   <div key={opt.key} onClick={() => setAnnForm(p => ({...p, publishMode: opt.key}))}
-                    style={{padding:'16px 12px',textAlign:'center',border: annForm.publishMode===opt.key ? '1.5px solid #1a1a1a' : '1px solid #d0d0d0',borderRadius:6,cursor:'pointer',
-                      background: annForm.publishMode===opt.key ? '#1a1a1a' : '#fff',
-                      color: annForm.publishMode===opt.key ? '#fff' : '#1a1a1a',transition:'all 0.15s'}}>
-                    <div style={{fontWeight:600,fontSize:13,marginBottom:2}}>{opt.label}</div>
+                    style={{padding:'16px 12px',textAlign:'center',border: annForm.publishMode===opt.key ? '1.5px solid var(--bg-warm-dark)' : '1px solid var(--border-light)',borderRadius:8,cursor:'pointer',
+                      background: annForm.publishMode===opt.key ? 'var(--bg-warm-dark)' : '#fff',
+                      color: annForm.publishMode===opt.key ? '#fff' : 'var(--text-dark)',transition:'all 0.15s'}}>
+                    <div style={{fontWeight:500,fontSize:13,marginBottom:3}}>{opt.label}</div>
                     <div style={{fontSize:11,opacity:0.7}}>{opt.sub}</div>
                   </div>
                 ))}
@@ -16972,6 +16972,52 @@ const PMCServiceChargesPage = () => {
         <div className="kpi-card"><div className="label">Pending</div><div className="value" style={{color:'#a07d3c'}}>{fmt(totals.pending)}</div></div>
         <div className="kpi-card"><div className="label">Overdue</div><div className="value" style={{color:'#8b4a42'}}>{fmt(totals.overdue)}</div></div>
       </div>
+
+      {/* Aging buckets — receivables by days overdue */}
+      {invoices !== null && filtered.length > 0 && (() => {
+        const today = new Date();
+        const buckets = { current: 0, b30: 0, b60: 0, b90: 0, b91: 0 };
+        filtered.filter(i => i.status === 'Pending' || i.status === 'Overdue').forEach(i => {
+          if (!i.due_date) { buckets.current += Number(i.amount_aed); return; }
+          const days = Math.floor((today.getTime() - new Date(i.due_date).getTime()) / (1000 * 60 * 60 * 24));
+          if (days <= 0) buckets.current += Number(i.amount_aed);
+          else if (days <= 30) buckets.b30 += Number(i.amount_aed);
+          else if (days <= 60) buckets.b60 += Number(i.amount_aed);
+          else if (days <= 90) buckets.b90 += Number(i.amount_aed);
+          else buckets.b91 += Number(i.amount_aed);
+        });
+        const total = Math.max(buckets.current + buckets.b30 + buckets.b60 + buckets.b90 + buckets.b91, 1);
+        const rows = [
+          { label: 'Not yet due',  amt: buckets.current, color: '#c4b8b0' },
+          { label: '1–30 days',     amt: buckets.b30,     color: '#a07d3c' },
+          { label: '31–60 days',    amt: buckets.b60,     color: '#8b6a3c' },
+          { label: '61–90 days',    amt: buckets.b90,     color: '#8b4a42' },
+          { label: '90+ days',      amt: buckets.b91,     color: '#6b2a22' },
+        ];
+        return (
+          <div className="card">
+            <div style={{marginBottom:12}}>
+              <div style={{fontSize:13,fontWeight:600}}>Aging — Receivables by Days Overdue</div>
+              <div style={{fontSize:11,color:'var(--text-secondary)',marginTop:2}}>Only unpaid invoices (Pending + Overdue). Older buckets = redder.</div>
+            </div>
+            <div style={{display:'flex',height:18,borderRadius:9,overflow:'hidden',border:'1px solid var(--border-light)',marginBottom:14}}>
+              {rows.map((r, i) => r.amt > 0 && <div key={i} title={r.label + ': ' + fmt(r.amt)} style={{flex: r.amt, background: r.color}}/>)}
+            </div>
+            <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit, minmax(150px, 1fr))',gap:10}}>
+              {rows.map((r, i) => (
+                <div key={i} style={{padding:'10px 12px',background:'var(--bg-surface)',borderRadius:6,border:'1px solid var(--border-light)'}}>
+                  <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:6}}>
+                    <span style={{width:8,height:8,borderRadius:4,background:r.color}}/>
+                    <div style={{fontSize:10,letterSpacing:'0.04em',textTransform:'uppercase',color:'var(--text-secondary)'}}>{r.label}</div>
+                  </div>
+                  <div style={{fontSize:14,fontWeight:600,color:'var(--text-dark)'}}>{fmt(r.amt)}</div>
+                  <div style={{fontSize:10,color:'var(--text-muted)',marginTop:2}}>{Math.round(r.amt/total*100)}% of unpaid</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Charts row — 2 col on desktop, stack on narrow */}
       {invoices !== null && filtered.length > 0 && (() => {
