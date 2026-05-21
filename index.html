@@ -4386,7 +4386,6 @@ const Sidebar = ({ page, setPage, isOpen, onClose, onLogout }) => {
   const { t } = useApp();
   const items = [
     { id: 'overview', label: t('nav.overview'), icon: 'overview' },
-    { id: 'profileCreation', label: 'Profile Creation', icon: 'reports' },
     { id: 'service', label: t('nav.service'), icon: 'service' },
     { id: 'payment', label: t('nav.payment'), icon: 'payment' },
     { id: 'escalations', label: t('nav.escalations'), icon: 'escalations' },
@@ -4395,6 +4394,7 @@ const Sidebar = ({ page, setPage, isOpen, onClose, onLogout }) => {
     { id: 'visitors', label: t('nav.visitors'), icon: 'visitors' },
     { id: 'guards', label: t('nav.guards'), icon: 'guards' },
     { id: 'reports', label: t('nav.reports'), icon: 'reports' },
+    { id: 'profileCreation', label: 'Profile Creation', icon: 'reports' },
     { id: 'settings', label: t('nav.settings'), icon: 'settings' },
   ];
 
@@ -14645,10 +14645,13 @@ const loadPersistedData = () => {
 const PC_TEMPLATES = {
   residents: {
     label: 'Residents',
-    headers: ['Full name','Email','Phone','Building name','Floor','Unit number','Temporary password'],
+    headers: [
+      'Full name','Email','Phone','Building name','Floor','Unit number','Temporary password',
+      'Date of birth','Passport number','Tenure','Lease start','Lease end','Monthly payment (AED)','Ownership start',
+    ],
     examples: [
-      ['Aisha Al Mansoori','aisha.almansoori@example.ae','+971 50 412 8839','Aljil Tower',12,'B-1204','Welcome2026!'],
-      ['Mohammed Al Hammadi','mohammed.alhammadi@example.ae','+971 55 234 1187','Aljil Tower',8,'A-803','Welcome2026!'],
+      ['Aisha Al Mansoori','aisha.almansoori@example.ae','+971 50 412 8839','Aljil Tower',12,'B-1204','Welcome2026!','1988-04-15','AB1234567','Owner','','','','2021-09-10'],
+      ['Mohammed Al Hammadi','mohammed.alhammadi@example.ae','+971 55 234 1187','Aljil Tower',8,'A-803','Welcome2026!','1990-11-22','CD7654321','Tenant','2025-03-01','2026-02-28',12000,''],
     ],
     filename: 'residents-template',
     rules: [
@@ -14656,6 +14659,10 @@ const PC_TEMPLATES = {
       'Unit number must match an existing unit in that building.',
       'Temporary password is what the resident uses on first sign-in. They can change it afterwards.',
       'Email must be unique across all VARS users.',
+      'Date of birth — use ISO format YYYY-MM-DD.',
+      'Tenure — one of: Owner, Tenant.',
+      'Tenants: fill Lease start, Lease end, Monthly payment (AED). Leave Ownership start empty.',
+      'Owners: fill Ownership start. Leave Lease start / Lease end / Monthly payment empty.',
     ],
   },
   security: {
@@ -14837,6 +14844,7 @@ const PCSummary = ({ section }) => {
   const [error, setError] = useState(null);
   const [selectedBuilding, setSelectedBuilding] = useState(null);
   const [editing, setEditing] = useState(null); // { kind: 'building' | 'resident' | 'security', record }
+  const [viewingResident, setViewingResident] = useState(null);
 
   const reload = async () => {
     setError(null); setRows(null);
@@ -14850,12 +14858,12 @@ const PCSummary = ({ section }) => {
         if (ue) throw ue;
         data = (buildings || []).map(b => ({ ...b, units: (units || []).filter(u => u.building_id === b.id) }));
       } else if (section === 'residents') {
-        const { data: profs, error: pe } = await supabaseClient.from('profiles').select('id,full_name,phone,created_at').eq('role','resident').order('full_name');
+        const { data: profs, error: pe } = await supabaseClient.from('profiles').select('id,full_name,phone,created_at,date_of_birth,passport_number').eq('role','resident').order('full_name');
         if (pe) throw pe;
         const ids = (profs || []).map(p => p.id);
         let assignments = [];
         if (ids.length) {
-          const { data: ras } = await supabaseClient.from('resident_assignments').select('profile_id,unit_id').in('profile_id', ids);
+          const { data: ras } = await supabaseClient.from('resident_assignments').select('profile_id,unit_id,tenure,lease_start,lease_end,monthly_payment_aed,ownership_start').in('profile_id', ids);
           assignments = ras || [];
         }
         const unitIds = assignments.map(a => a.unit_id);
@@ -14878,9 +14886,15 @@ const PCSummary = ({ section }) => {
           const building = unit && buildingById[unit.building_id];
           return {
             id: p.id, full_name: p.full_name, phone: p.phone, created_at: p.created_at,
+            date_of_birth: p.date_of_birth, passport_number: p.passport_number,
             building_name: building ? building.name : '—',
             floor: unit ? unit.floor : '—',
             unit_number: unit ? unit.unit_number : '—',
+            tenure: ra ? ra.tenure : null,
+            lease_start: ra ? ra.lease_start : null,
+            lease_end: ra ? ra.lease_end : null,
+            monthly_payment_aed: ra ? ra.monthly_payment_aed : null,
+            ownership_start: ra ? ra.ownership_start : null,
           };
         });
       } else if (section === 'security') {
@@ -15042,7 +15056,7 @@ const PCSummary = ({ section }) => {
           <thead><tr><th>Name</th><th>Phone</th><th>Building</th><th>Floor</th><th>Unit</th><th>Created</th><th style={{textAlign:'right'}}>Actions</th></tr></thead>
           <tbody>
             {rows.map(r => (
-              <tr key={r.id}>
+              <tr key={r.id} onClick={() => setViewingResident(r)} style={{cursor:'pointer'}}>
                 <td style={{fontWeight:500}}>{r.full_name}</td>
                 <td>{r.phone || '—'}</td>
                 <td>{r.building_name}</td>
@@ -15050,8 +15064,9 @@ const PCSummary = ({ section }) => {
                 <td>{r.unit_number}</td>
                 <td>{r.created_at ? new Date(r.created_at).toLocaleDateString() : '—'}</td>
                 <td style={{textAlign:'right',whiteSpace:'nowrap'}}>
-                  <button onClick={() => setEditing({ kind: 'resident', record: r })} style={{padding:'4px 10px',fontSize:11,background:'#fff',border:'1px solid #d5cfc8',borderRadius:4,color:'var(--text-dark)',cursor:'pointer',marginRight:6}}>Edit</button>
-                  <button onClick={async () => {
+                  <button onClick={(e) => { e.stopPropagation(); setEditing({ kind: 'resident', record: r }); }} style={{padding:'4px 10px',fontSize:11,background:'#fff',border:'1px solid #d5cfc8',borderRadius:4,color:'var(--text-dark)',cursor:'pointer',marginRight:6}}>Edit</button>
+                  <button onClick={async (e) => {
+                    e.stopPropagation();
                     if (!window.confirm('Delete resident "' + r.full_name + '"? This removes their login too.')) return;
                     const out = await deleteUsersViaFunction([r.id]);
                     const first = out && out.results && out.results[0];
@@ -15065,6 +15080,7 @@ const PCSummary = ({ section }) => {
         </table>
       </div>
       {editing && <EditRecordModal kind={editing.kind} record={editing.record} onClose={() => setEditing(null)} onSaved={reload}/>}
+      {viewingResident && <ResidentDetailModal resident={viewingResident} onClose={() => setViewingResident(null)}/>}
       </>
     );
   }
@@ -15266,6 +15282,13 @@ const PCBulkUpload = ({ section }) => {
               email: r['Email'], password: r['Temporary password'], full_name: r['Full name'],
               phone: r['Phone'], role: 'resident',
               building_name: r['Building name'], unit_number: r['Unit number'],
+              date_of_birth: r['Date of birth'] || null,
+              passport_number: r['Passport number'] || null,
+              tenure: r['Tenure'] || null,
+              lease_start: r['Lease start'] || null,
+              lease_end: r['Lease end'] || null,
+              monthly_payment_aed: r['Monthly payment (AED)'] != null && r['Monthly payment (AED)'] !== '' ? Number(r['Monthly payment (AED)']) : null,
+              ownership_start: r['Ownership start'] || null,
             };
           }
           return {
@@ -15694,15 +15717,16 @@ const SecurityManualForm = () => {
 
 // ==================== UNIT ATTACHMENTS ====================
 
-const UnitAttachmentRow = ({ file, onDelete, canDelete }) => {
+const UnitAttachmentRow = ({ file, onDelete, canDelete, bucket }) => {
+  const b = bucket || 'unit-attachments';
   const [url, setUrl] = useState(null);
   useEffect(() => {
     if (!supabaseClient) return;
     let mounted = true;
-    supabaseClient.storage.from('unit-attachments').createSignedUrl(file.storage_path, 300)
+    supabaseClient.storage.from(b).createSignedUrl(file.storage_path, 300)
       .then(({ data }) => { if (mounted) setUrl(data && data.signedUrl); });
     return () => { mounted = false; };
-  }, [file.storage_path]);
+  }, [file.storage_path, b]);
   return (
     <div style={{display:'flex',alignItems:'center',gap:12,padding:'8px 10px',background:'#fff',border:'1px solid var(--border-light)',borderRadius:6,marginBottom:6,fontSize:12}}>
       <div style={{flex:1,minWidth:0,overflow:'hidden'}}>
@@ -15718,7 +15742,7 @@ const UnitAttachmentRow = ({ file, onDelete, canDelete }) => {
   );
 };
 
-const UnitAttachmentSection = ({ section, files, uploading, onUpload, onDelete }) => {
+const UnitAttachmentSection = ({ section, files, uploading, onUpload, onDelete, bucket }) => {
   const inputRef = useRef(null);
   const canAddMore = section.multiple || files.length === 0;
   return (
@@ -15738,7 +15762,7 @@ const UnitAttachmentSection = ({ section, files, uploading, onUpload, onDelete }
         )}
       </div>
       {files.length === 0 && <div style={{fontSize:12,color:'var(--text-muted)',padding:'4px 0 0'}}>No files yet.</div>}
-      {files.map(f => <UnitAttachmentRow key={f.id} file={f} onDelete={() => onDelete(f)} canDelete={true}/>)}
+      {files.map(f => <UnitAttachmentRow key={f.id} file={f} onDelete={() => onDelete(f)} canDelete={true} bucket={bucket}/>)}
     </div>
   );
 };
@@ -15811,6 +15835,108 @@ const UnitAttachmentsModal = ({ unit, buildingName, onClose }) => {
           <div>
             {sections.map(s => (
               <UnitAttachmentSection key={s.kind} section={s} files={grouped[s.kind] || []} uploading={uploadingKind === s.kind} onUpload={handleUpload} onDelete={handleDelete}/>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+// ==================== RESIDENT DETAIL MODAL ====================
+
+const ResidentDetailModal = ({ resident, onClose }) => {
+  const [documents, setDocuments] = useState(null);
+  const [uploadingKind, setUploadingKind] = useState(null);
+  const [error, setError] = useState(null);
+
+  const reload = async () => {
+    if (!supabaseClient) return;
+    const { data, error: e } = await supabaseClient.from('resident_documents')
+      .select('id,kind,filename,storage_path,created_at')
+      .eq('profile_id', resident.id)
+      .order('created_at', { ascending: false });
+    if (e) setError(e.message); else { setDocuments(data || []); setError(null); }
+  };
+  useEffect(() => { reload(); }, [resident.id]);
+
+  const handleUpload = async (kind, file) => {
+    if (!file || !supabaseClient) return;
+    setUploadingKind(kind); setError(null);
+    const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+    const path = resident.id + '/' + kind + '-' + Date.now() + '-' + safeName;
+    const { error: upErr } = await supabaseClient.storage.from('resident-documents').upload(path, file);
+    if (upErr) { setError('Upload failed: ' + upErr.message); setUploadingKind(null); return; }
+    const { error: insErr } = await supabaseClient.from('resident_documents').insert({
+      profile_id: resident.id, kind, filename: file.name, storage_path: path,
+    });
+    if (insErr) setError('Metadata: ' + insErr.message);
+    setUploadingKind(null);
+    await reload();
+  };
+
+  const handleDelete = async (doc) => {
+    if (!supabaseClient) return;
+    if (!window.confirm('Delete ' + doc.filename + '?')) return;
+    await supabaseClient.storage.from('resident-documents').remove([doc.storage_path]);
+    await supabaseClient.from('resident_documents').delete().eq('id', doc.id);
+    await reload();
+  };
+
+  const docSections = [
+    { kind: 'emirates_id',      label: 'Emirates ID',         accept: '.pdf,image/*', multiple: false },
+    { kind: 'passport',         label: 'Passport copy',       accept: '.pdf,image/*', multiple: false },
+    { kind: 'tenancy_contract', label: 'Tenancy Contract',    accept: '.pdf',         multiple: false },
+    { kind: 'owning_contract',  label: 'Ownership Contract',  accept: '.pdf',         multiple: false },
+    { kind: 'title_deed',       label: 'Title Deed (copy)',   accept: '.pdf',         multiple: false },
+    { kind: 'other',            label: 'Other Documents',     accept: '*/*',          multiple: true  },
+  ];
+  const grouped = (documents || []).reduce((acc, d) => { (acc[d.kind] = acc[d.kind] || []).push(d); return acc; }, {});
+
+  const InfoCell = ({ label, value }) => (
+    <div>
+      <div style={{fontSize:10,letterSpacing:'0.06em',textTransform:'uppercase',color:'var(--text-secondary)',marginBottom:2}}>{label}</div>
+      <div style={{fontSize:13,color:'var(--text-dark)'}}>{value || '—'}</div>
+    </div>
+  );
+
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal" onClick={e => e.stopPropagation()} style={{maxWidth:720,maxHeight:'90vh',overflowY:'auto'}}>
+        <div className="modal-header">
+          <div>
+            <div style={{fontSize:10,letterSpacing:'0.08em',textTransform:'uppercase',color:'var(--text-muted)',marginBottom:4}}>Resident</div>
+            <h2>{resident.full_name}</h2>
+            <div className="modal-sub">{resident.building_name} · Floor {resident.floor} · Unit {resident.unit_number}</div>
+          </div>
+          <button className="modal-close" onClick={onClose}>×</button>
+        </div>
+
+        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:14,marginBottom:20,padding:16,background:'var(--bg-surface)',borderRadius:8,border:'1px solid var(--border-light)'}}>
+          <InfoCell label="Phone" value={resident.phone}/>
+          <InfoCell label="Date of birth" value={resident.date_of_birth}/>
+          <InfoCell label="Passport number" value={resident.passport_number}/>
+          <InfoCell label="Tenure" value={resident.tenure}/>
+          {resident.tenure === 'Tenant' && (<>
+            <InfoCell label="Lease start" value={resident.lease_start}/>
+            <InfoCell label="Lease end" value={resident.lease_end}/>
+            <InfoCell label="Monthly payment" value={resident.monthly_payment_aed != null ? 'AED ' + Number(resident.monthly_payment_aed).toLocaleString() : null}/>
+          </>)}
+          {resident.tenure === 'Owner' && (
+            <InfoCell label="Ownership since" value={resident.ownership_start}/>
+          )}
+          <InfoCell label="Resident since" value={resident.created_at ? new Date(resident.created_at).toLocaleDateString() : null}/>
+        </div>
+
+        {error && <div style={{padding:10,background:'#fdf2f1',color:'#8b4a42',borderRadius:6,fontSize:12,marginBottom:14}}>{error}</div>}
+
+        <div style={{fontSize:11,letterSpacing:'0.06em',textTransform:'uppercase',color:'var(--text-secondary)',marginBottom:12,fontWeight:500}}>Documents</div>
+        {documents === null ? (
+          <div style={{padding:24,color:'var(--text-muted)',fontSize:13}}>Loading…</div>
+        ) : (
+          <div>
+            {docSections.map(s => (
+              <UnitAttachmentSection key={s.kind} section={s} files={grouped[s.kind] || []} uploading={uploadingKind === s.kind} onUpload={handleUpload} onDelete={handleDelete} bucket="resident-documents"/>
             ))}
           </div>
         )}
