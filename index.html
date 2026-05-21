@@ -17068,6 +17068,24 @@ const PMCReportsPage = () => {
   const [stats, setStats] = useState(null);
   const [section, setSection] = useState('finance');
   const [showExport, setShowExport] = useState(false);
+  const [timeRange, setTimeRange] = useState('12m'); // '3m' | '6m' | '12m' | 'ytd' | '24m'
+
+  // Time-range cutoff for filtering
+  const cutoff = (() => {
+    const d = new Date();
+    if (timeRange === '3m') d.setMonth(d.getMonth() - 3);
+    else if (timeRange === '6m') d.setMonth(d.getMonth() - 6);
+    else if (timeRange === '12m') d.setMonth(d.getMonth() - 12);
+    else if (timeRange === '24m') d.setMonth(d.getMonth() - 24);
+    else if (timeRange === 'ytd') { d.setMonth(0); d.setDate(1); }
+    else return null;
+    return d.toISOString().slice(0, 10);
+  })();
+  const monthCount = timeRange === '3m' ? 3
+                  : timeRange === '6m' ? 6
+                  : timeRange === '24m' ? 24
+                  : timeRange === 'ytd' ? new Date().getMonth() + 1
+                  : 12;
 
   useEffect(() => {
     let mounted = true;
@@ -17098,6 +17116,11 @@ const PMCReportsPage = () => {
           supabaseClient.from('amenity_bookings').select('amenity_name,status,booking_date,created_at').in('building_id', probeB),
         ]);
         if (!mounted) return;
+        // Apply time-range cutoff to relevant time-bound datasets
+        const cutInv = cutoff ? (invoices || []).filter(i => (i.created_at || i.due_date || '').slice(0, 10) >= cutoff) : (invoices || []);
+        const cutSRs = cutoff ? (srs || []).filter(s => (s.created_at || '').slice(0, 10) >= cutoff) : (srs || []);
+        const cutVisits = cutoff ? (visits || []).filter(v => (v.visit_date || v.created_at || '').slice(0, 10) >= cutoff) : (visits || []);
+        const cutBookings = cutoff ? (bookings || []).filter(b => (b.booking_date || b.created_at || '').slice(0, 10) >= cutoff) : (bookings || []);
 
         const totalUnits = filteredUnits.length;
         const occupiedUnits = new Set((ras || []).map(r => r.unit_id)).size;
@@ -17107,10 +17130,10 @@ const PMCReportsPage = () => {
         const tenants = (ras || []).filter(r => r.tenure === 'Tenant').length;
 
         const monthlyRevenue = (ras || []).filter(r => r.tenure === 'Tenant' && r.monthly_payment_aed).reduce((s, r) => s + Number(r.monthly_payment_aed), 0);
-        const totalInvoiced = (invoices || []).reduce((s, i) => s + Number(i.amount_aed), 0);
-        const collected = (invoices || []).filter(i => i.status === 'Paid').reduce((s, i) => s + Number(i.amount_aed), 0);
-        const pending = (invoices || []).filter(i => i.status === 'Pending').reduce((s, i) => s + Number(i.amount_aed), 0);
-        const overdue = (invoices || []).filter(i => i.status === 'Overdue').reduce((s, i) => s + Number(i.amount_aed), 0);
+        const totalInvoiced = cutInv.reduce((s, i) => s + Number(i.amount_aed), 0);
+        const collected = cutInv.filter(i => i.status === 'Paid').reduce((s, i) => s + Number(i.amount_aed), 0);
+        const pending = cutInv.filter(i => i.status === 'Pending').reduce((s, i) => s + Number(i.amount_aed), 0);
+        const overdue = cutInv.filter(i => i.status === 'Overdue').reduce((s, i) => s + Number(i.amount_aed), 0);
         const collectionRate = totalInvoiced > 0 ? Math.round((collected / totalInvoiced) * 100) : 0;
 
         const today = new Date(); today.setHours(0,0,0,0);
@@ -17119,25 +17142,25 @@ const PMCReportsPage = () => {
         const leasesExpired = (ras || []).filter(r => r.lease_end && new Date(r.lease_end) < today).length;
 
         const srByStatus = {};
-        (srs || []).forEach(s => { srByStatus[s.status] = (srByStatus[s.status] || 0) + 1; });
+        cutSRs.forEach(s => { srByStatus[s.status] = (srByStatus[s.status] || 0) + 1; });
         const srByCategory = {};
-        (srs || []).forEach(s => { srByCategory[s.category] = (srByCategory[s.category] || 0) + 1; });
+        cutSRs.forEach(s => { srByCategory[s.category] = (srByCategory[s.category] || 0) + 1; });
         const srByPriority = {};
-        (srs || []).forEach(s => { srByPriority[s.priority] = (srByPriority[s.priority] || 0) + 1; });
+        cutSRs.forEach(s => { srByPriority[s.priority] = (srByPriority[s.priority] || 0) + 1; });
         const openSRs = ['New','Acknowledged','In Progress'].reduce((acc, k) => acc + (srByStatus[k] || 0), 0);
         const closedSRs = ['Done','Closed'].reduce((acc, k) => acc + (srByStatus[k] || 0), 0);
 
         const visitsByType = {};
-        (visits || []).forEach(v => { visitsByType[v.type] = (visitsByType[v.type] || 0) + 1; });
+        cutVisits.forEach(v => { visitsByType[v.type] = (visitsByType[v.type] || 0) + 1; });
         const visitsByStatus = {};
-        (visits || []).forEach(v => { visitsByStatus[v.status] = (visitsByStatus[v.status] || 0) + 1; });
+        cutVisits.forEach(v => { visitsByStatus[v.status] = (visitsByStatus[v.status] || 0) + 1; });
 
         const bookingsByAmenity = {};
-        (bookings || []).forEach(b => { bookingsByAmenity[b.amenity_name] = (bookingsByAmenity[b.amenity_name] || 0) + 1; });
+        cutBookings.forEach(b => { bookingsByAmenity[b.amenity_name] = (bookingsByAmenity[b.amenity_name] || 0) + 1; });
 
         // Service charge breakdown — approximated from invoice source_type
         const chargeByCategory = {};
-        (invoices || []).forEach(i => {
+        cutInv.forEach(i => {
           const key = ({
             monthly_dues:     'Monthly Dues',
             amenity_booking:  'Amenity',
@@ -17147,13 +17170,14 @@ const PMCReportsPage = () => {
           chargeByCategory[key] = (chargeByCategory[key] || 0) + Number(i.amount_aed);
         });
 
-        // ============ Monthly time-series (last 12 months) ============
-        const monthBuckets = buildMonthlyBuckets(12);
+        // ============ Monthly time-series (range from timeRange selector) ============
+        const monthBuckets = buildMonthlyBuckets(monthCount);
         const monthIndex = Object.fromEntries(monthBuckets.map((m, i) => [m.key, i]));
         const pickKey = (s) => (s || '').slice(0, 7);
+        const Z = () => new Array(monthCount).fill(0);
 
-        const invSeries = { paid: new Array(12).fill(0), pending: new Array(12).fill(0), overdue: new Array(12).fill(0) };
-        (invoices || []).forEach(inv => {
+        const invSeries = { paid: Z(), pending: Z(), overdue: Z() };
+        cutInv.forEach(inv => {
           const k = pickKey(inv.created_at || inv.due_date);
           const idx = monthIndex[k];
           if (idx == null) return;
@@ -17163,8 +17187,13 @@ const PMCReportsPage = () => {
           else if (inv.status === 'Overdue') invSeries.overdue[idx] += amt;
         });
 
-        const srSeries = { newAck: new Array(12).fill(0), inProgress: new Array(12).fill(0), done: new Array(12).fill(0) };
-        (srs || []).forEach(s => {
+        // Cumulative collected vs invoiced (running total)
+        let runCollected = 0, runInvoiced = 0;
+        const cumCollected = invSeries.paid.map(v => { runCollected += v; return runCollected; });
+        const cumInvoiced = invSeries.paid.map((p, i) => { runInvoiced += p + (invSeries.pending[i] || 0) + (invSeries.overdue[i] || 0); return runInvoiced; });
+
+        const srSeries = { newAck: Z(), inProgress: Z(), done: Z() };
+        cutSRs.forEach(s => {
           const idx = monthIndex[pickKey(s.created_at)];
           if (idx == null) return;
           if (s.status === 'New' || s.status === 'Acknowledged') srSeries.newAck[idx]++;
@@ -17172,17 +17201,20 @@ const PMCReportsPage = () => {
           else if (s.status === 'Done' || s.status === 'Closed') srSeries.done[idx]++;
         });
 
-        const visitsSeries = new Array(12).fill(0);
-        (visits || []).forEach(v => {
+        const visitsSeries = Z();
+        cutVisits.forEach(v => {
           const idx = monthIndex[pickKey(v.visit_date || v.created_at)];
           if (idx != null) visitsSeries[idx]++;
         });
 
-        const bookingsSeries = new Array(12).fill(0);
-        (bookings || []).forEach(b => {
+        const bookingsSeries = Z();
+        cutBookings.forEach(b => {
           const idx = monthIndex[pickKey(b.booking_date || b.created_at)];
           if (idx != null) bookingsSeries[idx]++;
         });
+
+        // Visitor type donut data (top 5)
+        const visitTypeSorted = Object.entries(visitsByType).sort((a, b) => b[1] - a[1]).slice(0, 6);
 
         setStats({
           buildings: filterB ? (buildings || []).filter(b => filterB.includes(b.id)) : (buildings || []),
@@ -17198,6 +17230,13 @@ const PMCReportsPage = () => {
           // Time-series
           monthLabels: monthBuckets.map(m => m.label),
           invSeries, srSeries, visitsSeries, bookingsSeries,
+          cumCollected, cumInvoiced,
+          visitTypeSorted,
+          // Counts (after time-range filter)
+          filteredInvoiceCount: cutInv.length,
+          filteredSRCount: cutSRs.length,
+          filteredVisitCount: cutVisits.length,
+          filteredBookingCount: cutBookings.length,
         });
         setLoading(false);
       } catch (e) {
@@ -17374,8 +17413,17 @@ const PMCReportsPage = () => {
       <div className="page-header">
         <div>
           <h1>Reports</h1>
-          <div className="subtitle">Landlord-grade reporting. Sections below pull live data from Supabase{selectedProperties.length > 0 ? ', scoped to your property selector at the top.' : '.'}</div>
+          <div className="subtitle">Landlord-grade reporting. Live data from Supabase{selectedProperties.length > 0 ? ', scoped to your property selector at the top.' : '.'}</div>
         </div>
+        <div style={{display:'flex',gap:10,alignItems:'center'}}>
+          <select className="form-input" value={timeRange} onChange={e => setTimeRange(e.target.value)} style={{width:'auto',minWidth:170,padding:'9px 14px',fontSize:13}}>
+            <option value="3m">Last 3 months</option>
+            <option value="6m">Last 6 months</option>
+            <option value="12m">Last 12 months</option>
+            <option value="24m">Last 24 months</option>
+            <option value="ytd">Year to date</option>
+            <option value="all">All time</option>
+          </select>
         <div style={{position:'relative'}}>
           <button className="btn btn-primary" onClick={() => setShowExport(!showExport)}>Export ▾</button>
           {showExport && (
@@ -17390,6 +17438,7 @@ const PMCReportsPage = () => {
               </div>
             </>
           )}
+        </div>
         </div>
       </div>
 
@@ -17486,15 +17535,16 @@ const FinanceReports = ({ stats, fmt, fmtShort }) => {
         )}
       </div>
 
-      {/* TIME-SERIES — Invoice Status by Month (stacked bar) */}
+      {/* Side-by-side: Invoice Status (stacked bar) + Cumulative Revenue (line) */}
+      <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit, minmax(440px, 1fr))',gap:18}}>
       <div className="card">
         <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:6}}>
           <div>
-            <div style={{fontSize:13,fontWeight:600}}>Invoice Status — Last 12 Months</div>
+            <div style={{fontSize:13,fontWeight:600}}>Invoice Status by Month</div>
             <div style={{fontSize:11,color:'var(--text-secondary)',marginTop:2}}>Stacked by Paid · Pending · Overdue. Hover bars for exact AED.</div>
           </div>
         </div>
-        <ChartCanvas height={320} config={{
+        <ChartCanvas height={300} config={{
           type: 'bar',
           data: {
             labels: stats.monthLabels,
@@ -17522,6 +17572,36 @@ const FinanceReports = ({ stats, fmt, fmtShort }) => {
             },
           },
         }}/>
+      </div>
+
+      <div className="card">
+        <div style={{marginBottom:6}}>
+          <div style={{fontSize:13,fontWeight:600}}>Cumulative Revenue</div>
+          <div style={{fontSize:11,color:'var(--text-secondary)',marginTop:2}}>Running total of collected vs invoiced over the period.</div>
+        </div>
+        <ChartCanvas height={300} config={{
+          type: 'line',
+          data: {
+            labels: stats.monthLabels,
+            datasets: [
+              { label: 'Cumulative Invoiced', data: stats.cumInvoiced, borderColor: '#928989', backgroundColor: 'rgba(146,137,137,0.12)', tension: 0.3, fill: true, pointRadius: 3 },
+              { label: 'Cumulative Collected', data: stats.cumCollected, borderColor: '#5a6b4f', backgroundColor: 'rgba(90,107,79,0.15)', tension: 0.3, fill: true, pointRadius: 3 },
+            ],
+          },
+          options: {
+            responsive: true, maintainAspectRatio: false,
+            interaction: { mode: 'index', intersect: false },
+            plugins: {
+              legend: { position: 'bottom', labels: { boxWidth: 12, font: { size: 11 } } },
+              tooltip: { callbacks: { label: (ctx) => ctx.dataset.label + ': AED ' + Math.round(ctx.parsed.y).toLocaleString() } },
+            },
+            scales: {
+              x: { grid: { display: false } },
+              y: { beginAtZero: true, ticks: { callback: (v) => 'AED ' + Math.round(v/1000) + 'K' } },
+            },
+          },
+        }}/>
+      </div>
       </div>
 
       {/* Revenue vs Costs — text summary */}
