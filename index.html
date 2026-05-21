@@ -17084,9 +17084,150 @@ const PMCReportsPage = () => {
     { id: 'compliance', label: 'Compliance' },
   ];
 
+  const downloadBlob = (filename, content, mime) => {
+    const blob = new Blob([content], { type: mime });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = filename;
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  };
+
   const handleExport = (format) => {
     setShowExport(false);
-    alert('Export → ' + format + '\n\nReport metadata + the live data set are ready. File generation gateway is under development — coming soon.');
+    if (!stats) { alert('Data is still loading — try again in a moment.'); return; }
+    const today = new Date().toISOString().slice(0, 10);
+    const filename = 'vars-pm-report-' + today;
+    const scope = selectedProperties.length > 0 ? selectedProperties.length + ' building(s) — top-bar scope' : 'All buildings';
+
+    const fmtA = (n) => 'AED ' + Math.round(n).toLocaleString();
+
+    // Section definitions: [title, headerRow, dataRows]
+    const sections = [
+      ['Portfolio Health Summary', ['Metric','Value'], [
+        ['Occupancy Rate', stats.occupancyRate + '%'],
+        ['Occupied Units', stats.occupiedUnits + ' / ' + stats.totalUnits],
+        ['Owners', stats.owners], ['Tenants', stats.tenants],
+        ['Monthly Run-Rate', fmtA(stats.monthlyRevenue)],
+        ['Open Maintenance', stats.openSRs],
+        ['Outstanding Receivables', fmtA(stats.pending + stats.overdue)],
+        ['Estimated Net Operating Income', fmtA(stats.noi)],
+      ]],
+      ['Rent Collection Status', ['Bucket','Amount (AED)','% of Total'], [
+        ['Paid',    fmtA(stats.collected), (stats.totalInvoiced > 0 ? Math.round(stats.collected/stats.totalInvoiced*100) : 0) + '%'],
+        ['Pending', fmtA(stats.pending),   (stats.totalInvoiced > 0 ? Math.round(stats.pending/stats.totalInvoiced*100)   : 0) + '%'],
+        ['Overdue', fmtA(stats.overdue),   (stats.totalInvoiced > 0 ? Math.round(stats.overdue/stats.totalInvoiced*100)   : 0) + '%'],
+        ['Total Invoiced', fmtA(stats.totalInvoiced), '100%'],
+        ['Collection Rate', stats.collectionRate + '%', ''],
+      ]],
+      ['Service Charges by Source', ['Source','Amount (AED)'],
+        Object.entries(stats.chargeByCategory || {}).map(([k, v]) => [k, fmtA(v)])
+      ],
+      ['Lease Pipeline', ['Bucket','Count'], [
+        ['Expiring next 90 days', stats.leasesExpSoon],
+        ['Already expired (holdover)', stats.leasesExpired],
+      ]],
+      ['Maintenance — Tickets by Status', ['Status','Count'],
+        Object.entries(stats.srByStatus || {}).map(([k, v]) => [k, v])
+      ],
+      ['Maintenance — Tickets by Category', ['Category','Count'],
+        Object.entries(stats.srByCategory || {}).map(([k, v]) => [k, v])
+      ],
+      ['Visitor Analytics — by Status', ['Status','Count'],
+        Object.entries(stats.visitsByStatus || {}).map(([k, v]) => [k, v])
+      ],
+      ['Visitor Analytics — by Type', ['Type','Count'],
+        Object.entries(stats.visitsByType || {}).map(([k, v]) => [k, v])
+      ],
+      ['Amenity Usage', ['Amenity','Bookings'],
+        Object.entries(stats.bookingsByAmenity || {}).map(([k, v]) => [k, v])
+      ],
+      ['PMC Performance Scorecard', ['Metric','Value'], [
+        ['Maintenance resolution rate', (stats.totalSRs > 0 ? Math.round(stats.closedSRs/stats.totalSRs*100) : 0) + '%'],
+        ['Collection efficiency', stats.collectionRate + '%'],
+        ['Open ticket ratio', (stats.totalSRs > 0 ? Math.round(stats.openSRs/stats.totalSRs*100) : 0) + '%'],
+        ['Receivables ratio (outstanding / total)', (stats.totalInvoiced > 0 ? Math.round((stats.pending+stats.overdue)/stats.totalInvoiced*100) : 0) + '%'],
+      ]],
+    ];
+
+    if (format === 'CSV') {
+      const escape = (c) => { const s = String(c == null ? '' : c); return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
+      let csv = 'VARS — PM Report\nGenerated,' + today + '\nScope,' + scope + '\n\n';
+      sections.forEach(([title, head, rows]) => {
+        csv += title + '\n';
+        csv += [head, ...rows].map(r => r.map(escape).join(',')).join('\n');
+        csv += '\n\n';
+      });
+      downloadBlob(filename + '.csv', csv, 'text/csv;charset=utf-8');
+      return;
+    }
+
+    if (format === 'Excel') {
+      const wb = window.XLSX.utils.book_new();
+      // Summary sheet — everything in one tab
+      const summary = [
+        ['VARS — Property Manager Report'],
+        ['Generated', today], ['Scope', scope], [],
+      ];
+      sections.forEach(([title, head, rows]) => {
+        summary.push([title]);
+        summary.push(head);
+        rows.forEach(r => summary.push(r));
+        summary.push([]);
+      });
+      window.XLSX.utils.book_append_sheet(wb, window.XLSX.utils.aoa_to_sheet(summary), 'Summary');
+      // One sheet per section for analysts who want to pivot
+      sections.forEach(([title, head, rows]) => {
+        const safe = title.replace(/[^A-Za-z0-9 ]/g, '').slice(0, 28) || 'Section';
+        window.XLSX.utils.book_append_sheet(wb, window.XLSX.utils.aoa_to_sheet([head, ...rows]), safe);
+      });
+      window.XLSX.writeFile(wb, filename + '.xlsx');
+      return;
+    }
+
+    if (format === 'PDF') {
+      const { jsPDF } = window.jspdf || {};
+      if (!jsPDF) { alert('PDF library failed to load.'); return; }
+      const doc = new jsPDF();
+      doc.setFontSize(18); doc.setTextColor(26, 26, 26);
+      doc.text('VARS — Property Manager Report', 14, 18);
+      doc.setFontSize(10); doc.setTextColor(120, 120, 120);
+      doc.text('Generated ' + today + ' · Scope: ' + scope, 14, 25);
+      let y = 32;
+      sections.forEach(([title, head, rows]) => {
+        if (y > 250) { doc.addPage(); y = 20; }
+        doc.setFontSize(12); doc.setTextColor(26, 26, 26);
+        doc.text(title, 14, y);
+        doc.autoTable({
+          startY: y + 3,
+          head: [head], body: rows.length ? rows : [['—','—']],
+          theme: 'grid',
+          headStyles: { fillColor: [146, 137, 137], textColor: 255, fontSize: 9 },
+          bodyStyles: { fontSize: 9, textColor: 30 },
+          margin: { left: 14, right: 14 },
+        });
+        y = (doc.lastAutoTable.finalY || y) + 12;
+      });
+      doc.save(filename + '.pdf');
+      return;
+    }
+
+    if (format === 'Word') {
+      let html = '<!DOCTYPE html><html><head><meta charset="utf-8"><title>VARS PM Report</title>';
+      html += '<style>body{font-family:"Segoe UI",Arial,sans-serif;color:#1a1a1a;padding:24pt;}h1{font-size:20pt;margin:0 0 8pt;}h2{font-size:13pt;margin:18pt 0 6pt;color:#6b5d52;border-bottom:1px solid #d5cfc8;padding-bottom:4pt;}table{border-collapse:collapse;width:100%;margin:6pt 0 12pt;}th,td{border:1px solid #d5cfc8;padding:6pt 10pt;text-align:left;font-size:10pt;}th{background:#928989;color:#fff;}</style>';
+      html += '</head><body>';
+      html += '<h1>VARS — Property Manager Report</h1>';
+      html += '<p style="color:#6b5d52;font-size:10pt;">Generated ' + today + ' · Scope: ' + scope + '</p>';
+      sections.forEach(([title, head, rows]) => {
+        html += '<h2>' + title + '</h2><table>';
+        html += '<thead><tr>' + head.map(c => '<th>' + (c == null ? '' : c) + '</th>').join('') + '</tr></thead>';
+        html += '<tbody>' + (rows.length ? rows : [['—','—']]).map(r => '<tr>' + r.map(c => '<td>' + (c == null ? '' : c) + '</td>').join('') + '</tr>').join('') + '</tbody>';
+        html += '</table>';
+      });
+      html += '</body></html>';
+      downloadBlob(filename + '.doc', html, 'application/msword');
+      return;
+    }
   };
 
   if (error) return <div className="page-header"><h1>Reports</h1><div style={{color:'#8b4a42',fontSize:13,marginTop:14}}>{error}</div></div>;
