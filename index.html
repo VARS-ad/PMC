@@ -15237,6 +15237,7 @@ const PCBulkUpload = ({ section }) => {
   const [uploading, setUploading] = useState(false);
   const [results, setResults] = useState(null);
   const [error, setError] = useState(null);
+  const [conflictMode, setConflictMode] = useState('skip'); // 'skip' | 'update' — what happens when an email already exists
 
   const handleFile = async (e) => {
     setError(null); setResults(null); setParsedRows(null);
@@ -15277,7 +15278,7 @@ const PCBulkUpload = ({ section }) => {
         const headers = { 'Content-Type': 'application/json' };
         if (session && session.access_token) headers['Authorization'] = 'Bearer ' + session.access_token;
         const resp = await fetch(SUPABASE_URL + '/functions/v1/bulk-onboard', {
-          method: 'POST', headers, body: JSON.stringify({ records }),
+          method: 'POST', headers, body: JSON.stringify({ records, mode: conflictMode }),
         });
         const out = await resp.json();
         setResults(out);
@@ -15324,6 +15325,27 @@ const PCBulkUpload = ({ section }) => {
 
       <div className="card">
         <div style={{fontSize:11,letterSpacing:'0.06em',textTransform:'uppercase',color:'var(--text-secondary)',marginBottom:12}}>3. Upload completed file</div>
+        {section !== 'buildings' && (
+          <div style={{marginBottom:14,padding:'12px 14px',background:'var(--bg-page)',borderRadius:8,border:'1px solid var(--border-light)'}}>
+            <div style={{fontSize:11,letterSpacing:'0.04em',textTransform:'uppercase',color:'var(--text-secondary)',marginBottom:10,fontWeight:500}}>When an email already exists</div>
+            <div style={{display:'flex',gap:14,flexWrap:'wrap'}}>
+              <label style={{display:'flex',alignItems:'flex-start',gap:8,cursor:'pointer',fontSize:12,flex:'1 1 240px'}}>
+                <input type="radio" name={'conflictMode_' + section} value="skip" checked={conflictMode==='skip'} onChange={e => setConflictMode(e.target.value)} style={{marginTop:3,cursor:'pointer'}}/>
+                <div>
+                  <div style={{fontWeight:500,color:'var(--text-dark)'}}>Skip existing (default)</div>
+                  <div style={{fontSize:11,color:'var(--text-muted)',marginTop:2,lineHeight:1.4}}>Rows whose email is already registered are ignored. The existing account is left untouched.</div>
+                </div>
+              </label>
+              <label style={{display:'flex',alignItems:'flex-start',gap:8,cursor:'pointer',fontSize:12,flex:'1 1 240px'}}>
+                <input type="radio" name={'conflictMode_' + section} value="update" checked={conflictMode==='update'} onChange={e => setConflictMode(e.target.value)} style={{marginTop:3,cursor:'pointer'}}/>
+                <div>
+                  <div style={{fontWeight:500,color:'var(--text-dark)'}}>Update existing</div>
+                  <div style={{fontSize:11,color:'var(--text-muted)',marginTop:2,lineHeight:1.4}}>Refresh name, phone, building/unit, shift, and reset the temp password. The Supabase Auth account UUID and all history (visits, bookings, invoices) stay intact.</div>
+                </div>
+              </label>
+            </div>
+          </div>
+        )}
         <input ref={fileInputRef} type="file" accept=".xlsx,.csv" onChange={handleFile} style={{fontSize:12}}/>
         {error && <div style={{color:'#8b4a42',fontSize:12,marginTop:12,padding:10,background:'#fdf2f1',borderRadius:6}}>Error: {error}</div>}
         {parsedRows && (
@@ -15399,11 +15421,19 @@ const BulkUploadResults = ({ section, results }) => {
   if (results.error) return <div style={{color:'#8b4a42',fontSize:12}}>{results.error}</div>;
   const arr = results.results || [];
   const okCount = arr.filter(r => r.ok).length;
+  const createdCount = arr.filter(r => r.ok && r.action === 'created').length;
+  const updatedCount = arr.filter(r => r.ok && r.action === 'updated').length;
   const errCount = arr.filter(r => !r.ok).length;
+  const breakdownSuffix = (createdCount > 0 || updatedCount > 0)
+    ? ' (' + [
+        createdCount > 0 ? createdCount + ' created' : null,
+        updatedCount > 0 ? updatedCount + ' updated' : null,
+      ].filter(Boolean).join(', ') + ')'
+    : '';
   return (
     <div>
       <div style={{display:'flex',gap:16,marginBottom:10,fontSize:12}}>
-        <div style={{color:'#4a7a4a',fontWeight:500}}>✓ {okCount} succeeded</div>
+        <div style={{color:'#4a7a4a',fontWeight:500}}>✓ {okCount} succeeded{breakdownSuffix}</div>
         {errCount > 0 && <div style={{color:'#8b4a42',fontWeight:500}}>✗ {errCount} failed</div>}
       </div>
       {section === 'buildings' && arr.filter(r => r.ok).length > 0 && (
