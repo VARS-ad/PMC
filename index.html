@@ -14846,7 +14846,7 @@ const PCSummary = ({ section }) => {
             <button className="btn btn-sm" onClick={reload}>Refresh</button>
           </div>
           <table className="data-table">
-            <thead><tr><th>Name</th><th>Address</th><th>Floors</th><th>Units</th><th>Created</th></tr></thead>
+            <thead><tr><th>Name</th><th>Address</th><th>Floors</th><th>Units</th><th>Created</th><th style={{textAlign:'right'}}>Actions</th></tr></thead>
             <tbody>
               {rows.map(b => {
                 const floors = new Set((b.units||[]).map(u => u.floor)).size;
@@ -14857,6 +14857,15 @@ const PCSummary = ({ section }) => {
                     <td>{floors}</td>
                     <td>{(b.units||[]).length}</td>
                     <td>{b.created_at ? new Date(b.created_at).toLocaleDateString() : '—'}</td>
+                    <td style={{textAlign:'right'}}>
+                      <button onClick={(e) => {
+                        e.stopPropagation();
+                        if (!window.confirm('Delete "' + b.name + '" and all its ' + (b.units||[]).length + ' unit(s)? This cannot be undone.')) return;
+                        supabaseClient.from('buildings').delete().eq('id', b.id).then(({error}) => {
+                          if (error) alert('Delete failed: ' + error.message); else reload();
+                        });
+                      }} style={{padding:'4px 10px',fontSize:11,background:'#fff',border:'1px solid #d5cfc8',borderRadius:4,color:'#8b4a42',cursor:'pointer'}}>Delete</button>
+                    </td>
                   </tr>
                 );
               })}
