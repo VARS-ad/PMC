@@ -16216,10 +16216,23 @@ const UpcomingVisitsPanel = () => {
 // scoped to the top-bar property selector. Removes the 'Unresolved Escalations'
 // KPI card per user request.
 
-const PMCStat = ({ label, value, color }) => (
-  <div style={{padding:'8px 10px',background:'var(--bg-surface)',borderRadius:6,border:'1px solid var(--border-light)'}}>
-    <div style={{fontSize:10,letterSpacing:'0.04em',textTransform:'uppercase',color:'var(--text-secondary)',marginBottom:2}}>{label}</div>
-    <div style={{fontSize:14,fontWeight:600,color:color||'var(--text-dark)'}}>{value}</div>
+const PMCStat = ({ label, value, color, onClick, hint }) => (
+  <div
+    onClick={(e) => { if (onClick) { e.stopPropagation(); onClick(); } }}
+    style={{
+      padding:'12px 14px',
+      background:'var(--bg-surface)',
+      borderRadius:6,
+      border:'1px solid var(--border-light)',
+      cursor: onClick ? 'pointer' : 'default',
+      transition:'background 0.15s, border-color 0.15s'
+    }}
+    onMouseEnter={e => { if (onClick) { e.currentTarget.style.background = 'var(--accent-warm-light)'; e.currentTarget.style.borderColor = 'var(--accent-warm)'; } }}
+    onMouseLeave={e => { if (onClick) { e.currentTarget.style.background = 'var(--bg-surface)'; e.currentTarget.style.borderColor = 'var(--border-light)'; } }}
+  >
+    <div style={{fontSize:10,letterSpacing:'0.04em',textTransform:'uppercase',color:'var(--text-secondary)',marginBottom:4}}>{label}</div>
+    <div style={{fontSize:15,fontWeight:600,color:color||'var(--text-dark)'}}>{value}</div>
+    {hint && <div style={{fontSize:10,color:'var(--text-muted)',marginTop:3}}>{hint}</div>}
   </div>
 );
 
@@ -16490,7 +16503,7 @@ const PMCOverviewPage = ({ setPage }) => {
 // units count · occupancy · residents · monthly revenue · collected · outstanding · open SRs.
 // Click a card → BuildingDetailModal (reused from Profile Creation).
 
-const PMCPropertiesPage = () => {
+const PMCPropertiesPage = ({ setPage }) => {
   const { selectedProperties = [] } = useApp();
   const [buildings, setBuildings] = useState(null);
   const [error, setError] = useState(null);
@@ -16545,26 +16558,30 @@ const PMCPropertiesPage = () => {
       ) : buildings.length === 0 ? (
         <div className="card"><div style={{padding:32,color:'var(--text-muted)',fontSize:13,textAlign:'center'}}>No buildings in your portfolio yet. Add some via <strong>Profile Creation → Buildings</strong>.</div></div>
       ) : (
-        <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit, minmax(380px, 1fr))',gap:16}}>
+        <div style={{display:'flex',flexDirection:'column',gap:18}}>
           {buildings.map(b => {
             const occupancyPct = b.unitCount > 0 ? Math.round((b.occupiedCount / b.unitCount) * 100) : 0;
+            // Math now adds up: totalBilled = collected (Paid) + outstanding (Pending + Overdue)
+            const totalBilled = b.collected + b.outstanding;
+            const open = () => setSelectedBuilding(b);
             return (
-              <div key={b.id} className="card" style={{cursor:'pointer'}} onClick={() => setSelectedBuilding(b)}>
+              <div key={b.id} className="card">
                 <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:10}}>
-                  <div style={{flex:1,minWidth:0}}>
-                    <div style={{fontSize:16,fontWeight:600,color:'var(--text-dark)'}}>{b.name}</div>
-                    <div style={{fontSize:11,color:'var(--text-muted)',marginTop:2}}>{b.address || '—'}</div>
+                  <div style={{flex:1,minWidth:0,cursor:'pointer'}} onClick={open}>
+                    <div style={{fontSize:18,fontWeight:600,color:'var(--text-dark)'}}>{b.name}</div>
+                    <div style={{fontSize:12,color:'var(--text-muted)',marginTop:2}}>{b.address || '—'}</div>
                   </div>
-                  <div style={{fontSize:11,color:occupancyPct >= 80 ? '#5a6b4f' : occupancyPct >= 50 ? 'var(--text-secondary)' : '#8b4a42',padding:'4px 10px',background:'var(--bg-surface)',borderRadius:4,whiteSpace:'nowrap',marginLeft:10}}>{occupancyPct}% occupied</div>
+                  <div onClick={open} style={{cursor:'pointer',fontSize:12,fontWeight:500,color:occupancyPct >= 80 ? '#5a6b4f' : occupancyPct >= 50 ? 'var(--text-secondary)' : '#8b4a42',padding:'6px 14px',background:'var(--bg-surface)',borderRadius:4,whiteSpace:'nowrap',marginLeft:10,border:'1px solid var(--border-light)'}}>{occupancyPct}% occupied</div>
                 </div>
-                {b.notes && <div style={{fontSize:11,color:'var(--text-muted)',marginBottom:12,padding:'8px 10px',background:'var(--bg-page)',borderRadius:6,lineHeight:1.5}}>{b.notes}</div>}
-                <div style={{display:'grid',gridTemplateColumns:'repeat(2, 1fr)',gap:8}}>
-                  <PMCStat label="Units"           value={b.unitCount}/>
-                  <PMCStat label="Occupied"        value={b.occupiedCount + ' / ' + b.unitCount}/>
-                  <PMCStat label="Monthly revenue" value={'AED ' + Math.round(b.monthlyRev).toLocaleString()}/>
-                  <PMCStat label="Collected"       value={'AED ' + Math.round(b.collected).toLocaleString()} color="#5a6b4f"/>
-                  <PMCStat label="Outstanding"     value={'AED ' + Math.round(b.outstanding).toLocaleString()} color={b.outstanding > 0 ? '#8b4a42' : null}/>
-                  <PMCStat label="Open / Total SRs" value={b.openSRs + ' / ' + b.totalSRs}/>
+                {b.notes && <div style={{fontSize:12,color:'var(--text-muted)',marginBottom:14,padding:'10px 12px',background:'var(--bg-page)',borderRadius:6,lineHeight:1.5}}>{b.notes}</div>}
+                <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit, minmax(150px, 1fr))',gap:10}}>
+                  <PMCStat label="Units"             value={b.unitCount}                                                  onClick={open}                                  hint="View floors & units"/>
+                  <PMCStat label="Occupied"          value={b.occupiedCount + ' / ' + b.unitCount}                       onClick={open}                                  hint="View residents in modal"/>
+                  <PMCStat label="Monthly Run-Rate"  value={'AED ' + Math.round(b.monthlyRev).toLocaleString()}          onClick={() => setPage && setPage('payment')}   hint="Sum of all tenant leases"/>
+                  <PMCStat label="Total Billed"      value={'AED ' + Math.round(totalBilled).toLocaleString()}           onClick={() => setPage && setPage('payment')}   hint="All non-cancelled invoices"/>
+                  <PMCStat label="Collected"         value={'AED ' + Math.round(b.collected).toLocaleString()}           onClick={() => setPage && setPage('payment')}   color="#5a6b4f" hint="Status = Paid"/>
+                  <PMCStat label="Outstanding"       value={'AED ' + Math.round(b.outstanding).toLocaleString()}         onClick={() => setPage && setPage('payment')}   color={b.outstanding > 0 ? '#8b4a42' : null} hint="Pending + Overdue"/>
+                  <PMCStat label="Open SRs"          value={b.openSRs + ' open · ' + b.totalSRs + ' total'}              onClick={() => setPage && setPage('service')}   hint="View service requests"/>
                 </div>
               </div>
             );
@@ -18131,7 +18148,7 @@ const App = () => {
       case 'announcements': return <AnnouncementsPage/>;
       case 'chat': return <ChatPage/>;
       case 'guards': return <PMCGuardsPage/>;
-      case 'properties': return <PMCPropertiesPage/>;
+      case 'properties': return <PMCPropertiesPage setPage={setPage}/>;
       // Escalations page removed — page no longer routed.
       case 'reports': return <PMCReportsPage/>;
       case 'settings': return <SettingsPage/>;
