@@ -4388,7 +4388,6 @@ const Sidebar = ({ page, setPage, isOpen, onClose, onLogout }) => {
     { id: 'overview', label: t('nav.overview'), icon: 'overview' },
     { id: 'service', label: t('nav.service'), icon: 'service' },
     { id: 'payment', label: t('nav.payment'), icon: 'payment' },
-    { id: 'escalations', label: t('nav.escalations'), icon: 'escalations' },
     { id: 'properties', label: t('nav.properties'), icon: 'properties' },
     { id: 'announcements', label: t('nav.announcements'), icon: 'announcements' },
     { id: 'visitors', label: t('nav.visitors'), icon: 'visitors' },
@@ -16212,6 +16211,349 @@ const UpcomingVisitsPanel = () => {
   );
 };
 
+// ==================== PMC OVERVIEW (dashboard home) ====================
+// Replaces the legacy OverviewPage. Pulls live counts from Supabase tables,
+// scoped to the top-bar property selector. Removes the 'Unresolved Escalations'
+// KPI card per user request.
+
+const PMCStat = ({ label, value, color }) => (
+  <div style={{padding:'8px 10px',background:'var(--bg-surface)',borderRadius:6,border:'1px solid var(--border-light)'}}>
+    <div style={{fontSize:10,letterSpacing:'0.04em',textTransform:'uppercase',color:'var(--text-secondary)',marginBottom:2}}>{label}</div>
+    <div style={{fontSize:14,fontWeight:600,color:color||'var(--text-dark)'}}>{value}</div>
+  </div>
+);
+
+const PMCOverviewPage = ({ setPage }) => {
+  const { selectedProperties = [] } = useApp();
+  const [stats, setStats] = useState(null);
+  const [error, setError] = useState(null);
+
+  useEffect(() => {
+    let mounted = true;
+    setStats(null); setError(null);
+    (async () => {
+      if (!supabaseClient) { setError('Supabase not initialized'); return; }
+      try {
+        const filterB = selectedProperties.length > 0 ? selectedProperties : null;
+        const { data: buildings } = await supabaseClient.from('buildings').select('id,name');
+        const { data: units } = await supabaseClient.from('units').select('id,building_id');
+        const filteredUnits = (units || []).filter(u => !filterB || filterB.includes(u.building_id));
+        const fIds = filteredUnits.map(u => u.id);
+        const probe = fIds.length ? fIds : ['00000000-0000-0000-0000-000000000000'];
+
+        const [{ data: ras }, { data: invoices }, { data: srs }, { data: visits }] = await Promise.all([
+          supabaseClient.from('resident_assignments').select('profile_id,unit_id').in('unit_id', probe),
+          supabaseClient.from('invoices').select('amount_aed,status').in('unit_id', probe),
+          supabaseClient.from('service_requests').select('id,category,description,status,priority,created_at,unit_id,resident_profile_id').in('unit_id', probe).order('created_at', { ascending: false }).limit(10),
+          supabaseClient.from('visits').select('id,visit_date,status,visitor_name,type').in('unit_id', probe),
+        ]);
+        if (!mounted) return;
+
+        const today = new Date().toISOString().slice(0,10);
+        const todaySRs = (srs || []).filter(s => (s.created_at || '').slice(0,10) === today).length;
+        const overdueAmt = (invoices || []).filter(i => i.status === 'Overdue').reduce((s, i) => s + Number(i.amount_aed), 0);
+        const upcomingVisits = (visits || []).filter(v => v.visit_date > today && v.status === 'Pre-Approved').length;
+        const todayVisits = (visits || []).filter(v => v.visit_date === today).length;
+        const totalUnits = filteredUnits.length;
+        const occupied = new Set((ras || []).map(r => r.unit_id)).size;
+        const occupancyRate = totalUnits > 0 ? Math.round((occupied / totalUnits) * 100) : 0;
+
+        setStats({
+          todaySRs, overdueAmt, upcomingVisits, todayVisits,
+          occupancyRate, occupied, totalUnits,
+          recentSRs: srs || [],
+        });
+      } catch (e) {
+        if (mounted) setError(String(e.message || e));
+      }
+    })();
+    return () => { mounted = false; };
+  }, [selectedProperties.join(',')]);
+
+  const fmt = (n) => 'AED ' + Math.round(n).toLocaleString();
+
+  if (error) return (<div><div className="page-header"><h1>PM Dashboard — Overview</h1></div><div className="card"><div style={{color:'#8b4a42',fontSize:13}}>{error}</div></div></div>);
+
+  return (
+    <div>
+      <div className="page-header">
+        <div>
+          <h1>PM Dashboard — Overview</h1>
+          <div className="subtitle">
+            {selectedProperties.length > 0
+              ? 'Scoped to ' + selectedProperties.length + ' building' + (selectedProperties.length === 1 ? '' : 's') + ' (top-bar selector) · live from Supabase'
+              : 'All buildings · live from Supabase'}
+          </div>
+        </div>
+      </div>
+
+      {!stats ? (
+        <div className="card"><div style={{padding:24,color:'var(--text-muted)',fontSize:13}}>Loading…</div></div>
+      ) : (<>
+        <div className="kpi-row">
+          {[
+            { label: 'Service Requests Today', value: stats.todaySRs, page: 'service' },
+            { label: 'Service Charge Arrears', value: fmt(stats.overdueAmt), page: 'payment' },
+            { label: 'Upcoming Visitors',      value: stats.upcomingVisits, page: 'visitors' },
+            { label: 'Visitors Today',         value: stats.todayVisits, page: 'visitors' },
+            { label: 'Occupancy Rate',         value: stats.occupancyRate + '%', page: 'properties' },
+            { label: 'Units Occupied',         value: stats.occupied + ' / ' + stats.totalUnits, page: 'properties' },
+          ].map((k, i) => (
+            <div key={i} className="kpi-card" style={{cursor:'pointer'}} onClick={() => setPage && setPage(k.page)}>
+              <div className="label">{k.label}</div>
+              <div className="value">{k.value}</div>
+              <div className="link">View details →</div>
+            </div>
+          ))}
+        </div>
+
+        <div className="card">
+          <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:14}}>
+            <div style={{fontSize:13,fontWeight:600}}>Recent Service Requests</div>
+            <span onClick={() => setPage && setPage('service')} style={{fontSize:11,color:'var(--accent-warm-dark)',cursor:'pointer'}}>View all →</span>
+          </div>
+          {stats.recentSRs.length === 0 ? (
+            <div style={{color:'var(--text-muted)',fontSize:13,padding:24,textAlign:'center'}}>No service requests yet.</div>
+          ) : (
+            <table className="data-table">
+              <thead><tr><th>Category</th><th>Description</th><th>Priority</th><th>Status</th><th>Created</th></tr></thead>
+              <tbody>
+                {stats.recentSRs.map(s => (
+                  <tr key={s.id}>
+                    <td style={{fontWeight:500}}>{s.category}</td>
+                    <td style={{maxWidth:340,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{s.description}</td>
+                    <td>{s.priority}</td>
+                    <td>{s.status}</td>
+                    <td>{s.created_at ? new Date(s.created_at).toLocaleDateString() : '—'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+      </>)}
+    </div>
+  );
+};
+
+// ==================== PMC PROPERTIES PAGE ====================
+// Replaces the legacy blank-ish PropertiesPage. Each card aggregates:
+// units count · occupancy · residents · monthly revenue · collected · outstanding · open SRs.
+// Click a card → BuildingDetailModal (reused from Profile Creation).
+
+const PMCPropertiesPage = () => {
+  const { selectedProperties = [] } = useApp();
+  const [buildings, setBuildings] = useState(null);
+  const [error, setError] = useState(null);
+  const [selectedBuilding, setSelectedBuilding] = useState(null);
+
+  useEffect(() => {
+    let mounted = true;
+    setBuildings(null);
+    (async () => {
+      if (!supabaseClient) { setError('Supabase not initialized'); return; }
+      try {
+        const [{ data: bs }, { data: units }, { data: ras }, { data: invoices }, { data: srs }] = await Promise.all([
+          supabaseClient.from('buildings').select('id,name,address,notes,created_at').order('name'),
+          supabaseClient.from('units').select('id,building_id,floor,unit_number'),
+          supabaseClient.from('resident_assignments').select('profile_id,unit_id,tenure,monthly_payment_aed'),
+          supabaseClient.from('invoices').select('unit_id,amount_aed,status'),
+          supabaseClient.from('service_requests').select('unit_id,status'),
+        ]);
+        if (!mounted) return;
+        const filterB = selectedProperties.length > 0 ? selectedProperties : null;
+        const result = (bs || []).filter(b => !filterB || filterB.includes(b.id)).map(b => {
+          const bUnits = (units || []).filter(u => u.building_id === b.id);
+          const unitIds = bUnits.map(u => u.id);
+          const occupied = (ras || []).filter(r => unitIds.includes(r.unit_id));
+          const tenants = occupied.filter(o => o.tenure === 'Tenant');
+          const monthlyRev = tenants.reduce((s, t) => s + Number(t.monthly_payment_aed || 0), 0);
+          const bInvoices = (invoices || []).filter(i => unitIds.includes(i.unit_id));
+          const collected = bInvoices.filter(i => i.status === 'Paid').reduce((s, i) => s + Number(i.amount_aed), 0);
+          const outstanding = bInvoices.filter(i => i.status === 'Pending' || i.status === 'Overdue').reduce((s, i) => s + Number(i.amount_aed), 0);
+          const bSRs = (srs || []).filter(s => unitIds.includes(s.unit_id));
+          const openSRs = bSRs.filter(s => ['New','Acknowledged','In Progress'].includes(s.status)).length;
+          return { ...b, units: bUnits, unitCount: bUnits.length, occupiedCount: occupied.length, monthlyRev, collected, outstanding, openSRs, totalSRs: bSRs.length };
+        });
+        setBuildings(result);
+      } catch (e) { if (mounted) setError(String(e.message || e)); }
+    })();
+    return () => { mounted = false; };
+  }, [selectedProperties.join(',')]);
+
+  return (
+    <div>
+      <div className="page-header">
+        <div>
+          <h1>Properties</h1>
+          <div className="subtitle">Buildings under management. Use the top-bar property selector to focus on specific assets.</div>
+        </div>
+      </div>
+
+      {error && <div className="card"><div style={{color:'#8b4a42',fontSize:13}}>{error}</div></div>}
+      {buildings === null ? (
+        <div className="card"><div style={{padding:24,color:'var(--text-muted)',fontSize:13}}>Loading…</div></div>
+      ) : buildings.length === 0 ? (
+        <div className="card"><div style={{padding:32,color:'var(--text-muted)',fontSize:13,textAlign:'center'}}>No buildings in your portfolio yet. Add some via <strong>Profile Creation → Buildings</strong>.</div></div>
+      ) : (
+        <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit, minmax(380px, 1fr))',gap:16}}>
+          {buildings.map(b => {
+            const occupancyPct = b.unitCount > 0 ? Math.round((b.occupiedCount / b.unitCount) * 100) : 0;
+            return (
+              <div key={b.id} className="card" style={{cursor:'pointer'}} onClick={() => setSelectedBuilding(b)}>
+                <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:10}}>
+                  <div style={{flex:1,minWidth:0}}>
+                    <div style={{fontSize:16,fontWeight:600,color:'var(--text-dark)'}}>{b.name}</div>
+                    <div style={{fontSize:11,color:'var(--text-muted)',marginTop:2}}>{b.address || '—'}</div>
+                  </div>
+                  <div style={{fontSize:11,color:occupancyPct >= 80 ? '#5a6b4f' : occupancyPct >= 50 ? 'var(--text-secondary)' : '#8b4a42',padding:'4px 10px',background:'var(--bg-surface)',borderRadius:4,whiteSpace:'nowrap',marginLeft:10}}>{occupancyPct}% occupied</div>
+                </div>
+                {b.notes && <div style={{fontSize:11,color:'var(--text-muted)',marginBottom:12,padding:'8px 10px',background:'var(--bg-page)',borderRadius:6,lineHeight:1.5}}>{b.notes}</div>}
+                <div style={{display:'grid',gridTemplateColumns:'repeat(2, 1fr)',gap:8}}>
+                  <PMCStat label="Units"           value={b.unitCount}/>
+                  <PMCStat label="Occupied"        value={b.occupiedCount + ' / ' + b.unitCount}/>
+                  <PMCStat label="Monthly revenue" value={'AED ' + Math.round(b.monthlyRev).toLocaleString()}/>
+                  <PMCStat label="Collected"       value={'AED ' + Math.round(b.collected).toLocaleString()} color="#5a6b4f"/>
+                  <PMCStat label="Outstanding"     value={'AED ' + Math.round(b.outstanding).toLocaleString()} color={b.outstanding > 0 ? '#8b4a42' : null}/>
+                  <PMCStat label="Open / Total SRs" value={b.openSRs + ' / ' + b.totalSRs}/>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {selectedBuilding && <BuildingDetailModal building={selectedBuilding} onClose={() => setSelectedBuilding(null)}/>}
+    </div>
+  );
+};
+
+// ==================== PMC SERVICE CHARGES PAGE (replaces Payment placeholder) ====================
+
+const PMCServiceChargesPage = () => {
+  const { selectedProperties = [] } = useApp();
+  const [invoices, setInvoices] = useState(null);
+  const [error, setError] = useState(null);
+  const [statusFilter, setStatusFilter] = useState('all');
+  const [search, setSearch] = useState('');
+
+  useEffect(() => {
+    let mounted = true;
+    setInvoices(null);
+    (async () => {
+      if (!supabaseClient) { setError('Supabase not initialized'); return; }
+      try {
+        const filterB = selectedProperties.length > 0 ? selectedProperties : null;
+        const { data: units } = await supabaseClient.from('units').select('id,building_id,unit_number,floor');
+        const filteredUnits = (units || []).filter(u => !filterB || filterB.includes(u.building_id));
+        const fIds = filteredUnits.map(u => u.id);
+        const probe = fIds.length ? fIds : ['00000000-0000-0000-0000-000000000000'];
+        const [{ data: invs }, { data: bs }, { data: profs }] = await Promise.all([
+          supabaseClient.from('invoices').select('id,invoice_number,description,amount_aed,due_date,status,source_type,unit_id,resident_profile_id,created_at').in('unit_id', probe).order('created_at', { ascending: false }),
+          supabaseClient.from('buildings').select('id,name'),
+          supabaseClient.from('profiles').select('id,full_name').eq('role', 'resident'),
+        ]);
+        if (!mounted) return;
+        const uMap = Object.fromEntries(filteredUnits.map(u => [u.id, u]));
+        const bMap = Object.fromEntries((bs || []).map(b => [b.id, b]));
+        const pMap = Object.fromEntries((profs || []).map(p => [p.id, p]));
+        setInvoices((invs || []).map(i => {
+          const u = uMap[i.unit_id];
+          return {
+            ...i,
+            unit_number: u ? u.unit_number : '—',
+            floor: u ? u.floor : null,
+            building_name: u && bMap[u.building_id] ? bMap[u.building_id].name : '—',
+            resident_name: i.resident_profile_id && pMap[i.resident_profile_id] ? pMap[i.resident_profile_id].full_name : '—',
+          };
+        }));
+      } catch (e) { if (mounted) setError(String(e.message || e)); }
+    })();
+    return () => { mounted = false; };
+  }, [selectedProperties.join(',')]);
+
+  const filtered = (invoices || []).filter(i => {
+    if (statusFilter !== 'all' && i.status !== statusFilter) return false;
+    if (search) {
+      const hay = ((i.invoice_number || '') + ' ' + i.description + ' ' + i.resident_name + ' ' + i.unit_number).toLowerCase();
+      if (!hay.includes(search.toLowerCase())) return false;
+    }
+    return true;
+  });
+
+  const totals = {
+    total: filtered.reduce((s, i) => s + Number(i.amount_aed), 0),
+    paid:    filtered.filter(i => i.status === 'Paid').reduce((s, i) => s + Number(i.amount_aed), 0),
+    pending: filtered.filter(i => i.status === 'Pending').reduce((s, i) => s + Number(i.amount_aed), 0),
+    overdue: filtered.filter(i => i.status === 'Overdue').reduce((s, i) => s + Number(i.amount_aed), 0),
+  };
+  const fmt = (n) => 'AED ' + Math.round(n).toLocaleString();
+
+  return (
+    <div>
+      <div className="page-header">
+        <div>
+          <h1>Service Charges</h1>
+          <div className="subtitle">All invoices across selected properties. Filter by status, search by invoice/resident/unit.</div>
+        </div>
+      </div>
+
+      <div className="kpi-row">
+        <div className="kpi-card"><div className="label">Total Billed</div><div className="value">{fmt(totals.total)}</div></div>
+        <div className="kpi-card"><div className="label">Collected</div><div className="value" style={{color:'#5a6b4f'}}>{fmt(totals.paid)}</div></div>
+        <div className="kpi-card"><div className="label">Pending</div><div className="value" style={{color:'#a07d3c'}}>{fmt(totals.pending)}</div></div>
+        <div className="kpi-card"><div className="label">Overdue</div><div className="value" style={{color:'#8b4a42'}}>{fmt(totals.overdue)}</div></div>
+      </div>
+
+      <div className="card">
+        <div style={{display:'flex',gap:14,flexWrap:'wrap',alignItems:'flex-end',marginBottom:14}}>
+          <div style={{flex:'1 1 160px'}}>
+            <label style={{fontSize:10,letterSpacing:'0.06em',textTransform:'uppercase',color:'var(--text-secondary)',marginBottom:6,display:'block',fontWeight:500}}>Status</label>
+            <select className="form-input" value={statusFilter} onChange={e => setStatusFilter(e.target.value)}>
+              <option value="all">All statuses</option>
+              <option>Paid</option><option>Pending</option><option>Overdue</option><option>Cancelled</option>
+            </select>
+          </div>
+          <div style={{flex:'2 1 200px'}}>
+            <label style={{fontSize:10,letterSpacing:'0.06em',textTransform:'uppercase',color:'var(--text-secondary)',marginBottom:6,display:'block',fontWeight:500}}>Search</label>
+            <input type="text" className="form-input" placeholder="Invoice number, description, resident, unit…" value={search} onChange={e => setSearch(e.target.value)}/>
+          </div>
+          <button className="btn btn-sm" onClick={() => { setStatusFilter('all'); setSearch(''); }}>Clear</button>
+        </div>
+
+        {error && <div style={{padding:10,background:'#fdf2f1',color:'#8b4a42',borderRadius:6,fontSize:12,marginBottom:14}}>{error}</div>}
+        {invoices === null ? (
+          <div style={{padding:24,color:'var(--text-muted)',fontSize:13}}>Loading…</div>
+        ) : filtered.length === 0 ? (
+          <div style={{padding:32,color:'var(--text-muted)',fontSize:13,textAlign:'center'}}>No invoices match these filters.</div>
+        ) : (
+          <table className="data-table">
+            <thead><tr><th>Invoice #</th><th>Description</th><th>Resident</th><th>Building / Unit</th><th style={{textAlign:'right'}}>Amount</th><th>Due</th><th>Status</th></tr></thead>
+            <tbody>
+              {filtered.slice(0, 200).map(i => (
+                <tr key={i.id}>
+                  <td style={{fontWeight:500,fontSize:12}}>{i.invoice_number || '—'}</td>
+                  <td style={{maxWidth:240,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}} title={i.description}>{i.description}</td>
+                  <td>{i.resident_name}</td>
+                  <td>{i.building_name}<div style={{fontSize:11,color:'var(--text-muted)'}}>Unit {i.unit_number}</div></td>
+                  <td style={{textAlign:'right',fontWeight:500}}>{fmt(i.amount_aed)}</td>
+                  <td>{i.due_date || '—'}</td>
+                  <td>
+                    <span style={{padding:'3px 10px',borderRadius:4,fontSize:11,fontWeight:500,
+                      background: i.status === 'Paid' ? '#e6efe1' : i.status === 'Overdue' ? '#fdf2f1' : '#f5f3f0',
+                      color: i.status === 'Paid' ? '#5a6b4f' : i.status === 'Overdue' ? '#8b4a42' : '#7a6e60',
+                    }}>{i.status}</span>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+    </div>
+  );
+};
+
 // ==================== PMC REPORTS PAGE ====================
 // Section-grouped landlord reports inspired by vars_landlord_dashboards.md
 // (Tier 1 must-haves + Tier 2 operational selections). Reads real data from
@@ -17392,17 +17734,17 @@ const App = () => {
     const sel = searchSelectedItem;
     const clearSel = () => setSearchSelectedItem(null);
     switch (page) {
-      case 'overview': return <OverviewPage setPage={setPage}/>;
+      case 'overview': return <PMCOverviewPage setPage={setPage}/>;
       case 'profileCreation': return <ProfileCreationPage/>;
-      case 'payment': return <PlaceholderPage title="Payment Summary" description="Payment tracking and billing management. Coming soon!"/>;
+      case 'payment': return <PMCServiceChargesPage/>;
       case 'visitors': return <PMCVisitorsPage/>;
       case 'service': return <ServiceRequestsPage/>;
       case 'packages': return <PlaceholderPage title="Packages" description="Package tracking and delivery management. Coming soon!"/>;
       case 'announcements': return <AnnouncementsPage/>;
       case 'chat': return <ChatPage/>;
       case 'guards': return <PMCGuardsPage/>;
-      case 'properties': return <PropertiesPage searchSelectedItem={sel} clearSearchSelection={clearSel}/>;
-      case 'escalations': return <EscalationsPage/>;
+      case 'properties': return <PMCPropertiesPage/>;
+      // Escalations page removed — page no longer routed.
       case 'reports': return <PMCReportsPage/>;
       case 'settings': return <SettingsPage/>;
       default: return <OverviewPage setPage={setPage}/>;
