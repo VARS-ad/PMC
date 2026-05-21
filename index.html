@@ -11474,6 +11474,53 @@ const ScannedVisitorForm = ({ scannedData, onClose, onSave }) => {
 
 const SecurityApp = ({ onLogout }) => {
   const { data, setData, showToast, t } = useApp();
+
+  // Pull the signed-in guard's real name, building, address, and shift hours from
+  // Supabase Auth + profile/assignment so the header displays true values instead of
+  // the legacy 'Suresh Kumar / GRD-045 / Sky Tower / 06:00 — 14:00' placeholders.
+  const [authGuard, setAuthGuard] = useState(null);
+  useEffect(() => {
+    if (!supabaseClient) return;
+    let mounted = true;
+    (async () => {
+      try {
+        const { data: { session } } = await supabaseClient.auth.getSession();
+        const userId = session && session.user && session.user.id;
+        const role = session && session.user && session.user.app_metadata && session.user.app_metadata.role;
+        if (!userId || role !== 'security') return;
+        const [{ data: profile }, { data: sa }] = await Promise.all([
+          supabaseClient.from('profiles').select('full_name,phone').eq('id', userId).maybeSingle(),
+          supabaseClient.from('security_assignments').select('building_id,shift').eq('profile_id', userId).maybeSingle(),
+        ]);
+        if (!mounted) return;
+        const { data: building } = (sa && sa.building_id)
+          ? await supabaseClient.from('buildings').select('name,address').eq('id', sa.building_id).maybeSingle()
+          : { data: null };
+        if (!mounted) return;
+        const shiftHours = sa && sa.shift === 'Day'   ? '06:00 — 18:00'
+                         : sa && sa.shift === 'Night' ? '18:00 — 06:00'
+                         : sa && sa.shift === '24h'   ? '24h coverage'
+                         : '—';
+        setAuthGuard({
+          name: (profile && profile.full_name) || 'Suresh Kumar',
+          id: 'GRD-' + (userId ? userId.slice(0, 6).toUpperCase() : '045'),
+          phone: (profile && profile.phone) || null,
+          shift: sa ? sa.shift : null,
+          shiftHours,
+          building: (building && building.name) || null,
+          buildingAddress: (building && building.address) || null,
+        });
+      } catch (_) { /* keep fallback for demo logins */ }
+    })();
+    return () => { mounted = false; };
+  }, []);
+  const g_name = (authGuard && authGuard.name) || 'Suresh Kumar';
+  const g_id = (authGuard && authGuard.id) || 'GRD-045';
+  const g_phone = (authGuard && authGuard.phone) || '+971 50 456 7890';
+  const g_shiftHours = (authGuard && authGuard.shiftHours) || '06:00 — 14:00';
+  const g_building = authGuard && authGuard.building;
+  const g_buildingAddress = authGuard && authGuard.buildingAddress;
+
   const [currentTab, setCurrentTab] = useState('dashboard');
   const [selectedVisitor, setSelectedVisitor] = useState(null);
   const [viewingVisitor, setViewingVisitor] = useState(null); // for detail view
@@ -13788,8 +13835,8 @@ const SecurityApp = ({ onLogout }) => {
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#1a1a1a" strokeWidth="1.5"><path d="M3 21h18M5 21V7l7-4 7 4v14M9 21v-6h6v6"/></svg>
           </div>
           <div>
-            <div style={{fontSize:15,fontWeight:700,color:'#1a1a1a',lineHeight:1.2}}>{t('sec.skyTower')}</div>
-            <div style={{fontSize:11,color:'#a89a92',marginTop:2}}>{t('sec.locationFull')}</div>
+            <div style={{fontSize:15,fontWeight:700,color:'#1a1a1a',lineHeight:1.2}}>{g_building || t('sec.skyTower')}</div>
+            <div style={{fontSize:11,color:'#a89a92',marginTop:2}}>{g_buildingAddress || t('sec.locationFull')}</div>
             <div style={{marginTop:8,position:'relative',display:'inline-block'}}>
               <select
                 value={selectedGate}
@@ -13814,9 +13861,9 @@ const SecurityApp = ({ onLogout }) => {
         {/* Guard on Duty + Shift Status */}
         <div style={{textAlign:'right'}}>
           <div style={{fontSize:10,color:'#a89a92',letterSpacing:'0.06em'}}>{t('sec.guardOnDuty')}</div>
-          <div style={{fontSize:14,fontWeight:600,color:'#1a1a1a'}}>Suresh Kumar</div>
-          <div style={{fontSize:10,color:'#a89a92'}}>{`${t('sec.id')}: GRD-045`}</div>
-          <div style={{fontSize:10,color:'#a89a92'}}>{`${t('sec.shiftLabel')}: 06:00 — 14:00`}</div>
+          <div style={{fontSize:14,fontWeight:600,color:'#1a1a1a'}}>{g_name}</div>
+          <div style={{fontSize:10,color:'#a89a92'}}>{`${t('sec.id')}: ${g_id}`}</div>
+          <div style={{fontSize:10,color:'#a89a92'}}>{`${t('sec.shiftLabel')}: ${g_shiftHours}`}</div>
         </div>
         {/* Icons */}
         <div style={{display:'flex',flexDirection:'column',alignItems:'center',gap:8}}>
@@ -13834,9 +13881,9 @@ const SecurityApp = ({ onLogout }) => {
                     <div style={{width:60,height:60,borderRadius:'50%',border:'2px solid #d0d0d0',background:'#f2efec',display:'flex',alignItems:'center',justifyContent:'center',margin:'0 auto 12px'}}>
                       <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#999" strokeWidth="1.2"><circle cx="12" cy="8" r="4"/><path d="M6 21v-2a4 4 0 014-4h4a4 4 0 014 4v2"/></svg>
                     </div>
-                    <div style={{fontSize:16,fontWeight:600,color:'#1a1a1a',marginBottom:2}}>Suresh Kumar</div>
+                    <div style={{fontSize:16,fontWeight:600,color:'#1a1a1a',marginBottom:2}}>{g_name}</div>
                     <div style={{fontSize:12,color:'#a89a92',marginBottom:2}}>{t('sec.securityGuard')}</div>
-                    <div style={{fontSize:11,color:'#c4b8b0'}}>{`${t('sec.id')}: GRD-045 — ${t('sec.shiftLabel')}: 06:00 — 14:00`}</div>
+                    <div style={{fontSize:11,color:'#c4b8b0'}}>{`${t('sec.id')}: ${g_id} — ${t('sec.shiftLabel')}: ${g_shiftHours}`}</div>
                   </div>
                   {/* Menu items — resident profile style with icon circles + chevrons */}
                   <div style={{padding:'8px 12px',maxHeight:380,overflowY:'auto'}}>
@@ -13979,15 +14026,15 @@ const SecurityApp = ({ onLogout }) => {
                       <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#a89a92" strokeWidth="1.5"><circle cx="12" cy="8" r="4"/><path d="M6 21v-2a4 4 0 014-4h4a4 4 0 014 4v2"/></svg>
                     </div>
                     <div>
-                      <div style={{fontSize:16,fontWeight:600,color:'#1a1a1a'}}>Suresh Kumar</div>
+                      <div style={{fontSize:16,fontWeight:600,color:'#1a1a1a'}}>{g_name}</div>
                       <div style={{fontSize:12,color:'#8a7f77'}}>{t('sec.seniorGuard')}</div>
-                      <div style={{fontSize:11,color:'#a89a92',marginTop:2}}>{`GRD-045 · ${t('sec.mainGate')}`}</div>
+                      <div style={{fontSize:11,color:'#a89a92',marginTop:2}}>{`${g_id} · ${t('sec.mainGate')}`}</div>
                     </div>
                   </div>
                   <div style={sectionTitle}>{t('sec.personal')}</div>
-                  <div style={rowStyle}><span style={labelStyle}>{t('sec.fullNameLabel')}</span><span style={valueStyle}>Suresh Kumar</span></div>
-                  <div style={rowStyle}><span style={labelStyle}>{t('sec.employeeId')}</span><span style={valueStyle}>GRD-045</span></div>
-                  <div style={rowStyle}><span style={labelStyle}>{t('sec.phone')}</span><span style={valueStyle}>+971 50 456 7890</span></div>
+                  <div style={rowStyle}><span style={labelStyle}>{t('sec.fullNameLabel')}</span><span style={valueStyle}>{g_name}</span></div>
+                  <div style={rowStyle}><span style={labelStyle}>{t('sec.employeeId')}</span><span style={valueStyle}>{g_id}</span></div>
+                  <div style={rowStyle}><span style={labelStyle}>{t('sec.phone')}</span><span style={valueStyle}>{g_phone}</span></div>
                   <div style={rowStyle}><span style={labelStyle}>{t('sec.emailLabel')}</span><span style={valueStyle}>s.kumar@vars.live</span></div>
                   <div style={sectionTitle}>{t('sec.duty')}</div>
                   <div style={rowStyle}><span style={labelStyle}>{t('sec.designation')}</span><span style={valueStyle}>{t('sec.seniorGuard')}</span></div>
