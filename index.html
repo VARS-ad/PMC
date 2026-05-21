@@ -8779,6 +8779,41 @@ const ResidentApp = ({ onLogout }) => {
   const [showResPropertyDropdown, setShowResPropertyDropdown] = useState(false);
   const dismissedNotifIds = data.dismissedNotifIds || [];
   const [resHhTab, setResHhTab] = useState('family');
+
+  // Fetch the signed-in resident's real name/unit/building so the header shows true values
+  // instead of legacy "Hello, Nitin / B-102, Sky Tower". Falls back to those for demo logins.
+  const [authResident, setAuthResident] = useState(null);
+  useEffect(() => {
+    if (!supabaseClient) return;
+    let mounted = true;
+    (async () => {
+      try {
+        const { data: { session } } = await supabaseClient.auth.getSession();
+        const userId = session && session.user && session.user.id;
+        const rrole = session && session.user && session.user.app_metadata && session.user.app_metadata.role;
+        if (!userId || rrole !== 'resident') return;
+        const [{ data: profile }, { data: ra }] = await Promise.all([
+          supabaseClient.from('profiles').select('full_name').eq('id', userId).maybeSingle(),
+          supabaseClient.from('resident_assignments').select('unit_id').eq('profile_id', userId).maybeSingle(),
+        ]);
+        if (!mounted || !ra) return;
+        const { data: unit } = await supabaseClient.from('units').select('floor,unit_number,building_id').eq('id', ra.unit_id).maybeSingle();
+        const { data: building } = unit ? await supabaseClient.from('buildings').select('name').eq('id', unit.building_id).maybeSingle() : { data: null };
+        if (!mounted) return;
+        const firstName = (profile && profile.full_name) ? profile.full_name.split(' ')[0] : 'Nitin';
+        setAuthResident({
+          name: firstName,
+          fullName: (profile && profile.full_name) || 'Nitin Sharma',
+          flat: (unit && unit.unit_number) || 'B-102',
+          building: (building && building.name) || 'Sky Tower',
+        });
+      } catch (_) { /* fall back to defaults */ }
+    })();
+    return () => { mounted = false; };
+  }, []);
+  const r_name = (authResident && authResident.name) || 'Nitin';
+  const r_flat = (authResident && authResident.flat) || 'B-102';
+  const r_building = (authResident && authResident.building) || 'Sky Tower';
   const [resHhShowCreate, setResHhShowCreate] = useState(false);
   const [resHhForm, setResHhForm] = useState({ name: '', phone: '', relation: 'Sister', role: 'Maid', schedule: 'Mon to Fri', hours: '9:00 AM to 17:00 PM', allowAccess: false, idDocType: 'Emirates ID', docNumber: '', vehicleNumber: '' });
   const [resHhEditingId, setResHhEditingId] = useState(null); // null = create mode, id = edit mode
@@ -10584,9 +10619,9 @@ const ResidentApp = ({ onLogout }) => {
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="rgba(26,26,26,0.35)" strokeWidth="1.5"><circle cx="12" cy="8" r="4"/><path d="M6 21v-2a4 4 0 014-4h4a4 4 0 014 4v2"/></svg>
             </div>
             <div style={{position:'relative'}}>
-              <div style={{fontSize:15,fontWeight:600,color:'#1a1a1a',letterSpacing:'-0.02em'}}>{t('res.hello')}, Nitin</div>
+              <div style={{fontSize:15,fontWeight:600,color:'#1a1a1a',letterSpacing:'-0.02em'}}>{t('res.hello')}, {r_name}</div>
               <div onClick={() => setShowResPropertyDropdown(!showResPropertyDropdown)} style={{cursor:'pointer',display:'flex',alignItems:'center',gap:4,fontSize:11,color:'rgba(26,26,26,0.4)',marginTop:2}}>
-                B-102, Sky Tower
+                {r_flat}, {r_building}
                 <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="rgba(26,26,26,0.35)" strokeWidth="2"><path d="M6 9l6 6 6-6"/></svg>
               </div>
               {showResPropertyDropdown && (
@@ -14572,7 +14607,12 @@ try {
     _createClient = window.createClient;
   }
   if (_createClient) {
-    supabaseClient = _createClient(SUPABASE_URL, SUPABASE_KEY);
+    // sessionStorage (NOT localStorage) so each browser tab keeps its own independent
+    // Supabase session. That's what lets you sign in as PMC in tab 1, Resident in tab 2,
+    // Security in tab 3 simultaneously without them overwriting each other.
+    supabaseClient = _createClient(SUPABASE_URL, SUPABASE_KEY, {
+      auth: { storage: window.sessionStorage, persistSession: true, autoRefreshToken: true }
+    });
     supabaseReady = true;
     console.log('Supabase client initialized OK');
   } else {
@@ -15928,6 +15968,21 @@ const App = () => {
   const [role, setRole] = useState(() => {
     try { return localStorage.getItem('varspm_role') || null; } catch(e) { return null; }
   });
+  // Sync URL hash with the current role so each tab's URL reflects its view —
+  // bookmarkable as /#/pmc, /#/resident, /#/security. Updates on login + logout.
+  useEffect(() => {
+    try {
+      if (role) {
+        const slug = role === 'manager' ? 'pmc' : role;
+        const desired = '#/' + slug;
+        if (window.location.hash !== desired) {
+          window.history.replaceState(null, '', window.location.pathname + window.location.search + desired);
+        }
+      } else if (window.location.hash && window.location.hash !== '#') {
+        window.history.replaceState(null, '', window.location.pathname + window.location.search);
+      }
+    } catch (_) { /* ignore in non-browser contexts */ }
+  }, [role]);
   const [page, setPage] = useState('overview');
   const [data, setData] = useState(loadPersistedData);
   const [toast, setToast] = useState(null);
