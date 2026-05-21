@@ -9388,20 +9388,32 @@ const ResidentApp = ({ onLogout }) => {
           <div className="res-content" style={{padding:'12px 16px',paddingBottom:80}}>
             <div style={{fontSize:20,fontWeight:600,color:'#1a1a1a',marginBottom:20}}>{t('res.payment')}</div>
 
-            {/* Total Due Card */}
-            <div style={{background:'#fff',border:'1px solid #ebe7e3',borderRadius:10,padding:20,marginBottom:28}}>
-              <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:4}}>
-                <span style={{fontSize:12,color:'#a89a92'}}>{t('res.totalDueMonth')}</span>
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#a89a92" strokeWidth="1.5"><path d="M6 9l6 6 6-6"/></svg>
-              </div>
-              <div style={{fontSize:32,fontWeight:700,color:'#1a1a1a',marginBottom:4}}>AED 3,200</div>
-              <div style={{fontSize:12,color:'#a89a92',marginBottom:14}}>{t('res.dueBy')} {monthShort(3)} 10, 2026</div>
-              <div style={{display:'flex',gap:12}}>
-                <button onClick={() => setPayModal({ amount: 'AED 3,200' })} style={{padding:'8px 18px',border:'1px solid #928989',borderRadius:4,background:'#fff',color:'#1a1a1a',fontSize:12,fontWeight:600,cursor:'pointer'}}>{t('res.payNow')}</button>
-                {payModal && <PaymentMethodModal amount={payModal.amount} onClose={() => setPayModal(null)} showToast={showToast}/>}
-                <button onClick={() => showToast('Detailed breakdown coming soon')} style={{padding:'8px 18px',border:'none',borderRadius:4,background:'none',color:'#a89a92',fontSize:12,fontWeight:500,cursor:'pointer'}}>{t('res.checkDetails')}</button>
-              </div>
-            </div>
+            {/* Total Due Card — derived from data.invoices for this resident */}
+            {(() => {
+              const myInvoices = (data.invoices || []).filter(i => !i.flat || i.flat === 'A-304'); // best-effort filter
+              const unpaid = myInvoices.filter(i => i.status === 'Pending' || i.status === 'Overdue');
+              const totalDue = unpaid.reduce((s, i) => s + Number(i.amount || 0), 0);
+              const nextDue = unpaid.slice().sort((a,b) => (a.dueDate || '').localeCompare(b.dueDate || ''))[0];
+              const amountLabel = 'AED ' + Math.round(totalDue).toLocaleString();
+              return (
+                <div style={{background:'#fff',border:'1px solid #ebe7e3',borderRadius:10,padding:20,marginBottom:28}}>
+                  <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:4}}>
+                    <span style={{fontSize:12,color:'#a89a92'}}>{t('res.totalDueMonth')}</span>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#a89a92" strokeWidth="1.5"><path d="M6 9l6 6 6-6"/></svg>
+                  </div>
+                  <div style={{fontSize:32,fontWeight:700,color:'#1a1a1a',marginBottom:4}}>{totalDue > 0 ? amountLabel : 'AED 0'}</div>
+                  <div style={{fontSize:12,color:'#a89a92',marginBottom:14}}>
+                    {nextDue ? (t('res.dueBy') + ' ' + nextDue.dueDate) : (unpaid.length === 0 ? 'All settled ✓' : t('res.dueBy') + ' —')}
+                    {unpaid.length > 1 ? ' · ' + unpaid.length + ' open invoices' : ''}
+                  </div>
+                  <div style={{display:'flex',gap:12}}>
+                    <button onClick={() => setPayModal({ amount: amountLabel })} disabled={totalDue === 0} style={{padding:'8px 18px',border:'1px solid #928989',borderRadius:4,background: totalDue === 0 ? '#f0ede9' : '#fff',color: totalDue === 0 ? '#a89a92' : '#1a1a1a',fontSize:12,fontWeight:600,cursor: totalDue === 0 ? 'default' : 'pointer'}}>{t('res.payNow')}</button>
+                    {payModal && <PaymentMethodModal amount={payModal.amount} onClose={() => setPayModal(null)} showToast={showToast}/>}
+                    <button onClick={() => showToast('Detailed breakdown coming soon')} style={{padding:'8px 18px',border:'none',borderRadius:4,background:'none',color:'#a89a92',fontSize:12,fontWeight:500,cursor:'pointer'}}>{t('res.checkDetails')}</button>
+                  </div>
+                </div>
+              );
+            })()}
 
             {/* Transaction History */}
             <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:16}}>
@@ -9942,8 +9954,11 @@ const ResidentApp = ({ onLogout }) => {
             if (da !== db) return da.localeCompare(db);
             return parseTime24(a.time).localeCompare(parseTime24(b.time));
           });
-        // Services are booked separately — not from pre-approved visitors
-        const upcomingServices = [];
+        // Upcoming Services — open service requests from the legacy ledger
+        const upcomingServices = (data.serviceRequests || [])
+          .filter(s => s.status === 'New' || s.status === 'Acknowledged' || s.status === 'In Progress' || s.status === 'Scheduled')
+          .sort((a, b) => (a.date || '').localeCompare(b.date || ''))
+          .slice(0, 5);
         const recentAnnouncements = data.announcements ? data.announcements.filter(a => a.status === 'Live' || a.status === 'Sent').slice(0,2) : [];
         const bookingServices = [
           { label: 'Plumbing', icon: (<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#7a6f66" strokeWidth="1.5"><path d="M4 22V12M4 12H8M4 12V8H2V6h4V4h2v2h4V4h2v2h2v2h-2v4h4v2h-4v8h-2v-8H8v8H6"/></svg>) },
