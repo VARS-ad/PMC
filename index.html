@@ -15,6 +15,7 @@
 <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 <style>
 @font-face{font-family:'Helvetica Now Text';src:local('Helvetica Now Text'),local('HelveticaNowText'),local('Helvetica Now Text Regular'),local('HelveticaNowText-Regular');font-weight:100 900;font-display:swap}
 </style>
@@ -16959,6 +16960,41 @@ const PMCServiceChargesPage = () => {
   );
 };
 
+// ==================== CHART HELPER (Chart.js wrapper) ====================
+// Renders a Chart.js chart and tears it down when the config changes or the
+// component unmounts. Hover tooltips + legend are interactive out of the box.
+
+const ChartCanvas = ({ config, height }) => {
+  const canvasRef = useRef(null);
+  const chartRef = useRef(null);
+  useEffect(() => {
+    if (!window.Chart || !canvasRef.current) return;
+    if (chartRef.current) { chartRef.current.destroy(); chartRef.current = null; }
+    try {
+      chartRef.current = new window.Chart(canvasRef.current, config);
+    } catch (e) { /* fail silently */ }
+    return () => { if (chartRef.current) { chartRef.current.destroy(); chartRef.current = null; } };
+  }, [JSON.stringify(config)]);
+  return (
+    <div style={{position:'relative',width:'100%',height: height || 280}}>
+      <canvas ref={canvasRef}/>
+    </div>
+  );
+};
+
+function buildMonthlyBuckets(months = 12) {
+  const today = new Date();
+  const out = [];
+  for (let i = months - 1; i >= 0; i--) {
+    const d = new Date(today.getFullYear(), today.getMonth() - i, 1);
+    out.push({
+      key: d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0'),
+      label: d.toLocaleDateString('en', { month: 'short', year: '2-digit' }),
+    });
+  }
+  return out;
+}
+
 // ==================== PMC REPORTS PAGE ====================
 // Section-grouped landlord reports inspired by vars_landlord_dashboards.md
 // (Tier 1 must-haves + Tier 2 operational selections). Reads real data from
@@ -16995,10 +17031,10 @@ const PMCReportsPage = () => {
           { data: bookings },
         ] = await Promise.all([
           supabaseClient.from('resident_assignments').select('profile_id,unit_id,tenure,monthly_payment_aed,lease_end').in('unit_id', probeIds),
-          supabaseClient.from('invoices').select('amount_aed,status,due_date,source_type').in('unit_id', probeIds),
+          supabaseClient.from('invoices').select('amount_aed,status,due_date,source_type,created_at').in('unit_id', probeIds),
           supabaseClient.from('service_requests').select('category,status,priority,created_at').in('unit_id', probeIds),
-          supabaseClient.from('visits').select('type,status,visit_date').in('unit_id', probeIds),
-          supabaseClient.from('amenity_bookings').select('amenity_name,status,booking_date').in('building_id', probeB),
+          supabaseClient.from('visits').select('type,status,visit_date,created_at').in('unit_id', probeIds),
+          supabaseClient.from('amenity_bookings').select('amenity_name,status,booking_date,created_at').in('building_id', probeB),
         ]);
         if (!mounted) return;
 
@@ -17050,6 +17086,43 @@ const PMCReportsPage = () => {
           chargeByCategory[key] = (chargeByCategory[key] || 0) + Number(i.amount_aed);
         });
 
+        // ============ Monthly time-series (last 12 months) ============
+        const monthBuckets = buildMonthlyBuckets(12);
+        const monthIndex = Object.fromEntries(monthBuckets.map((m, i) => [m.key, i]));
+        const pickKey = (s) => (s || '').slice(0, 7);
+
+        const invSeries = { paid: new Array(12).fill(0), pending: new Array(12).fill(0), overdue: new Array(12).fill(0) };
+        (invoices || []).forEach(inv => {
+          const k = pickKey(inv.created_at || inv.due_date);
+          const idx = monthIndex[k];
+          if (idx == null) return;
+          const amt = Number(inv.amount_aed) || 0;
+          if (inv.status === 'Paid') invSeries.paid[idx] += amt;
+          else if (inv.status === 'Pending') invSeries.pending[idx] += amt;
+          else if (inv.status === 'Overdue') invSeries.overdue[idx] += amt;
+        });
+
+        const srSeries = { newAck: new Array(12).fill(0), inProgress: new Array(12).fill(0), done: new Array(12).fill(0) };
+        (srs || []).forEach(s => {
+          const idx = monthIndex[pickKey(s.created_at)];
+          if (idx == null) return;
+          if (s.status === 'New' || s.status === 'Acknowledged') srSeries.newAck[idx]++;
+          else if (s.status === 'In Progress') srSeries.inProgress[idx]++;
+          else if (s.status === 'Done' || s.status === 'Closed') srSeries.done[idx]++;
+        });
+
+        const visitsSeries = new Array(12).fill(0);
+        (visits || []).forEach(v => {
+          const idx = monthIndex[pickKey(v.visit_date || v.created_at)];
+          if (idx != null) visitsSeries[idx]++;
+        });
+
+        const bookingsSeries = new Array(12).fill(0);
+        (bookings || []).forEach(b => {
+          const idx = monthIndex[pickKey(b.booking_date || b.created_at)];
+          if (idx != null) bookingsSeries[idx]++;
+        });
+
         setStats({
           buildings: filterB ? (buildings || []).filter(b => filterB.includes(b.id)) : (buildings || []),
           totalUnits, occupiedUnits, vacant, occupancyRate, owners, tenants,
@@ -17061,6 +17134,9 @@ const PMCReportsPage = () => {
           chargeByCategory,
           // Net Operating Income approximation (collected minus stub 30% operating cost)
           noi: Math.round(collected - 0.3 * collected),
+          // Time-series
+          monthLabels: monthBuckets.map(m => m.label),
+          invSeries, srSeries, visitsSeries, bookingsSeries,
         });
         setLoading(false);
       } catch (e) {
@@ -17349,6 +17425,44 @@ const FinanceReports = ({ stats, fmt, fmtShort }) => {
         )}
       </div>
 
+      {/* TIME-SERIES — Invoice Status by Month (stacked bar) */}
+      <div className="card">
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:6}}>
+          <div>
+            <div style={{fontSize:13,fontWeight:600}}>Invoice Status — Last 12 Months</div>
+            <div style={{fontSize:11,color:'var(--text-secondary)',marginTop:2}}>Stacked by Paid · Pending · Overdue. Hover bars for exact AED.</div>
+          </div>
+        </div>
+        <ChartCanvas height={320} config={{
+          type: 'bar',
+          data: {
+            labels: stats.monthLabels,
+            datasets: [
+              { label: 'Paid',    data: stats.invSeries.paid,    backgroundColor: '#5a6b4f' },
+              { label: 'Pending', data: stats.invSeries.pending, backgroundColor: '#c4b8b0' },
+              { label: 'Overdue', data: stats.invSeries.overdue, backgroundColor: '#8b4a42' },
+            ],
+          },
+          options: {
+            responsive: true, maintainAspectRatio: false,
+            interaction: { mode: 'index', intersect: false },
+            plugins: {
+              legend: { position: 'bottom', labels: { boxWidth: 12, font: { size: 11 } } },
+              tooltip: {
+                callbacks: {
+                  label: (ctx) => ctx.dataset.label + ': AED ' + Math.round(ctx.parsed.y).toLocaleString(),
+                  footer: (items) => 'Total: AED ' + items.reduce((s, it) => s + it.parsed.y, 0).toLocaleString(),
+                },
+              },
+            },
+            scales: {
+              x: { stacked: true, grid: { display: false } },
+              y: { stacked: true, beginAtZero: true, ticks: { callback: (v) => 'AED ' + Math.round(v/1000) + 'K' } },
+            },
+          },
+        }}/>
+      </div>
+
       {/* Revenue vs Costs — text summary */}
       <div className="card">
         <div style={{fontSize:13,fontWeight:600,marginBottom:14}}>Revenue vs Operating Costs (estimated)</div>
@@ -17376,6 +17490,50 @@ const OccupancyReports = ({ stats, fmt }) => {
   const occPct = stats.occupancyRate;
   return (
     <div>
+      {/* TIME-SERIES — Tenant collected vs total billed, donut + line trend */}
+      <div className="card">
+        <div style={{fontSize:13,fontWeight:600,marginBottom:6}}>Occupancy & Pipeline</div>
+        <div style={{fontSize:11,color:'var(--text-secondary)',marginBottom:14}}>Donut: occupied vs vacant. Snapshot today.</div>
+        <div style={{display:'grid',gridTemplateColumns:'1fr 2fr',gap:18,alignItems:'center'}}>
+          <ChartCanvas height={240} config={{
+            type: 'doughnut',
+            data: {
+              labels: ['Occupied', 'Vacant'],
+              datasets: [{
+                data: [stats.occupiedUnits, stats.vacant],
+                backgroundColor: ['#928989', '#e8e3de'],
+                borderWidth: 0,
+              }],
+            },
+            options: {
+              responsive: true, maintainAspectRatio: false, cutout: '65%',
+              plugins: {
+                legend: { position: 'bottom', labels: { boxWidth: 12, font: { size: 11 } } },
+                tooltip: { callbacks: { label: (ctx) => ctx.label + ': ' + ctx.parsed + ' units' } },
+              },
+            },
+          }}/>
+          <div style={{display:'grid',gridTemplateColumns:'repeat(2, 1fr)',gap:10}}>
+            <div style={{padding:14,background:'var(--bg-surface)',borderRadius:8}}>
+              <div style={{fontSize:10,letterSpacing:'0.06em',textTransform:'uppercase',color:'var(--text-secondary)',marginBottom:4}}>Occupancy</div>
+              <div style={{fontSize:24,fontWeight:600}}>{stats.occupancyRate}%</div>
+            </div>
+            <div style={{padding:14,background:'var(--bg-surface)',borderRadius:8}}>
+              <div style={{fontSize:10,letterSpacing:'0.06em',textTransform:'uppercase',color:'var(--text-secondary)',marginBottom:4}}>Total Units</div>
+              <div style={{fontSize:24,fontWeight:600}}>{stats.totalUnits}</div>
+            </div>
+            <div style={{padding:14,background:'var(--bg-surface)',borderRadius:8}}>
+              <div style={{fontSize:10,letterSpacing:'0.06em',textTransform:'uppercase',color:'var(--text-secondary)',marginBottom:4}}>Owners</div>
+              <div style={{fontSize:24,fontWeight:600}}>{stats.owners}</div>
+            </div>
+            <div style={{padding:14,background:'var(--bg-surface)',borderRadius:8}}>
+              <div style={{fontSize:10,letterSpacing:'0.06em',textTransform:'uppercase',color:'var(--text-secondary)',marginBottom:4}}>Tenants</div>
+              <div style={{fontSize:24,fontWeight:600}}>{stats.tenants}</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <div className="card">
         <div style={{fontSize:13,fontWeight:600,marginBottom:14}}>Occupancy Snapshot</div>
         <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit, minmax(150px, 1fr))',gap:14,marginBottom:18}}>
@@ -17450,6 +17608,58 @@ const OperationsReports = ({ stats }) => {
   };
   return (
     <div>
+      {/* TIME-SERIES — Service requests + Visits + Bookings, last 12 months */}
+      <div className="card">
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:6}}>
+          <div>
+            <div style={{fontSize:13,fontWeight:600}}>Service Requests — Last 12 Months</div>
+            <div style={{fontSize:11,color:'var(--text-secondary)',marginTop:2}}>Stacked by status. Hover bars for breakdown.</div>
+          </div>
+        </div>
+        <ChartCanvas height={300} config={{
+          type: 'bar',
+          data: {
+            labels: stats.monthLabels,
+            datasets: [
+              { label: 'New / Acknowledged', data: stats.srSeries.newAck,     backgroundColor: '#928989' },
+              { label: 'In Progress',        data: stats.srSeries.inProgress, backgroundColor: '#a07d3c' },
+              { label: 'Done / Closed',      data: stats.srSeries.done,       backgroundColor: '#5a6b4f' },
+            ],
+          },
+          options: {
+            responsive: true, maintainAspectRatio: false,
+            interaction: { mode: 'index', intersect: false },
+            plugins: { legend: { position: 'bottom', labels: { boxWidth: 12, font: { size: 11 } } } },
+            scales: { x: { stacked: true, grid: { display: false } }, y: { stacked: true, beginAtZero: true, ticks: { precision: 0 } } },
+          },
+        }}/>
+      </div>
+
+      <div className="card">
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:6}}>
+          <div>
+            <div style={{fontSize:13,fontWeight:600}}>Visits & Amenity Bookings — Last 12 Months</div>
+            <div style={{fontSize:11,color:'var(--text-secondary)',marginTop:2}}>Two lines, dual-y-axes share the same x. Hover for exact counts.</div>
+          </div>
+        </div>
+        <ChartCanvas height={300} config={{
+          type: 'line',
+          data: {
+            labels: stats.monthLabels,
+            datasets: [
+              { label: 'Visits', data: stats.visitsSeries, borderColor: '#928989', backgroundColor: 'rgba(146,137,137,0.15)', tension: 0.3, fill: true, pointRadius: 4 },
+              { label: 'Amenity Bookings', data: stats.bookingsSeries, borderColor: '#a07d3c', backgroundColor: 'rgba(160,125,60,0.15)', tension: 0.3, fill: true, pointRadius: 4 },
+            ],
+          },
+          options: {
+            responsive: true, maintainAspectRatio: false,
+            interaction: { mode: 'index', intersect: false },
+            plugins: { legend: { position: 'bottom', labels: { boxWidth: 12, font: { size: 11 } } } },
+            scales: { x: { grid: { display: false } }, y: { beginAtZero: true, ticks: { precision: 0 } } },
+          },
+        }}/>
+      </div>
+
       <div className="card">
         <div style={{fontSize:13,fontWeight:600,marginBottom:14}}>Maintenance Ticket Funnel</div>
         <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit, minmax(120px, 1fr))',gap:10}}>
