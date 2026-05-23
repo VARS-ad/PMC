@@ -21,9 +21,6 @@ const REPORT_BRAND = {
   surfaceHex:   '#faf8f6', surfaceRgb: [250, 248, 246],
 };
 
-// V-shield logo path (100x100 viewBox, drawn as a triangle fan inside a rounded square)
-const _VARS_SHIELD_PATH = [[33.3,16.7],[50,16.7],[58.1,25.2],[66.7,33.3],[66.7,83.3],[50,83.3],[33.3,66.7]];
-
 // ---------- shared helpers ----------
 
 const _nowStamp = () => {
@@ -74,18 +71,15 @@ const exportReportPDF = ({ title, subtitle, columns, rows, metadata, filename })
   let y = 28;
 
   // === Brand header ===
-  // V-shield: solid rounded square + white V shape inside
+  // V-shield: solid rounded square + bold white "V" wordmark inside
   doc.setFillColor(...REPORT_BRAND.primaryRgb);
   doc.roundedRect(marginX, y, 32, 32, 3, 3, 'F');
-  doc.setFillColor(255, 255, 255);
-  const sx = marginX, sy = y, s = 32;
-  const pt = (px, py) => [sx + (px/100)*s, sy + (py/100)*s];
-  for (let i = 1; i < _VARS_SHIELD_PATH.length - 1; i++) {
-    const a = pt(_VARS_SHIELD_PATH[0][0],   _VARS_SHIELD_PATH[0][1]);
-    const b = pt(_VARS_SHIELD_PATH[i][0],   _VARS_SHIELD_PATH[i][1]);
-    const c = pt(_VARS_SHIELD_PATH[i+1][0], _VARS_SHIELD_PATH[i+1][1]);
-    doc.triangle(a[0], a[1], b[0], b[1], c[0], c[1], 'F');
-  }
+  doc.setTextColor(255, 255, 255);
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(22);
+  // Anchored at the centre of the 32x32 shield; y-offset puts the baseline
+  // slightly below centre so the optical centre of "V" lands in the middle.
+  doc.text('V', marginX + 16, y + 23, { align: 'center' });
 
   // VARS wordmark + subtitle (left-aligned)
   doc.setTextColor(...REPORT_BRAND.textDarkRgb);
@@ -147,27 +141,37 @@ const exportReportPDF = ({ title, subtitle, columns, rows, metadata, filename })
   // === Data table ===
   if (!doc.autoTable) { alert('PDF table plugin failed to load — please reload the page'); return; }
   const aoa = _rowsToAOA(rows, columns);
+
+  // Treat column `width` as a relative weight and scale so the table fills the
+  // page. Without this, autoTable interprets raw widths as points (1pt ≈ 1/72")
+  // and the table ends up ~20% of page width with text wrapping per character.
+  const usableW = pageW - marginX * 2;
+  const totalWeight = columns.reduce((s, c) => s + (c.width || 14), 0);
+  const colStyles = columns.reduce((acc, c, idx) => {
+    const w = c.width || 14;
+    acc[idx] = { cellWidth: (w / totalWeight) * usableW };
+    if (c.halign) acc[idx].halign = c.halign;
+    return acc;
+  }, {});
+
   doc.autoTable({
     startY: y,
     head: [columns.map(c => c.header)],
     body: aoa.map(r => r.map(v => v == null ? '' : String(v))),
     theme: 'grid',
+    tableWidth: usableW,
     styles: {
-      font: 'helvetica', fontSize: 8, cellPadding: 4,
+      font: 'helvetica', fontSize: 9, cellPadding: 5,
       textColor: REPORT_BRAND.textDarkRgb, lineColor: REPORT_BRAND.borderRgb,
-      lineWidth: 0.3, overflow: 'linebreak',
+      lineWidth: 0.3, overflow: 'linebreak', valign: 'top',
     },
     headStyles: {
       fillColor: REPORT_BRAND.primaryRgb, textColor: [255, 255, 255],
-      fontSize: 8, fontStyle: 'bold', halign: 'left', cellPadding: 5,
-      lineColor: REPORT_BRAND.primaryRgb,
+      fontSize: 9, fontStyle: 'bold', halign: 'left', cellPadding: 6,
+      lineColor: REPORT_BRAND.primaryRgb, valign: 'middle',
     },
     alternateRowStyles: { fillColor: REPORT_BRAND.surfaceRgb },
-    columnStyles: columns.reduce((acc, c, idx) => {
-      if (c.width)  acc[idx] = { ...(acc[idx]||{}), cellWidth: c.width };
-      if (c.halign) acc[idx] = { ...(acc[idx]||{}), halign: c.halign };
-      return acc;
-    }, {}),
+    columnStyles: colStyles,
     margin: { left: marginX, right: marginX, bottom: 36 },
     didDrawPage: () => {
       const footerY = pageH - 20;
