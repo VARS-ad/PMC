@@ -206,6 +206,256 @@ const exportReportPDF = ({ title, subtitle, columns, rows, metadata, filename })
   doc.save(_safeFilename(filename) + '.pdf');
 };
 
+// ---------- Tenant statement PDF (one-page account-statement style) ----------
+//
+// Renders a self-contained per-tenant document: brand header + tenant
+// identity + Personal Details panel + Contract panel + payment KPIs
+// + a payment-history table. Designed for portrait A4 so it prints
+// or attaches cleanly to email.
+//
+// opts.tenant     — { full_name, building_name, unit_number, floor,
+//                     emirates_id, passport_number, date_of_birth,
+//                     phone, email, emergency_contact_name,
+//                     emergency_contact_phone, employer, occupation,
+//                     created_at }
+// opts.contract   — { tenure, lease_start, lease_end,
+//                     monthly_payment_aed, ownership_start }
+// opts.payments   — [{ invoice_number, description, amount_aed,
+//                      due_date, status, paid_at, payment_method }]
+// opts.filename   — base filename (timestamp + .pdf appended)
+
+const exportTenantStatementPDF = ({ tenant, contract, payments, filename }) => {
+  const jsPDFCtor = (window.jspdf && window.jspdf.jsPDF) || window.jsPDF;
+  if (!jsPDFCtor) { alert('PDF library failed to load — please reload the page'); return; }
+  const doc = new jsPDFCtor({ orientation: 'portrait', unit: 'pt', format: 'a4' });
+  const pageW = doc.internal.pageSize.getWidth();
+  const pageH = doc.internal.pageSize.getHeight();
+  const marginX = 36;
+  let y = 28;
+
+  // --- Brand header (compact: small shield + wordmark + subtitle) ---
+  doc.setFillColor(...REPORT_BRAND.primaryRgb);
+  doc.roundedRect(marginX, y, 28, 28, 3, 3, 'F');
+  doc.setTextColor(255, 255, 255);
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(18);
+  doc.text('V', marginX + 14, y + 21, { align: 'center' });
+
+  doc.setTextColor(...REPORT_BRAND.textDarkRgb);
+  doc.setFontSize(18);
+  doc.text(REPORT_BRAND.title, marginX + 36, y + 16);
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(7);
+  doc.setTextColor(90, 90, 90);
+  doc.text('TENANT STATEMENT', marginX + 36, y + 26);
+
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(8);
+  doc.setTextColor(...REPORT_BRAND.textMuteRgb);
+  doc.text('Generated ' + _nowStamp(), pageW - marginX, y + 16, { align: 'right' });
+  doc.text(REPORT_BRAND.appLabel,        pageW - marginX, y + 26, { align: 'right' });
+
+  y += 38;
+  doc.setDrawColor(...REPORT_BRAND.primaryRgb);
+  doc.setLineWidth(1.2);
+  doc.line(marginX, y, pageW - marginX, y);
+  y += 14;
+
+  // --- Tenant identity block ---
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(20);
+  doc.setTextColor(...REPORT_BRAND.textDarkRgb);
+  doc.text(tenant.full_name || '—', marginX, y + 16);
+  doc.setFontSize(10);
+  doc.setTextColor(...REPORT_BRAND.textMuteRgb);
+  const idLine = [
+    tenant.building_name,
+    tenant.unit_number ? 'Unit ' + tenant.unit_number : null,
+    tenant.floor != null ? 'Floor ' + tenant.floor : null,
+    contract && contract.tenure ? contract.tenure : null,
+  ].filter(Boolean).join('  ·  ');
+  doc.text(idLine, marginX, y + 32);
+  y += 46;
+
+  // --- Two-column detail panels ---
+  const drawPanel = (x, panelY, w, h, title, rows) => {
+    doc.setFillColor(...REPORT_BRAND.surfaceRgb);
+    doc.setDrawColor(...REPORT_BRAND.borderRgb);
+    doc.setLineWidth(0.5);
+    doc.roundedRect(x, panelY, w, h, 4, 4, 'FD');
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(8);
+    doc.setTextColor(...REPORT_BRAND.textMuteRgb);
+    doc.text(title.toUpperCase(), x + 12, panelY + 16);
+
+    const labelX = x + 12;
+    const valueX = x + 110;
+    let ry = panelY + 32;
+    rows.forEach(([label, value]) => {
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(8);
+      doc.setTextColor(...REPORT_BRAND.textMuteRgb);
+      doc.text(label, labelX, ry);
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(9);
+      doc.setTextColor(...REPORT_BRAND.textDarkRgb);
+      const maxW = (x + w) - valueX - 8;
+      const truncated = doc.splitTextToSize(String(value || '—'), maxW).slice(0, 1).join('');
+      doc.text(truncated, valueX, ry);
+      ry += 14;
+    });
+  };
+
+  const personalRows = [
+    ['Emirates ID',    tenant.emirates_id],
+    ['Passport',       tenant.passport_number],
+    ['Date of birth',  tenant.date_of_birth],
+    ['Phone',          tenant.phone],
+    ['Email',          tenant.email],
+    ['Emergency name', tenant.emergency_contact_name],
+    ['Emergency phone',tenant.emergency_contact_phone],
+    ['Employer',       tenant.employer],
+    ['Occupation',     tenant.occupation],
+  ];
+  const contractRows = contract && contract.tenure === 'Owner' ? [
+    ['Tenure',         contract.tenure],
+    ['Ownership since',contract.ownership_start],
+    ['Building',       tenant.building_name],
+    ['Unit',           tenant.unit_number],
+    ['Floor',          tenant.floor],
+    ['Resident since', tenant.created_at ? new Date(tenant.created_at).toLocaleDateString() : null],
+  ] : [
+    ['Tenure',         (contract && contract.tenure) || '—'],
+    ['Lease start',    contract && contract.lease_start],
+    ['Lease end',      contract && contract.lease_end],
+    ['Monthly rent',   contract && contract.monthly_payment_aed != null ? 'AED ' + Number(contract.monthly_payment_aed).toLocaleString() : null],
+    ['Building',       tenant.building_name],
+    ['Unit',           tenant.unit_number],
+    ['Floor',          tenant.floor],
+    ['Resident since', tenant.created_at ? new Date(tenant.created_at).toLocaleDateString() : null],
+  ];
+  const colW   = (pageW - marginX * 2 - 12) / 2;
+  const panelH = Math.max(24 + 14 * personalRows.length + 10, 24 + 14 * contractRows.length + 10);
+  drawPanel(marginX,             y, colW, panelH, 'Personal Details', personalRows);
+  drawPanel(marginX + colW + 12, y, colW, panelH, 'Contract & Tenancy', contractRows);
+  y += panelH + 14;
+
+  // --- Payment KPI row ---
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const totals = (payments || []).reduce((acc, p) => {
+    const amt = Number(p.amount_aed) || 0;
+    if (p.status === 'Paid') acc.paid += amt;
+    else if (p.status === 'Pending' || p.status === 'Overdue') {
+      if (p.due_date && new Date(p.due_date) > today) acc.future += amt;
+      else acc.outstanding += amt;
+    }
+    acc.total += amt;
+    return acc;
+  }, { paid: 0, outstanding: 0, future: 0, total: 0 });
+  const kpiW = (pageW - marginX * 2 - 24) / 4;
+  const kpiY = y;
+  const drawKpi = (i, label, value, color) => {
+    const x = marginX + i * (kpiW + 8);
+    doc.setFillColor(255, 255, 255);
+    doc.setDrawColor(...REPORT_BRAND.borderRgb);
+    doc.roundedRect(x, kpiY, kpiW, 46, 4, 4, 'FD');
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(7);
+    doc.setTextColor(...REPORT_BRAND.textMuteRgb);
+    doc.text(label.toUpperCase(), x + 10, kpiY + 16);
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(13);
+    doc.setTextColor(...(color || REPORT_BRAND.textDarkRgb));
+    doc.text('AED ' + Math.round(value).toLocaleString('en-US'), x + 10, kpiY + 36);
+  };
+  drawKpi(0, 'Total billed', totals.total);
+  drawKpi(1, 'Paid',         totals.paid,        [90, 107, 79]);  // green
+  drawKpi(2, 'Outstanding',  totals.outstanding, [139, 74, 66]);  // red
+  drawKpi(3, 'Future',       totals.future,      [160, 125, 60]); // amber
+  y += 60;
+
+  // --- Payment history table (autoTable) ---
+  if (!doc.autoTable) { alert('PDF table plugin failed to load'); return; }
+  const sortedPayments = (payments || []).slice().sort((a, b) => {
+    const ad = a.due_date || a.created_at || ''; const bd = b.due_date || b.created_at || '';
+    return bd.localeCompare(ad);
+  });
+  const tableBody = sortedPayments.map(p => [
+    p.invoice_number || '—',
+    p.description || '—',
+    p.due_date || '—',
+    p.paid_at ? new Date(p.paid_at).toISOString().slice(0, 10) : '—',
+    p.payment_method || (p.status === 'Paid' ? '—' : 'unpaid'),
+    'AED ' + Math.round(Number(p.amount_aed) || 0).toLocaleString('en-US'),
+    p.status || '—',
+  ]);
+
+  doc.autoTable({
+    startY: y,
+    head: [['Invoice #', 'Description', 'Due', 'Paid', 'Method', 'Amount', 'Status']],
+    body: tableBody,
+    theme: 'grid',
+    tableWidth: pageW - marginX * 2,
+    styles: {
+      font: 'helvetica', fontSize: 8, cellPadding: 5,
+      textColor: REPORT_BRAND.textDarkRgb, lineColor: REPORT_BRAND.borderRgb,
+      lineWidth: 0.3, overflow: 'linebreak', valign: 'top',
+    },
+    headStyles: {
+      fillColor: REPORT_BRAND.primaryRgb, textColor: [255, 255, 255],
+      fontSize: 8, fontStyle: 'bold', halign: 'left', cellPadding: 6,
+      lineColor: REPORT_BRAND.primaryRgb,
+    },
+    alternateRowStyles: { fillColor: REPORT_BRAND.surfaceRgb },
+    columnStyles: {
+      0: { cellWidth: 60 },
+      1: { cellWidth: 'auto' },
+      2: { cellWidth: 60 },
+      3: { cellWidth: 60 },
+      4: { cellWidth: 70 },
+      5: { cellWidth: 70, halign: 'right' },
+      6: { cellWidth: 60 },
+    },
+    didParseCell: (data) => {
+      if (data.section === 'body' && data.column.index === 6) {
+        const s = String(data.cell.raw || '');
+        if (s === 'Paid')      { data.cell.styles.textColor = [90, 107, 79];  data.cell.styles.fontStyle = 'bold'; }
+        else if (s === 'Overdue')  { data.cell.styles.textColor = [139, 74, 66];  data.cell.styles.fontStyle = 'bold'; }
+        else if (s === 'Pending')  { data.cell.styles.textColor = [160, 125, 60]; data.cell.styles.fontStyle = 'bold'; }
+      }
+    },
+    margin: { left: marginX, right: marginX, bottom: 36 },
+    didDrawPage: () => {
+      const footerY = pageH - 20;
+      doc.setDrawColor(...REPORT_BRAND.borderRgb);
+      doc.setLineWidth(0.4);
+      doc.line(marginX, footerY - 10, pageW - marginX, footerY - 10);
+      doc.setFontSize(7);
+      doc.setTextColor(...REPORT_BRAND.textMuteRgb);
+      doc.setFont('helvetica', 'normal');
+      doc.text(REPORT_BRAND.footerText, marginX, footerY);
+      doc.text('Page ' + doc.internal.getNumberOfPages() + ' · ' + (payments || []).length + ' invoices',
+               pageW - marginX, footerY, { align: 'right' });
+    },
+  });
+
+  if (tableBody.length === 0) {
+    // autoTable.didDrawPage won't fire if body is empty — draw a friendly placeholder.
+    doc.setFont('helvetica', 'italic');
+    doc.setFontSize(9);
+    doc.setTextColor(...REPORT_BRAND.textMuteRgb);
+    doc.text('No invoices on record for this tenant yet.', marginX, y + 24);
+    const footerY = pageH - 20;
+    doc.setDrawColor(...REPORT_BRAND.borderRgb);
+    doc.setLineWidth(0.4);
+    doc.line(marginX, footerY - 10, pageW - marginX, footerY - 10);
+    doc.setFontSize(7);
+    doc.text(REPORT_BRAND.footerText, marginX, footerY);
+  }
+
+  doc.save(_safeFilename(filename || 'tenant_statement') + '.pdf');
+};
+
 // ---------- Excel export ----------
 
 const exportReportExcel = ({ title, subtitle, sheetName, columns, rows, metadata, filename }) => {
