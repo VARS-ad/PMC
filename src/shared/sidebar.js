@@ -5,6 +5,7 @@ const Sidebar = ({ page, setPage, isOpen, onClose, onLogout }) => {
     { id: 'overview', label: t('nav.overview'), icon: 'overview' },
     { id: 'service', label: t('nav.service'), icon: 'service' },
     { id: 'properties', label: t('nav.properties'), icon: 'properties' },
+    { id: 'vendors', label: 'Vendors', icon: 'vendors' },
     { id: 'payment', label: t('nav.payment'), icon: 'payment' },
     { id: 'announcements', label: t('nav.announcements'), icon: 'announcements' },
     { id: 'visitors', label: t('nav.visitors'), icon: 'visitors' },
