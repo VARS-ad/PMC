@@ -5,6 +5,9 @@
 // `maintenance-documents`. RLS allows PMC-only access. See
 // supabase/migrations/0007_vendors.sql for the schema.
 
+// Service categories and statuses are stored as canonical English strings in
+// the DB (CHECK constraints enforce this). The UI translates them via t() at
+// render time. PAYMENT_METHODS / PAYMENT_STATUSES likewise.
 const VENDOR_CATEGORIES = [
   'Plumbing', 'Electrical', 'HVAC', 'Cleaning', 'Security', 'Gardening',
   'Pest Control', 'Lift Maintenance', 'General Handyman', 'Other',
@@ -13,15 +16,15 @@ const VENDOR_STATUSES   = ['Active', 'Expiring Soon', 'Expired', 'Terminated'];
 const PAYMENT_STATUSES  = ['Pending', 'Paid', 'Overdue', 'Cancelled'];
 const PAYMENT_METHODS   = ['Bank Transfer', 'Cheque', 'Cash', 'Credit Card', 'Other'];
 
-const VENDOR_DOC_KINDS = [
-  { kind: 'contract',         label: 'Contracts',                              accept: '.pdf,image/*,.doc,.docx', multiple: true },
-  { kind: 'payment_receipt',  label: 'Payment Receipts',                       accept: '.pdf,image/*',            multiple: true },
-  { kind: 'invoice',          label: 'Invoices',                               accept: '.pdf,image/*',            multiple: true },
-  { kind: 'other',            label: 'Trade License / Certificates / Other',   accept: '*/*',                     multiple: true },
+// Document-kind metadata (no display label — that's i18n at render time).
+const VENDOR_DOC_KINDS_META = [
+  { kind: 'contract',        labelKey: 'vendors.doc.contracts', accept: '.pdf,image/*,.doc,.docx', multiple: true },
+  { kind: 'payment_receipt', labelKey: 'vendors.doc.receipts',  accept: '.pdf,image/*',            multiple: true },
+  { kind: 'invoice',         labelKey: 'vendors.doc.invoices',  accept: '.pdf,image/*',            multiple: true },
+  { kind: 'other',           labelKey: 'vendors.doc.other',     accept: '*/*',                     multiple: true },
 ];
 
 // Derive effective status from contract_end (overrides DB status unless terminated).
-// Pure function — used by both the list view and the detail badges.
 const deriveVendorStatus = (v) => {
   if (!v) return 'Active';
   if (v.status === 'Terminated') return 'Terminated';
@@ -34,25 +37,30 @@ const deriveVendorStatus = (v) => {
   return v.status || 'Active';
 };
 
-const vendorStatusBadge = (s) => {
+// Status badge — takes a canonical status string + optional translated label.
+// If no label passed, falls back to the status string itself (English).
+const vendorStatusBadge = (status, label) => {
   const c = ({
     'Active':         { bg: '#e6efe1', fg: '#5a6b4f' },
     'Expiring Soon':  { bg: '#fdf2dc', fg: '#a07d3c' },
     'Expired':        { bg: '#fdf2f1', fg: '#8b4a42' },
     'Terminated':     { bg: '#f5f3f0', fg: '#8a7e72' },
-  })[s] || { bg: '#f5f3f0', fg: '#888' };
-  return <span style={{padding:'3px 10px',borderRadius:4,fontSize:11,fontWeight:500,background:c.bg,color:c.fg}}>{s}</span>;
+  })[status] || { bg: '#f5f3f0', fg: '#888' };
+  return <span style={{padding:'3px 10px',borderRadius:4,fontSize:11,fontWeight:500,background:c.bg,color:c.fg}}>{label || status}</span>;
 };
-
-const paymentStatusBadge = (s) => {
+const paymentStatusBadge = (status, label) => {
   const c = ({
     'Paid':       { bg: '#e6efe1', fg: '#5a6b4f' },
     'Pending':    { bg: '#fdf2dc', fg: '#a07d3c' },
     'Overdue':    { bg: '#fdf2f1', fg: '#8b4a42' },
     'Cancelled':  { bg: '#f5f3f0', fg: '#8a7e72' },
-  })[s] || { bg: '#f5f3f0', fg: '#888' };
-  return <span style={{padding:'2px 8px',borderRadius:3,fontSize:10,fontWeight:600,background:c.bg,color:c.fg}}>{s}</span>;
+  })[status] || { bg: '#f5f3f0', fg: '#888' };
+  return <span style={{padding:'2px 8px',borderRadius:3,fontSize:10,fontWeight:600,background:c.bg,color:c.fg}}>{label || status}</span>;
 };
+
+// Lookup helpers: i18n keys for canonical status / payment-status strings.
+const _statusKey  = (s) => 'vendors.status.' + ({ 'Active':'active','Expiring Soon':'expiringSoon','Expired':'expired','Terminated':'terminated' }[s] || 'active');
+const _payKey     = (s) => 'vendors.pay.'    + ({ 'Paid':'paid','Pending':'pending','Overdue':'overdue','Cancelled':'overdue' }[s] || 'pending');
 
 const fmtAED = (n) => 'AED ' + (Number(n) || 0).toLocaleString('en-US', { maximumFractionDigits: 0 });
 
@@ -60,6 +68,7 @@ const fmtAED = (n) => 'AED ' + (Number(n) || 0).toLocaleString('en-US', { maximu
 // VendorEditModal — create or edit a vendor record + sync buildings M2M
 // =====================================================================
 const VendorEditModal = ({ vendor, buildings, vendorBuildingIds, onSaved, onClose }) => {
+  const { t } = useApp();
   const isNew = !vendor || !vendor.id;
   const [form, setForm] = useState(() => ({
     name:               vendor?.name               || '',
@@ -115,7 +124,6 @@ const VendorEditModal = ({ vendor, buildings, vendorBuildingIds, onSaved, onClos
         const { error: e } = await supabaseClient.from('vendors').update(payload).eq('id', vendorId);
         if (e) throw e;
       }
-      // Sync buildings M2M: delete-all + insert
       await supabaseClient.from('vendor_buildings').delete().eq('vendor_id', vendorId);
       const rows = [...selectedBuildings].map(b => ({ vendor_id: vendorId, building_id: b }));
       if (rows.length) {
@@ -129,80 +137,82 @@ const VendorEditModal = ({ vendor, buildings, vendorBuildingIds, onSaved, onClos
     setSaving(false);
   };
 
-  const F = ({label, children, required}) => (
-    <div className="form-group">
-      <label>{label}{required && <span style={{color:'#8b4a42'}}> *</span>}</label>
-      {children}
-    </div>
-  );
-
   return (
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal modal-wide" onClick={e => e.stopPropagation()} style={{maxWidth: 720, maxHeight: '90vh', overflowY: 'auto'}}>
         <div className="modal-header">
           <div>
-            <h2>{isNew ? 'Add Vendor' : 'Edit Vendor'}</h2>
-            <div className="modal-sub">{isNew ? 'Create a new maintenance company record.' : vendor.name}</div>
+            <h2>{isNew ? t('vendors.modal.add') : t('vendors.modal.edit')}</h2>
+            <div className="modal-sub">{isNew ? t('vendors.subtitle') : vendor.name}</div>
           </div>
           <button className="modal-close" onClick={onClose}>×</button>
         </div>
 
         <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap: 14}}>
-          <F label="Company Name" required>
+          <div className="form-group">
+            <label>{t('vendors.field.companyName')} <span style={{color:'#8b4a42'}}>*</span></label>
             <input className="form-input" value={form.name} onChange={e => setForm({...form, name: e.target.value})}/>
-          </F>
-          <F label="Service Category" required>
+          </div>
+          <div className="form-group">
+            <label>{t('vendors.field.serviceCategory')} <span style={{color:'#8b4a42'}}>*</span></label>
             <select className="form-input" value={form.service_category} onChange={e => setForm({...form, service_category: e.target.value})}>
               {VENDOR_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
             </select>
-          </F>
+          </div>
 
-          <F label="Contact Person">
+          <div className="form-group">
+            <label>{t('vendors.field.contactPerson')}</label>
             <input className="form-input" value={form.contact_person} onChange={e => setForm({...form, contact_person: e.target.value})}/>
-          </F>
-          <F label="Status">
+          </div>
+          <div className="form-group">
+            <label>{t('vendors.filter.status')}</label>
             <select className="form-input" value={form.status} onChange={e => setForm({...form, status: e.target.value})}>
-              {VENDOR_STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
+              {VENDOR_STATUSES.map(s => <option key={s} value={s}>{t(_statusKey(s))}</option>)}
             </select>
-          </F>
+          </div>
 
-          <F label="Phone">
+          <div className="form-group">
+            <label>{t('vendors.field.phone')}</label>
             <input className="form-input" value={form.contact_phone} onChange={e => setForm({...form, contact_phone: e.target.value})} placeholder="+971 ..."/>
-          </F>
-          <F label="Email">
+          </div>
+          <div className="form-group">
+            <label>{t('vendors.field.email')}</label>
             <input type="email" className="form-input" value={form.contact_email} onChange={e => setForm({...form, contact_email: e.target.value})}/>
-          </F>
+          </div>
 
           <div className="form-group" style={{gridColumn: 'span 2'}}>
-            <label>Address</label>
+            <label>{t('vendors.field.address')}</label>
             <input className="form-input" value={form.address} onChange={e => setForm({...form, address: e.target.value})}/>
           </div>
 
-          <F label="Contract Start">
+          <div className="form-group">
+            <label>{t('vendors.field.contractStart')}</label>
             <input type="date" className="form-input" value={form.contract_start} onChange={e => setForm({...form, contract_start: e.target.value})}/>
-          </F>
-          <F label="Contract End">
+          </div>
+          <div className="form-group">
+            <label>{t('vendors.field.contractEnd')}</label>
             <input type="date" className="form-input" value={form.contract_end} onChange={e => setForm({...form, contract_end: e.target.value})}/>
-          </F>
+          </div>
 
-          <F label="Contract Value (AED)">
+          <div className="form-group">
+            <label>{t('vendors.field.contractValueAed')}</label>
             <input type="number" className="form-input" value={form.contract_value_aed} onChange={e => setForm({...form, contract_value_aed: e.target.value})} min="0" step="100"/>
-          </F>
-          <F label="Trade License #">
+          </div>
+          <div className="form-group">
+            <label>{t('vendors.field.tradeLicenseNum')}</label>
             <input className="form-input" value={form.trade_license} onChange={e => setForm({...form, trade_license: e.target.value})}/>
-          </F>
+          </div>
 
-          <F label="TRN (Tax Reg. Number)">
+          <div className="form-group">
+            <label>{t('vendors.field.trnLong')}</label>
             <input className="form-input" value={form.trn_number} onChange={e => setForm({...form, trn_number: e.target.value})}/>
-          </F>
+          </div>
           <div/>
 
           <div className="form-group" style={{gridColumn: 'span 2'}}>
-            <label>Buildings Covered</label>
+            <label>{t('vendors.field.buildings')}</label>
             {buildings.length === 0 ? (
-              <div style={{fontSize: 12, color: 'var(--text-muted)', padding: 8, background: 'var(--bg-surface)', borderRadius: 4}}>
-                No buildings on file. Add buildings under Profile Creation first.
-              </div>
+              <div style={{fontSize: 12, color: 'var(--text-muted)', padding: 8, background: 'var(--bg-surface)', borderRadius: 4}}>—</div>
             ) : (
               <div style={{display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(180px, 1fr))', gap: 6}}>
                 {buildings.map(b => (
@@ -216,7 +226,7 @@ const VendorEditModal = ({ vendor, buildings, vendorBuildingIds, onSaved, onClos
           </div>
 
           <div className="form-group" style={{gridColumn: 'span 2'}}>
-            <label>Notes</label>
+            <label>{t('vendors.field.notes')}</label>
             <textarea className="form-input" rows={3} value={form.notes} onChange={e => setForm({...form, notes: e.target.value})}/>
           </div>
         </div>
@@ -224,9 +234,9 @@ const VendorEditModal = ({ vendor, buildings, vendorBuildingIds, onSaved, onClos
         {error && <div style={{color:'#8b4a42', fontSize: 12, marginTop: 12}}>{error}</div>}
 
         <div className="btn-group" style={{marginTop: 20, justifyContent: 'flex-end'}}>
-          <button className="btn" onClick={onClose}>Cancel</button>
+          <button className="btn" onClick={onClose}>{t('vendors.btn.cancel')}</button>
           <button className="btn btn-primary" onClick={handleSave} disabled={saving}>
-            {saving ? 'Saving…' : (isNew ? 'Create Vendor' : 'Save Changes')}
+            {saving ? t('vendors.btn.saving') : (isNew ? t('vendors.btn.create') : t('vendors.btn.save'))}
           </button>
         </div>
       </div>
@@ -238,6 +248,7 @@ const VendorEditModal = ({ vendor, buildings, vendorBuildingIds, onSaved, onClos
 // VendorPaymentEditModal — add or edit a single payment / invoice record
 // =====================================================================
 const VendorPaymentEditModal = ({ vendorId, payment, onSaved, onClose }) => {
+  const { t } = useApp();
   const isNew = !payment || !payment.id;
   const [form, setForm] = useState(() => ({
     invoice_number:    payment?.invoice_number    || '',
@@ -288,43 +299,43 @@ const VendorPaymentEditModal = ({ vendorId, payment, onSaved, onClose }) => {
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal" onClick={e => e.stopPropagation()} style={{maxWidth: 560}}>
         <div className="modal-header">
-          <h2>{isNew ? 'Add Payment / Invoice' : 'Edit Payment'}</h2>
+          <h2>{isNew ? t('vendors.modal.addPay') : t('vendors.modal.editPay')}</h2>
           <button className="modal-close" onClick={onClose}>×</button>
         </div>
 
         <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap: 14}}>
           <div className="form-group">
-            <label>Invoice #</label>
+            <label>{t('vendors.pay.th.invoice')}</label>
             <input className="form-input" value={form.invoice_number} onChange={e => setForm({...form, invoice_number: e.target.value})}/>
           </div>
           <div className="form-group">
-            <label>Invoice Date</label>
+            <label>{t('vendors.pay.th.date')}</label>
             <input type="date" className="form-input" value={form.invoice_date} onChange={e => setForm({...form, invoice_date: e.target.value})}/>
           </div>
           <div className="form-group" style={{gridColumn: 'span 2'}}>
-            <label>Description <span style={{color:'#8b4a42'}}>*</span></label>
-            <input className="form-input" value={form.description} onChange={e => setForm({...form, description: e.target.value})} placeholder="Quarterly AC servicing"/>
+            <label>{t('vendors.pay.th.description')} <span style={{color:'#8b4a42'}}>*</span></label>
+            <input className="form-input" value={form.description} onChange={e => setForm({...form, description: e.target.value})}/>
           </div>
           <div className="form-group">
-            <label>Category</label>
-            <input className="form-input" value={form.category} onChange={e => setForm({...form, category: e.target.value})} placeholder="Routine, One-off, Emergency..."/>
+            <label>{t('vendors.filter.category')}</label>
+            <input className="form-input" value={form.category} onChange={e => setForm({...form, category: e.target.value})}/>
           </div>
           <div className="form-group">
-            <label>Amount (AED) <span style={{color:'#8b4a42'}}>*</span></label>
+            <label>{t('vendors.pay.th.amount')} (AED) <span style={{color:'#8b4a42'}}>*</span></label>
             <input type="number" className="form-input" value={form.amount_aed} onChange={e => setForm({...form, amount_aed: e.target.value})} min="0" step="0.01"/>
           </div>
           <div className="form-group">
-            <label>Status</label>
+            <label>{t('vendors.pay.th.status')}</label>
             <select className="form-input" value={form.payment_status} onChange={e => setForm({...form, payment_status: e.target.value})}>
-              {PAYMENT_STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
+              {PAYMENT_STATUSES.map(s => <option key={s} value={s}>{t(_payKey(s))}</option>)}
             </select>
           </div>
           <div className="form-group">
-            <label>Paid Date</label>
+            <label>{t('vendors.pay.paid')} ({t('vendors.pay.th.date').toLowerCase()})</label>
             <input type="date" className="form-input" value={form.paid_date} onChange={e => setForm({...form, paid_date: e.target.value})}/>
           </div>
           <div className="form-group">
-            <label>Payment Method</label>
+            <label>Method</label>
             <select className="form-input" value={form.payment_method} onChange={e => setForm({...form, payment_method: e.target.value})}>
               <option value="">—</option>
               {PAYMENT_METHODS.map(m => <option key={m} value={m}>{m}</option>)}
@@ -332,10 +343,10 @@ const VendorPaymentEditModal = ({ vendorId, payment, onSaved, onClose }) => {
           </div>
           <div className="form-group">
             <label>Reference #</label>
-            <input className="form-input" value={form.payment_reference} onChange={e => setForm({...form, payment_reference: e.target.value})} placeholder="Cheque / transaction #"/>
+            <input className="form-input" value={form.payment_reference} onChange={e => setForm({...form, payment_reference: e.target.value})}/>
           </div>
           <div className="form-group" style={{gridColumn: 'span 2'}}>
-            <label>Notes</label>
+            <label>{t('vendors.field.notes')}</label>
             <textarea className="form-input" rows={2} value={form.notes} onChange={e => setForm({...form, notes: e.target.value})}/>
           </div>
         </div>
@@ -343,9 +354,108 @@ const VendorPaymentEditModal = ({ vendorId, payment, onSaved, onClose }) => {
         {error && <div style={{color:'#8b4a42', fontSize: 12, marginTop: 12}}>{error}</div>}
 
         <div className="btn-group" style={{marginTop: 16, justifyContent: 'flex-end'}}>
-          <button className="btn" onClick={onClose}>Cancel</button>
+          <button className="btn" onClick={onClose}>{t('vendors.btn.cancel')}</button>
           <button className="btn btn-primary" onClick={handleSave} disabled={saving}>
-            {saving ? 'Saving…' : 'Save'}
+            {saving ? t('vendors.btn.saving') : t('vendors.btn.save')}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// =====================================================================
+// RenewContractModal — bump contract dates + value + optional new file
+// =====================================================================
+const RenewContractModal = ({ vendor, onSaved, onClose }) => {
+  const { t } = useApp();
+  const fileRef = useRef(null);
+  const [form, setForm] = useState({
+    contract_start: new Date().toISOString().slice(0, 10),
+    contract_end:   '',
+    contract_value_aed: vendor.contract_value_aed || '',
+  });
+  const [file, setFile] = useState(null);
+  const [saving, setSaving] = useState(false);
+  const [error, setError]   = useState(null);
+
+  const handleRenew = async () => {
+    if (!form.contract_start || !form.contract_end) { setError('Both dates are required'); return; }
+    if (new Date(form.contract_end) <= new Date(form.contract_start)) { setError('End must be after start'); return; }
+    setSaving(true); setError(null);
+    try {
+      // 1) update vendor row
+      const { error: ue } = await supabaseClient.from('vendors').update({
+        contract_start:     form.contract_start,
+        contract_end:       form.contract_end,
+        contract_value_aed: form.contract_value_aed === '' ? null : Number(form.contract_value_aed),
+        status:             'Active',
+        updated_at:         new Date().toISOString(),
+      }).eq('id', vendor.id);
+      if (ue) throw ue;
+
+      // 2) if a new file was attached, upload it + insert document metadata
+      if (file) {
+        const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+        const path = vendor.id + '/contract-' + Date.now() + '-' + safeName;
+        const { error: upErr } = await supabaseClient.storage.from('maintenance-documents').upload(path, file);
+        if (upErr) throw upErr;
+        const { error: insErr } = await supabaseClient.from('vendor_documents').insert({
+          vendor_id: vendor.id, kind: 'contract', filename: file.name, storage_path: path,
+        });
+        if (insErr) throw insErr;
+      }
+      onSaved();
+    } catch (e) { setError(e.message || String(e)); }
+    setSaving(false);
+  };
+
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal" onClick={e => e.stopPropagation()} style={{maxWidth: 520}}>
+        <div className="modal-header">
+          <div>
+            <h2>{t('vendors.renew.title')} — {vendor.name}</h2>
+            <div className="modal-sub">{t('vendors.renew.intro')}</div>
+          </div>
+          <button className="modal-close" onClick={onClose}>×</button>
+        </div>
+
+        <div style={{padding:'10px 12px', background:'var(--bg-surface)', borderRadius: 6, fontSize: 12, marginBottom: 16}}>
+          <span style={{color:'var(--text-muted)'}}>{t('vendors.renew.currentEnd')}:</span>{' '}
+          <strong>{vendor.contract_end || '—'}</strong>
+        </div>
+
+        <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap: 14}}>
+          <div className="form-group">
+            <label>{t('vendors.renew.newStart')}</label>
+            <input type="date" className="form-input" value={form.contract_start} onChange={e => setForm({...form, contract_start: e.target.value})}/>
+          </div>
+          <div className="form-group">
+            <label>{t('vendors.renew.newEnd')}</label>
+            <input type="date" className="form-input" value={form.contract_end} onChange={e => setForm({...form, contract_end: e.target.value})}/>
+          </div>
+          <div className="form-group" style={{gridColumn: 'span 2'}}>
+            <label>{t('vendors.renew.newValue')}</label>
+            <input type="number" className="form-input" value={form.contract_value_aed} onChange={e => setForm({...form, contract_value_aed: e.target.value})} min="0" step="100"/>
+          </div>
+          <div className="form-group" style={{gridColumn: 'span 2'}}>
+            <label>{t('vendors.renew.uploadNew')}</label>
+            <input ref={fileRef} type="file" accept=".pdf,image/*,.doc,.docx" style={{display:'none'}} onChange={e => setFile(e.target.files && e.target.files[0])}/>
+            <div style={{display:'flex', alignItems:'center', gap: 10}}>
+              <button className="btn btn-sm" onClick={() => fileRef.current && fileRef.current.click()}>Choose file…</button>
+              <span style={{fontSize: 12, color: 'var(--text-muted)'}}>{file ? file.name : '—'}</span>
+              {file && <button onClick={() => { setFile(null); if (fileRef.current) fileRef.current.value = ''; }} style={{background:'none',border:'none',color:'#8b4a42',cursor:'pointer',fontSize:11}}>×</button>}
+            </div>
+          </div>
+        </div>
+
+        {error && <div style={{color:'#8b4a42', fontSize: 12, marginTop: 12}}>{error}</div>}
+
+        <div className="btn-group" style={{marginTop: 18, justifyContent: 'flex-end'}}>
+          <button className="btn" onClick={onClose}>{t('vendors.btn.cancel')}</button>
+          <button className="btn btn-primary" onClick={handleRenew} disabled={saving}>
+            {saving ? t('vendors.renew.confirming') : t('vendors.renew.btn')}
           </button>
         </div>
       </div>
@@ -357,11 +467,13 @@ const VendorPaymentEditModal = ({ vendorId, payment, onSaved, onClose }) => {
 // VendorDetailModal — Details / Documents / Payments tabs
 // =====================================================================
 const VendorDetailModal = ({ vendor, buildings, vendorBuildingIds, onClose, onEdit, onDeleted, onChanged }) => {
+  const { t } = useApp();
   const [tab, setTab] = useState('details');
   const [documents, setDocuments] = useState(null);
   const [uploadingKind, setUploadingKind] = useState(null);
   const [payments, setPayments] = useState(null);
   const [editingPayment, setEditingPayment] = useState(null);
+  const [showRenew, setShowRenew] = useState(false);
   const [error, setError] = useState(null);
 
   const loadDocs = async () => {
@@ -412,7 +524,6 @@ const VendorDetailModal = ({ vendor, buildings, vendorBuildingIds, onClose, onEd
 
   const handleDeleteVendor = async () => {
     if (!window.confirm('Delete vendor "' + vendor.name + '" and all its documents and payments? This cannot be undone.')) return;
-    // Delete files from Storage first (the metadata cascades, but bucket objects don't)
     const { data: docs } = await supabaseClient.from('vendor_documents').select('storage_path').eq('vendor_id', vendor.id);
     if (docs && docs.length) {
       await supabaseClient.storage.from('maintenance-documents').remove(docs.map(d => d.storage_path));
@@ -433,6 +544,9 @@ const VendorDetailModal = ({ vendor, buildings, vendorBuildingIds, onClose, onEd
     acc.total += amt;
     return acc;
   }, { total: 0, paid: 0, pending: 0, overdue: 0 });
+
+  const effectiveStatus = deriveVendorStatus(vendor);
+  const canRenew = effectiveStatus === 'Expired' || effectiveStatus === 'Expiring Soon';
 
   const TabBtn = ({ id, label, count }) => (
     <button
@@ -465,15 +579,15 @@ const VendorDetailModal = ({ vendor, buildings, vendorBuildingIds, onClose, onEd
           <div>
             <div style={{fontSize:10, letterSpacing:'0.08em', textTransform:'uppercase', color:'var(--text-muted)', marginBottom: 4}}>{vendor.service_category}</div>
             <h2>{vendor.name}</h2>
-            <div style={{marginTop: 6}}>{vendorStatusBadge(deriveVendorStatus(vendor))}</div>
+            <div style={{marginTop: 6}}>{vendorStatusBadge(effectiveStatus, t(_statusKey(effectiveStatus)))}</div>
           </div>
           <button className="modal-close" onClick={onClose}>×</button>
         </div>
 
         <div style={{display:'flex', gap: 8, marginBottom: 18}}>
-          <TabBtn id="details" label="Details"/>
-          <TabBtn id="documents" label="Documents" count={documents ? documents.length : null}/>
-          <TabBtn id="payments" label="Payments" count={payments ? payments.length : null}/>
+          <TabBtn id="details"   label={t('vendors.tab.details')}/>
+          <TabBtn id="documents" label={t('vendors.tab.documents')} count={documents ? documents.length : null}/>
+          <TabBtn id="payments"  label={t('vendors.tab.payments')}  count={payments ? payments.length : null}/>
         </div>
 
         {error && <div style={{color:'#8b4a42', fontSize: 12, marginBottom: 12}}>{error}</div>}
@@ -481,39 +595,45 @@ const VendorDetailModal = ({ vendor, buildings, vendorBuildingIds, onClose, onEd
         {tab === 'details' && (
           <div>
             <div style={{display:'grid', gridTemplateColumns:'repeat(2, 1fr)', gap: 16, marginBottom: 18}}>
-              <Field label="Contact Person"     value={vendor.contact_person}/>
-              <Field label="Phone"              value={vendor.contact_phone}/>
-              <Field label="Email"              value={vendor.contact_email}/>
-              <Field label="Address"            value={vendor.address}/>
-              <Field label="Contract Start"     value={vendor.contract_start}/>
-              <Field label="Contract End"       value={vendor.contract_end}/>
-              <Field label="Contract Value"     value={vendor.contract_value_aed != null ? fmtAED(vendor.contract_value_aed) : null}/>
-              <Field label="Trade License"      value={vendor.trade_license}/>
-              <Field label="TRN"                value={vendor.trn_number}/>
-              <Field label="Buildings Covered"  value={buildingNames.length ? buildingNames.join(', ') : null}/>
+              <Field label={t('vendors.field.contactPerson')}  value={vendor.contact_person}/>
+              <Field label={t('vendors.field.phone')}          value={vendor.contact_phone}/>
+              <Field label={t('vendors.field.email')}          value={vendor.contact_email}/>
+              <Field label={t('vendors.field.address')}        value={vendor.address}/>
+              <Field label={t('vendors.field.contractStart')}  value={vendor.contract_start}/>
+              <Field label={t('vendors.field.contractEnd')}    value={vendor.contract_end}/>
+              <Field label={t('vendors.field.contractValue')}  value={vendor.contract_value_aed != null ? fmtAED(vendor.contract_value_aed) : null}/>
+              <Field label={t('vendors.field.tradeLicense')}   value={vendor.trade_license}/>
+              <Field label={t('vendors.field.trn')}            value={vendor.trn_number}/>
+              <Field label={t('vendors.field.buildings')}      value={buildingNames.length ? buildingNames.join(', ') : null}/>
             </div>
             {vendor.notes && (
               <div style={{padding:'12px 14px', background:'var(--bg-surface)', borderRadius: 6, fontSize: 13, lineHeight: 1.55, marginBottom: 18}}>
                 {vendor.notes}
               </div>
             )}
-            <div className="btn-group" style={{justifyContent: 'space-between'}}>
-              <button className="btn btn-danger btn-sm" onClick={handleDeleteVendor}>Delete Vendor</button>
-              <button className="btn btn-primary" onClick={onEdit}>Edit</button>
+            <div className="btn-group" style={{justifyContent: 'space-between', alignItems: 'center'}}>
+              <button className="btn btn-danger btn-sm" onClick={handleDeleteVendor}>{t('vendors.btn.delete')}</button>
+              <div className="btn-group">
+                {canRenew && (
+                  <button className="btn btn-outline" onClick={() => setShowRenew(true)}>{t('vendors.btn.renew')}</button>
+                )}
+                <button className="btn btn-primary" onClick={onEdit}>{t('vendors.btn.edit')}</button>
+              </div>
             </div>
           </div>
         )}
 
         {tab === 'documents' && (
           <div>
-            {VENDOR_DOC_KINDS.map(section => {
-              const files = (documents || []).filter(d => d.kind === section.kind);
+            {VENDOR_DOC_KINDS_META.map(meta => {
+              const section = { kind: meta.kind, label: t(meta.labelKey), accept: meta.accept, multiple: meta.multiple };
+              const files = (documents || []).filter(d => d.kind === meta.kind);
               return (
                 <UnitAttachmentSection
-                  key={section.kind}
+                  key={meta.kind}
                   section={section}
                   files={files}
-                  uploading={uploadingKind === section.kind}
+                  uploading={uploadingKind === meta.kind}
                   onUpload={handleUploadDoc}
                   onDelete={handleDeleteDoc}
                   bucket="maintenance-documents"
@@ -527,26 +647,31 @@ const VendorDetailModal = ({ vendor, buildings, vendorBuildingIds, onClose, onEd
           <div>
             {payments !== null && payments.length > 0 && (
               <div className="kpi-row" style={{marginBottom: 14}}>
-                <div className="kpi-card"><div className="label">Total Billed</div><div className="value" style={{fontSize:18}}>{fmtAED(totals.total)}</div></div>
-                <div className="kpi-card"><div className="label">Paid</div><div className="value" style={{fontSize:18, color:'#5a6b4f'}}>{fmtAED(totals.paid)}</div></div>
-                <div className="kpi-card"><div className="label">Pending</div><div className="value" style={{fontSize:18, color:'#a07d3c'}}>{fmtAED(totals.pending)}</div></div>
-                <div className="kpi-card"><div className="label">Overdue</div><div className="value" style={{fontSize:18, color:'#8b4a42'}}>{fmtAED(totals.overdue)}</div></div>
+                <div className="kpi-card"><div className="label">{t('vendors.pay.totalBilled')}</div><div className="value" style={{fontSize:18}}>{fmtAED(totals.total)}</div></div>
+                <div className="kpi-card"><div className="label">{t('vendors.pay.paid')}</div><div className="value" style={{fontSize:18, color:'#5a6b4f'}}>{fmtAED(totals.paid)}</div></div>
+                <div className="kpi-card"><div className="label">{t('vendors.pay.pending')}</div><div className="value" style={{fontSize:18, color:'#a07d3c'}}>{fmtAED(totals.pending)}</div></div>
+                <div className="kpi-card"><div className="label">{t('vendors.pay.overdue')}</div><div className="value" style={{fontSize:18, color:'#8b4a42'}}>{fmtAED(totals.overdue)}</div></div>
               </div>
             )}
             <div style={{display:'flex', justifyContent:'flex-end', marginBottom: 10}}>
-              <button className="btn btn-primary btn-sm" onClick={() => setEditingPayment({})}>+ Add Payment</button>
+              <button className="btn btn-primary btn-sm" onClick={() => setEditingPayment({})}>{t('vendors.pay.addBtn')}</button>
             </div>
             {payments === null ? (
-              <div style={{fontSize: 12, color: 'var(--text-muted)', padding: 12}}>Loading…</div>
+              <div style={{fontSize: 12, color: 'var(--text-muted)', padding: 12}}>{t('vendors.loading')}</div>
             ) : payments.length === 0 ? (
               <div style={{fontSize: 12, color: 'var(--text-muted)', padding: 24, textAlign: 'center', background:'var(--bg-surface)', borderRadius: 6}}>
-                No payments recorded for this vendor yet.
+                {t('vendors.pay.empty')}
               </div>
             ) : (
               <table className="data-table" style={{fontSize: 12}}>
                 <thead>
                   <tr>
-                    <th>Invoice #</th><th>Date</th><th>Description</th><th style={{textAlign:'right'}}>Amount</th><th>Status</th><th></th>
+                    <th>{t('vendors.pay.th.invoice')}</th>
+                    <th>{t('vendors.pay.th.date')}</th>
+                    <th>{t('vendors.pay.th.description')}</th>
+                    <th style={{textAlign:'right'}}>{t('vendors.pay.th.amount')}</th>
+                    <th>{t('vendors.pay.th.status')}</th>
+                    <th></th>
                   </tr>
                 </thead>
                 <tbody>
@@ -556,7 +681,7 @@ const VendorDetailModal = ({ vendor, buildings, vendorBuildingIds, onClose, onEd
                       <td>{p.invoice_date || '—'}</td>
                       <td>{p.description}</td>
                       <td style={{textAlign:'right'}}>{fmtAED(p.amount_aed)}</td>
-                      <td>{paymentStatusBadge(p.payment_status)}</td>
+                      <td>{paymentStatusBadge(p.payment_status, t(_payKey(p.payment_status)))}</td>
                       <td style={{textAlign:'right'}}><button onClick={(e) => { e.stopPropagation(); handleDeletePayment(p); }} style={{background:'none', border:'none', color:'#8b4a42', cursor:'pointer', fontSize: 11}}>×</button></td>
                     </tr>
                   ))}
@@ -573,6 +698,14 @@ const VendorDetailModal = ({ vendor, buildings, vendorBuildingIds, onClose, onEd
             )}
           </div>
         )}
+
+        {showRenew && (
+          <RenewContractModal
+            vendor={vendor}
+            onSaved={() => { setShowRenew(false); if (onChanged) onChanged(); onClose(); }}
+            onClose={() => setShowRenew(false)}
+          />
+        )}
       </div>
     </div>
   );
@@ -582,15 +715,17 @@ const VendorDetailModal = ({ vendor, buildings, vendorBuildingIds, onClose, onEd
 // PMCVendorsPage — main list page
 // =====================================================================
 const PMCVendorsPage = () => {
+  const { t } = useApp();
   const [vendors, setVendors] = useState(null);
   const [buildings, setBuildings] = useState([]);
-  const [vendorBuildings, setVendorBuildings] = useState({}); // id -> [building_id]
-  const [paymentTotalsByVendor, setPaymentTotalsByVendor] = useState({}); // id -> {paid, outstanding}
+  const [vendorBuildings, setVendorBuildings] = useState({});
+  const [paymentTotalsByVendor, setPaymentTotalsByVendor] = useState({});
   const [error, setError] = useState(null);
   const [search, setSearch] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState('all');
-  const [editingVendor, setEditingVendor] = useState(null);     // null | {} | vendor
+  const [outstandingOnly, setOutstandingOnly] = useState(false);
+  const [editingVendor, setEditingVendor] = useState(null);
   const [detailVendor, setDetailVendor] = useState(null);
   const [showExport, setShowExport] = useState(false);
 
@@ -611,11 +746,11 @@ const PMCVendorsPage = () => {
       });
       const totMap = {};
       (vpays || []).forEach(p => {
-        const t = totMap[p.vendor_id] = totMap[p.vendor_id] || { paid: 0, outstanding: 0, total: 0 };
+        const t2 = totMap[p.vendor_id] = totMap[p.vendor_id] || { paid: 0, outstanding: 0, total: 0 };
         const amt = Number(p.amount_aed) || 0;
-        t.total += amt;
-        if (p.payment_status === 'Paid') t.paid += amt;
-        if (p.payment_status === 'Pending' || p.payment_status === 'Overdue') t.outstanding += amt;
+        t2.total += amt;
+        if (p.payment_status === 'Paid') t2.paid += amt;
+        if (p.payment_status === 'Pending' || p.payment_status === 'Overdue') t2.outstanding += amt;
       });
       setVendors((vs || []).map(v => ({ ...v, _effectiveStatus: deriveVendorStatus(v) })));
       setBuildings(bs || []);
@@ -625,9 +760,12 @@ const PMCVendorsPage = () => {
   };
   useEffect(() => { load(); }, []);
 
+  const outstandingOf = (v) => paymentTotalsByVendor[v.id]?.outstanding || 0;
+
   const filtered = (vendors || []).filter(v => {
     if (categoryFilter !== 'all' && v.service_category !== categoryFilter) return false;
     if (statusFilter   !== 'all' && v._effectiveStatus  !== statusFilter)   return false;
+    if (outstandingOnly && outstandingOf(v) <= 0) return false;
     if (search) {
       const q = search.toLowerCase();
       const hay = (v.name + ' ' + (v.contact_person || '') + ' ' + (v.contact_phone || '') + ' ' + (v.contact_email || '') + ' ' + v.service_category).toLowerCase();
@@ -637,20 +775,18 @@ const PMCVendorsPage = () => {
   });
 
   const counts = {
-    total:      filtered.length,
-    active:     filtered.filter(v => v._effectiveStatus === 'Active').length,
-    expiring:   filtered.filter(v => v._effectiveStatus === 'Expiring Soon').length,
-    expired:    filtered.filter(v => v._effectiveStatus === 'Expired').length,
+    total:           filtered.length,
+    active:          filtered.filter(v => v._effectiveStatus === 'Active').length,
+    expiring:        filtered.filter(v => v._effectiveStatus === 'Expiring Soon').length,
+    expired:         filtered.filter(v => v._effectiveStatus === 'Expired').length,
+    withOutstanding: filtered.filter(v => outstandingOf(v) > 0).length,
   };
 
-  // Rows enriched for Export / Print (buildings + payment totals merged in)
   const exportRows = filtered.map(v => ({
     ...v,
-    buildings_covered: (vendorBuildings[v.id] || [])
-                         .map(bid => buildings.find(b => b.id === bid)?.name)
-                         .filter(Boolean).join(', '),
+    buildings_covered: (vendorBuildings[v.id] || []).map(bid => buildings.find(b => b.id === bid)?.name).filter(Boolean).join(', '),
     paid_total:        paymentTotalsByVendor[v.id]?.paid || 0,
-    outstanding_total: paymentTotalsByVendor[v.id]?.outstanding || 0,
+    outstanding_total: outstandingOf(v),
     effective_status:  v._effectiveStatus,
   }));
 
@@ -658,12 +794,12 @@ const PMCVendorsPage = () => {
     <div>
       <div className="page-header">
         <div>
-          <h1>Vendors</h1>
-          <div className="subtitle">Maintenance companies under contract — details, documents, and payment tracking.</div>
+          <h1>{t('vendors.title')}</h1>
+          <div className="subtitle">{t('vendors.subtitle')}</div>
         </div>
         <div className="btn-group">
-          <button className="btn" onClick={() => setShowExport(true)} disabled={!vendors || vendors.length === 0}>Export / Print</button>
-          <button className="btn btn-primary" onClick={() => setEditingVendor({})}>+ Add Vendor</button>
+          <button className="btn" onClick={() => setShowExport(true)} disabled={!vendors || vendors.length === 0}>{t('vendors.exportBtn')}</button>
+          <button className="btn btn-primary" onClick={() => setEditingVendor({})}>{t('vendors.addBtn')}</button>
         </div>
       </div>
 
@@ -692,68 +828,78 @@ const PMCVendorsPage = () => {
           { key: 'effective_status',    header: 'Status',           width: 12 },
         ]}
         extraMetadata={{
-          'Category Filter': categoryFilter === 'all' ? 'All' : categoryFilter,
-          'Status Filter':   statusFilter   === 'all' ? 'All' : statusFilter,
-          'Search':          search || '—',
-          'Active':          String(counts.active),
-          'Expiring Soon':   String(counts.expiring),
-          'Expired':         String(counts.expired),
+          'Category Filter':   categoryFilter === 'all' ? 'All' : categoryFilter,
+          'Status Filter':     statusFilter   === 'all' ? 'All' : statusFilter,
+          'Outstanding Only':  outstandingOnly ? 'Yes' : 'No',
+          'Search':            search || '—',
+          'Active':            String(counts.active),
+          'Expiring Soon':     String(counts.expiring),
+          'Expired':           String(counts.expired),
+          'With Outstanding':  String(counts.withOutstanding),
         }}
       />
 
       <div className="kpi-row">
-        <div className="kpi-card"><div className="label">Total Vendors</div><div className="value">{counts.total}</div></div>
-        <div className="kpi-card"><div className="label">Active</div><div className="value" style={{color:'#5a6b4f'}}>{counts.active}</div></div>
-        <div className="kpi-card"><div className="label">Expiring Soon</div><div className="value" style={{color:'#a07d3c'}}>{counts.expiring}</div></div>
-        <div className="kpi-card"><div className="label">Expired</div><div className="value" style={{color:'#8b4a42'}}>{counts.expired}</div></div>
+        <div className="kpi-card"><div className="label">{t('vendors.kpi.total')}</div><div className="value">{counts.total}</div></div>
+        <div className="kpi-card"><div className="label">{t('vendors.kpi.active')}</div><div className="value" style={{color:'#5a6b4f'}}>{counts.active}</div></div>
+        <div className="kpi-card"><div className="label">{t('vendors.kpi.expiringSoon')}</div><div className="value" style={{color:'#a07d3c'}}>{counts.expiring}</div></div>
+        <div className="kpi-card"><div className="label">{t('vendors.kpi.expired')}</div><div className="value" style={{color:'#8b4a42'}}>{counts.expired}</div></div>
+        <div className="kpi-card" style={{cursor:'pointer', borderColor: outstandingOnly ? 'var(--bg-warm-dark)' : undefined}} onClick={() => setOutstandingOnly(!outstandingOnly)}>
+          <div className="label">{t('vendors.kpi.outstanding')}</div>
+          <div className="value" style={{color:'#8b4a42'}}>{counts.withOutstanding}</div>
+        </div>
       </div>
 
       <div className="card">
         <div style={{display:'flex', gap: 12, flexWrap: 'wrap', alignItems:'flex-end', marginBottom: 14}}>
           <div style={{flex: '1 1 180px'}}>
-            <label style={{fontSize: 10, letterSpacing:'0.06em', textTransform:'uppercase', color:'var(--text-secondary)', marginBottom: 6, display:'block', fontWeight: 500}}>Search</label>
-            <input className="form-input" placeholder="Name, contact, phone, email…" value={search} onChange={e => setSearch(e.target.value)}/>
+            <label style={{fontSize: 10, letterSpacing:'0.06em', textTransform:'uppercase', color:'var(--text-secondary)', marginBottom: 6, display:'block', fontWeight: 500}}>{t('vendors.filter.search')}</label>
+            <input className="form-input" placeholder={t('vendors.filter.searchPlaceholder')} value={search} onChange={e => setSearch(e.target.value)}/>
           </div>
           <div style={{flex: '0 0 180px'}}>
-            <label style={{fontSize: 10, letterSpacing:'0.06em', textTransform:'uppercase', color:'var(--text-secondary)', marginBottom: 6, display:'block', fontWeight: 500}}>Category</label>
+            <label style={{fontSize: 10, letterSpacing:'0.06em', textTransform:'uppercase', color:'var(--text-secondary)', marginBottom: 6, display:'block', fontWeight: 500}}>{t('vendors.filter.category')}</label>
             <select className="form-input" value={categoryFilter} onChange={e => setCategoryFilter(e.target.value)}>
-              <option value="all">All categories</option>
+              <option value="all">{t('vendors.filter.allCategories')}</option>
               {VENDOR_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
             </select>
           </div>
           <div style={{flex: '0 0 160px'}}>
-            <label style={{fontSize: 10, letterSpacing:'0.06em', textTransform:'uppercase', color:'var(--text-secondary)', marginBottom: 6, display:'block', fontWeight: 500}}>Status</label>
+            <label style={{fontSize: 10, letterSpacing:'0.06em', textTransform:'uppercase', color:'var(--text-secondary)', marginBottom: 6, display:'block', fontWeight: 500}}>{t('vendors.filter.status')}</label>
             <select className="form-input" value={statusFilter} onChange={e => setStatusFilter(e.target.value)}>
-              <option value="all">All statuses</option>
-              {VENDOR_STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
+              <option value="all">{t('vendors.filter.allStatuses')}</option>
+              {VENDOR_STATUSES.map(s => <option key={s} value={s}>{t(_statusKey(s))}</option>)}
             </select>
           </div>
+          <label style={{display:'flex', alignItems:'center', gap: 8, padding:'9px 12px', background: outstandingOnly ? 'var(--accent-warm-light)' : 'var(--bg-surface)', border:'1px solid var(--border-light)', borderRadius:4, fontSize:12, cursor:'pointer', whiteSpace:'nowrap'}}>
+            <input type="checkbox" checked={outstandingOnly} onChange={e => setOutstandingOnly(e.target.checked)}/>
+            <span>{t('vendors.filter.outstandingOnly')}</span>
+          </label>
         </div>
 
         {error && <div style={{color:'#8b4a42', fontSize: 12, marginBottom: 12}}>{error}</div>}
 
         {vendors === null ? (
-          <div style={{padding: 24, color: 'var(--text-muted)', fontSize: 13}}>Loading…</div>
+          <div style={{padding: 24, color: 'var(--text-muted)', fontSize: 13}}>{t('vendors.loading')}</div>
         ) : filtered.length === 0 ? (
           <div style={{padding: 40, color: 'var(--text-muted)', fontSize: 13, textAlign: 'center'}}>
-            {vendors.length === 0 ? 'No vendors yet. Click "Add Vendor" to create the first one.' : 'No vendors match the current filters.'}
+            {vendors.length === 0 ? t('vendors.empty.none') : t('vendors.empty.noMatch')}
           </div>
         ) : (
           <table className="data-table">
             <thead>
               <tr>
-                <th>Vendor</th>
-                <th>Category</th>
-                <th>Contact</th>
-                <th>Contract</th>
-                <th style={{textAlign:'right'}}>Value (AED)</th>
-                <th style={{textAlign:'right'}}>Outstanding</th>
-                <th>Status</th>
+                <th>{t('vendors.th.vendor')}</th>
+                <th>{t('vendors.th.category')}</th>
+                <th>{t('vendors.th.contact')}</th>
+                <th>{t('vendors.th.contract')}</th>
+                <th style={{textAlign:'right'}}>{t('vendors.th.value')}</th>
+                <th style={{textAlign:'right'}}>{t('vendors.th.outstanding')}</th>
+                <th>{t('vendors.th.status')}</th>
               </tr>
             </thead>
             <tbody>
               {filtered.map(v => {
-                const tot = paymentTotalsByVendor[v.id] || { outstanding: 0 };
+                const out = outstandingOf(v);
                 return (
                   <tr key={v.id} style={{cursor: 'pointer'}} onClick={() => setDetailVendor(v)}>
                     <td className="name-cell">
@@ -767,11 +913,11 @@ const PMCVendorsPage = () => {
                     </td>
                     <td>
                       {v.contract_start || '—'}
-                      <span className="sub">to {v.contract_end || '—'}</span>
+                      <span className="sub">→ {v.contract_end || '—'}</span>
                     </td>
                     <td style={{textAlign:'right'}}>{v.contract_value_aed != null ? fmtAED(v.contract_value_aed) : '—'}</td>
-                    <td style={{textAlign:'right', color: tot.outstanding > 0 ? '#8b4a42' : 'var(--text-muted)'}}>{tot.outstanding > 0 ? fmtAED(tot.outstanding) : '—'}</td>
-                    <td>{vendorStatusBadge(v._effectiveStatus)}</td>
+                    <td style={{textAlign:'right', color: out > 0 ? '#8b4a42' : 'var(--text-muted)'}}>{out > 0 ? fmtAED(out) : '—'}</td>
+                    <td>{vendorStatusBadge(v._effectiveStatus, t(_statusKey(v._effectiveStatus)))}</td>
                   </tr>
                 );
               })}
