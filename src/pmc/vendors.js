@@ -714,7 +714,7 @@ const VendorDetailModal = ({ vendor, buildings, vendorBuildingIds, onClose, onEd
 // =====================================================================
 // PMCVendorsPage — main list page
 // =====================================================================
-const PMCVendorsPage = () => {
+const PMCVendorsPage = ({ setPage }) => {
   const { t } = useApp();
   const [vendors, setVendors] = useState(null);
   const [buildings, setBuildings] = useState([]);
@@ -799,6 +799,11 @@ const PMCVendorsPage = () => {
         </div>
         <div className="btn-group">
           <button className="btn" onClick={() => setShowExport(true)} disabled={!vendors || vendors.length === 0}>{t('vendors.exportBtn')}</button>
+          {setPage && (
+            <button className="btn" onClick={() => { try { window._profileCreationInitialSection = 'vendors'; } catch(e) {} setPage('profileCreation'); }}>
+              Bulk Upload…
+            </button>
+          )}
           <button className="btn btn-primary" onClick={() => setEditingVendor({})}>{t('vendors.addBtn')}</button>
         </div>
       </div>

@@ -55,6 +55,29 @@ const PC_TEMPLATES = {
       'Re-running the upload is safe: existing buildings/units are skipped (matched on Building + Unit).',
     ],
   },
+  vendors: {
+    label: 'Vendors',
+    headers: [
+      'Company name','Service category','Contact person','Phone','Email','Address',
+      'Contract start','Contract end','Contract value (AED)',
+      'Trade license','TRN','Buildings covered','Status','Notes',
+    ],
+    examples: [
+      ['AquaFix Plumbing LLC','Plumbing','Hassan Al Awadi','+971 50 111 2233','hassan@aquafix.ae','Sheikh Zayed Rd, Dubai','2026-01-01','2026-12-31',30000,'1234567','123456789012345','Aljil Tower, Al Qurm View','Active','Quarterly inspections + emergency callout'],
+      ['Spark Electric Services','Electrical','Maryam Al Suwaidi','+971 55 444 5566','info@sparkelectric.ae','Al Reem Island, Abu Dhabi','2025-06-15','2026-06-14',18500,'7890123','987654321098765','Aljil Tower','Expiring Soon','Annual maintenance contract'],
+      ['CrystalClean Co.','Cleaning','Aisha Al Marzouqi','+971 50 909 1212','ops@crystalclean.ae','Al Quoz, Dubai','2025-09-01','2026-08-31',24000,'5566778','455667788990011','Al Qurm View','Active','Daily cleaning of common areas'],
+    ],
+    filename: 'vendors-template',
+    rules: [
+      'Company name and Service category are required.',
+      'Service category must be one of: Plumbing, Electrical, HVAC, Cleaning, Security, Gardening, Pest Control, Lift Maintenance, General Handyman, Other.',
+      'Status — Active, Expiring Soon, Expired, or Terminated. Defaults to Active when blank.',
+      'Dates use ISO format YYYY-MM-DD.',
+      'Buildings covered — comma-separated list of existing building names (e.g. "Aljil Tower, Al Qurm View"). Names that don\'t match an existing building are skipped silently.',
+      'Re-running the upload is safe: vendors are matched on Company name and skipped if already present.',
+      'After the metadata upload completes, an optional "Bulk attach documents" section appears where you can drag-drop multiple files at once.',
+    ],
+  },
   amenities:   { label: 'Amenities',   readOnly: true },
   maintenance: { label: 'Maintenance', readOnly: true },
   payments:    { label: 'Payments',    readOnly: true },
@@ -127,12 +150,23 @@ function rowsToObjects(parsedRows, headers) {
 }
 
 const ProfileCreationPage = () => {
-  const [section, setSection] = useState('buildings');
+  // Allow other pages (e.g. the Vendors page's "Bulk Upload" button) to land
+  // the user directly on a specific section by setting this global hint
+  // before calling setPage('profileCreation'). We consume + clear it once.
+  const [section, setSection] = useState(() => {
+    const hint = (typeof window !== 'undefined') ? window._profileCreationInitialSection : null;
+    if (hint) { try { window._profileCreationInitialSection = null; } catch(e) {} return hint; }
+    return 'buildings';
+  });
   const [inner, setInner] = useState('summary');
   const [authChecked, setAuthChecked] = useState(false);
   const [pmcSession, setPmcSession] = useState(null);
   const isReadOnly = !!(PC_TEMPLATES[section] && PC_TEMPLATES[section].readOnly);
-  const effectiveInner = isReadOnly ? 'summary' : inner;
+  // Vendors only has a Bulk upload sub-tab (no Summary / Manual — that lives
+  // on the dedicated Vendors page in the sidebar).
+  const vendorsOnly = section === 'vendors';
+  const effectiveInner = isReadOnly ? 'summary' : (vendorsOnly ? 'bulk' : inner);
+  const innerTabs = vendorsOnly ? ['bulk'] : ['summary','bulk','manual'];
 
   useEffect(() => {
     if (!supabaseClient) { setAuthChecked(true); return; }
@@ -173,16 +207,16 @@ const ProfileCreationPage = () => {
       <div style={{display:'flex',gap:8,marginBottom:20,borderBottom:'1px solid var(--border-light)'}}>
         {Object.entries(PC_TEMPLATES).map(([id, cfg]) => (
           <div key={id}
-            onClick={() => { setSection(id); setInner('summary'); }}
+            onClick={() => { setSection(id); setInner(id === 'vendors' ? 'bulk' : 'summary'); }}
             style={{padding:'10px 18px',cursor:'pointer',fontSize:13,fontWeight:section===id?500:400,color:section===id?'var(--text-dark)':'var(--text-secondary)',borderBottom: section===id ? '2px solid var(--bg-warm-dark)' : '2px solid transparent',marginBottom:-1,letterSpacing:'-0.01em'}}>
             {cfg.label}
           </div>
         ))}
       </div>
 
-      {!isReadOnly && (
+      {!isReadOnly && innerTabs.length > 1 && (
         <div style={{display:'flex',gap:8,marginBottom:24}}>
-          {['summary','bulk','manual'].map(id => (
+          {innerTabs.map(id => (
             <div key={id}
               onClick={() => setInner(id)}
               style={{padding:'7px 14px',cursor:'pointer',fontSize:12,fontWeight:inner===id?500:400,color:inner===id?'var(--text-dark)':'var(--text-secondary)',border: inner===id ? '1.5px solid var(--bg-warm-dark)' : '1px solid var(--border-light)',borderRadius:8,background:inner===id?'var(--bg-surface)':'#fff',letterSpacing:'-0.01em'}}>
@@ -646,6 +680,9 @@ const PCBulkUpload = ({ section }) => {
       if (section === 'buildings') {
         const res = await uploadBuildingsBulk(parsedRows);
         setResults(res);
+      } else if (section === 'vendors') {
+        const res = await uploadVendorsBulk(parsedRows);
+        setResults(res);
       } else {
         const records = parsedRows.map(r => {
           if (section === 'residents') {
@@ -766,6 +803,11 @@ const PCBulkUpload = ({ section }) => {
           </div>
         )}
       </div>
+
+      {/* Vendors: optional bulk attachments step shown only after a successful metadata upload */}
+      {section === 'vendors' && results && (results.results || []).some(r => r.ok) && (
+        <PCVendorAttachments createdVendors={(results.results || []).filter(r => r.ok)}/>
+      )}
     </div>
   );
 };
@@ -813,6 +855,237 @@ async function uploadBuildingsBulk(parsedRows) {
   return { results };
 }
 
+// =========================================================================
+// uploadVendorsBulk — insert vendor rows + vendor_buildings M2M from parsed
+// spreadsheet rows. Skips vendors whose `Company name` already exists. Each
+// row's `Buildings covered` cell is parsed as a comma-separated list and
+// matched (case-insensitive) against existing buildings; unmatched names are
+// silently dropped.
+// =========================================================================
+async function uploadVendorsBulk(parsedRows) {
+  const results = [];
+  const validCategories = ['Plumbing','Electrical','HVAC','Cleaning','Security','Gardening','Pest Control','Lift Maintenance','General Handyman','Other'];
+  const validStatuses   = ['Active','Expiring Soon','Expired','Terminated'];
+
+  // Pre-fetch existing vendors + buildings so we can dedupe + resolve names
+  const { data: existingVendors } = await supabaseClient.from('vendors').select('id,name');
+  const existingByName = Object.fromEntries((existingVendors || []).map(v => [v.name.toLowerCase(), v]));
+  const { data: buildings } = await supabaseClient.from('buildings').select('id,name');
+  const buildingByName = Object.fromEntries((buildings || []).map(b => [b.name.toLowerCase(), b]));
+
+  for (const row of parsedRows) {
+    const name = (row['Company name'] || '').toString().trim();
+    if (!name) { results.push({ vendor: '(blank)', ok: false, error: 'Company name is required' }); continue; }
+    if (existingByName[name.toLowerCase()]) {
+      results.push({ vendor: name, ok: true, action: 'skipped', skipped: true });
+      continue;
+    }
+    const category = (row['Service category'] || '').toString().trim();
+    if (!validCategories.includes(category)) {
+      results.push({ vendor: name, ok: false, error: 'Service category "' + category + '" is not one of: ' + validCategories.join(', ') });
+      continue;
+    }
+    const rawStatus = (row['Status'] || '').toString().trim() || 'Active';
+    if (!validStatuses.includes(rawStatus)) {
+      results.push({ vendor: name, ok: false, error: 'Status "' + rawStatus + '" is not one of: ' + validStatuses.join(', ') });
+      continue;
+    }
+    const value = row['Contract value (AED)'];
+    const payload = {
+      name,
+      service_category:    category,
+      contact_person:      (row['Contact person'] || '').toString().trim() || null,
+      contact_phone:       (row['Phone']          || '').toString().trim() || null,
+      contact_email:       (row['Email']          || '').toString().trim() || null,
+      address:             (row['Address']        || '').toString().trim() || null,
+      contract_start:      row['Contract start']  || null,
+      contract_end:        row['Contract end']    || null,
+      contract_value_aed:  (value === '' || value == null) ? null : Number(value),
+      trade_license:       (row['Trade license']  || '').toString().trim() || null,
+      trn_number:          (row['TRN']            || '').toString().trim() || null,
+      status:              rawStatus,
+      notes:               (row['Notes']          || '').toString().trim() || null,
+    };
+    const { data: inserted, error: ie } = await supabaseClient.from('vendors').insert(payload).select('id').single();
+    if (ie) { results.push({ vendor: name, ok: false, error: ie.message }); continue; }
+
+    // Resolve buildings covered (comma-separated string of names → building IDs)
+    const buildingsCsv = (row['Buildings covered'] || '').toString().trim();
+    let buildingsLinked = 0, buildingsSkipped = 0;
+    if (buildingsCsv) {
+      const names = buildingsCsv.split(',').map(s => s.trim()).filter(Boolean);
+      const ids = [];
+      for (const n of names) {
+        const b = buildingByName[n.toLowerCase()];
+        if (b) ids.push(b.id); else buildingsSkipped++;
+      }
+      if (ids.length) {
+        const linkRows = ids.map(bid => ({ vendor_id: inserted.id, building_id: bid }));
+        const { error: le } = await supabaseClient.from('vendor_buildings').insert(linkRows);
+        if (!le) buildingsLinked = ids.length;
+      }
+    }
+    results.push({ vendor: name, ok: true, action: 'created', vendor_id: inserted.id, buildings_linked: buildingsLinked, buildings_skipped: buildingsSkipped });
+  }
+  return { results };
+}
+
+// =========================================================================
+// PCVendorAttachments — optional bulk-attachments uploader shown after a
+// successful vendor bulk upload. User picks (or drags) one or many files.
+// For each file we auto-suggest:
+//   • vendor      — the just-created vendor whose name is the longest
+//                   case-insensitive substring of the filename (overridable)
+//   • kind        — keyword in filename: "contract" → contract,
+//                   "receipt" or "payment" → payment_receipt,
+//                   "invoice" → invoice, else → other (overridable)
+// Files upload sequentially to the maintenance-documents bucket; metadata
+// goes to vendor_documents.
+// =========================================================================
+const PCVendorAttachments = ({ createdVendors }) => {
+  const fileInputRef = useRef(null);
+  const [pending, setPending] = useState([]); // [{ id, file, vendorId, kind, status, error }]
+  const [busy, setBusy] = useState(false);
+
+  // Build a quick map for filename → best vendor match (longest name substring)
+  const knownVendors = (createdVendors || []).filter(r => r.vendor_id);
+  const guessVendor = (filename) => {
+    const lower = filename.toLowerCase();
+    let best = null;
+    knownVendors.forEach(v => {
+      if (!v.vendor) return;
+      const n = v.vendor.toLowerCase();
+      if (n && lower.indexOf(n) !== -1 && (!best || v.vendor.length > best.vendor.length)) best = v;
+    });
+    return best ? best.vendor_id : (knownVendors[0]?.vendor_id || '');
+  };
+  const guessKind = (filename) => {
+    const lower = filename.toLowerCase();
+    if (/contract|agreement/.test(lower)) return 'contract';
+    if (/receipt|payment[\s_-]*proof/.test(lower)) return 'payment_receipt';
+    if (/invoice/.test(lower)) return 'invoice';
+    return 'other';
+  };
+
+  const addFiles = (files) => {
+    const additions = Array.from(files).map((f, i) => ({
+      id: Date.now() + '-' + Math.random().toString(36).slice(2, 8) + '-' + i,
+      file: f,
+      vendorId: guessVendor(f.name),
+      kind: guessKind(f.name),
+      status: 'pending', // pending | uploading | ok | error
+      error: null,
+    }));
+    setPending(prev => [...prev, ...additions]);
+  };
+
+  const updatePending = (id, patch) => setPending(prev => prev.map(p => p.id === id ? { ...p, ...patch } : p));
+  const removePending = (id) => setPending(prev => prev.filter(p => p.id !== id));
+
+  const uploadAll = async () => {
+    setBusy(true);
+    for (const item of pending) {
+      if (item.status === 'ok') continue;
+      if (!item.vendorId) { updatePending(item.id, { status: 'error', error: 'Pick a vendor' }); continue; }
+      updatePending(item.id, { status: 'uploading', error: null });
+      try {
+        const safeName = item.file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+        const path = item.vendorId + '/' + item.kind + '-' + Date.now() + '-' + safeName;
+        const { error: upErr } = await supabaseClient.storage.from('maintenance-documents').upload(path, item.file);
+        if (upErr) throw upErr;
+        const { error: insErr } = await supabaseClient.from('vendor_documents').insert({
+          vendor_id: item.vendorId, kind: item.kind, filename: item.file.name, storage_path: path,
+        });
+        if (insErr) throw insErr;
+        updatePending(item.id, { status: 'ok' });
+      } catch (e) {
+        updatePending(item.id, { status: 'error', error: e.message || String(e) });
+      }
+    }
+    setBusy(false);
+  };
+
+  const vendorOptions = knownVendors;
+  const okCount  = pending.filter(p => p.status === 'ok').length;
+  const errCount = pending.filter(p => p.status === 'error').length;
+  const todoCount = pending.filter(p => p.status === 'pending').length;
+
+  return (
+    <div className="card" style={{marginTop: 18}}>
+      <div style={{fontSize:11,letterSpacing:'0.06em',textTransform:'uppercase',color:'var(--text-secondary)',marginBottom:6}}>4. Bulk attach documents (optional)</div>
+      <div style={{fontSize:12,color:'var(--text-secondary)',marginBottom:14}}>
+        Attach contracts, receipts, invoices, or other files for the {knownVendors.length} vendor{knownVendors.length === 1 ? '' : 's'} you just uploaded.
+        We try to guess the vendor and document kind from each filename — adjust as needed before uploading.
+      </div>
+
+      <input ref={fileInputRef} type="file" multiple accept=".pdf,image/*,.doc,.docx" style={{display:'none'}}
+             onChange={e => { addFiles(e.target.files); if (fileInputRef.current) fileInputRef.current.value = ''; }}/>
+      <button className="btn" onClick={() => fileInputRef.current && fileInputRef.current.click()}>+ Choose files…</button>
+
+      {pending.length > 0 && (
+        <div style={{marginTop: 16}}>
+          <div style={{maxHeight: 320, overflowY: 'auto', border: '1px solid var(--border-light)', borderRadius: 6}}>
+            <table className="data-table" style={{fontSize: 12}}>
+              <thead>
+                <tr>
+                  <th>File</th>
+                  <th>Vendor</th>
+                  <th>Kind</th>
+                  <th>Status</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody>
+                {pending.map(p => (
+                  <tr key={p.id}>
+                    <td style={{maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap'}}>{p.file.name}</td>
+                    <td>
+                      <select className="form-input" value={p.vendorId} onChange={e => updatePending(p.id, { vendorId: e.target.value })} disabled={p.status === 'ok' || p.status === 'uploading'} style={{fontSize: 11, padding: '4px 6px'}}>
+                        <option value="">— Pick vendor —</option>
+                        {vendorOptions.map(v => <option key={v.vendor_id} value={v.vendor_id}>{v.vendor}</option>)}
+                      </select>
+                    </td>
+                    <td>
+                      <select className="form-input" value={p.kind} onChange={e => updatePending(p.id, { kind: e.target.value })} disabled={p.status === 'ok' || p.status === 'uploading'} style={{fontSize: 11, padding: '4px 6px'}}>
+                        <option value="contract">Contract</option>
+                        <option value="payment_receipt">Payment Receipt</option>
+                        <option value="invoice">Invoice</option>
+                        <option value="other">Other</option>
+                      </select>
+                    </td>
+                    <td style={{fontSize: 11}}>
+                      {p.status === 'pending'   && <span style={{color: 'var(--text-muted)'}}>Pending</span>}
+                      {p.status === 'uploading' && <span style={{color: '#a07d3c'}}>Uploading…</span>}
+                      {p.status === 'ok'        && <span style={{color: '#5a6b4f', fontWeight: 500}}>✓ Uploaded</span>}
+                      {p.status === 'error'     && <span style={{color: '#8b4a42'}}>{p.error || 'Failed'}</span>}
+                    </td>
+                    <td style={{textAlign: 'right'}}>
+                      {p.status !== 'ok' && p.status !== 'uploading' && (
+                        <button onClick={() => removePending(p.id)} style={{background: 'none', border: 'none', cursor: 'pointer', color: '#8b4a42', fontSize: 12}}>×</button>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 14}}>
+            <div style={{fontSize: 12, color: 'var(--text-secondary)'}}>
+              {okCount > 0 && <span style={{color: '#5a6b4f', marginRight: 12}}>✓ {okCount} uploaded</span>}
+              {errCount > 0 && <span style={{color: '#8b4a42', marginRight: 12}}>✗ {errCount} failed</span>}
+              {todoCount > 0 && <span>{todoCount} pending</span>}
+            </div>
+            <button className="btn btn-primary" onClick={uploadAll} disabled={busy || todoCount === 0}>
+              {busy ? 'Uploading…' : 'Upload ' + todoCount + ' file' + (todoCount === 1 ? '' : 's')}
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
 const BulkUploadResults = ({ section, results }) => {
   if (results.error) return <div style={{color:'#8b4a42',fontSize:12}}>{results.error}</div>;
   const arr = results.results || [];
@@ -839,11 +1112,22 @@ const BulkUploadResults = ({ section, results }) => {
           ))}
         </div>
       )}
+      {section === 'vendors' && arr.filter(r => r.ok).length > 0 && (
+        <div style={{fontSize:11,color:'var(--text-secondary)',marginBottom:8}}>
+          {arr.filter(r => r.ok).map((r,i) => (
+            <div key={i}>
+              {r.vendor}: {r.action === 'skipped' ? 'already existed (skipped)' : 'created'}
+              {r.buildings_linked > 0 ? ', linked to ' + r.buildings_linked + ' building' + (r.buildings_linked === 1 ? '' : 's') : ''}
+              {r.buildings_skipped > 0 ? ' (' + r.buildings_skipped + ' building name' + (r.buildings_skipped === 1 ? '' : 's') + ' not found)' : ''}
+            </div>
+          ))}
+        </div>
+      )}
       {errCount > 0 && (
         <div style={{maxHeight:200,overflowY:'auto',marginTop:6}}>
           {arr.filter(r => !r.ok).map((r,i) => (
             <div key={i} style={{fontSize:11,color:'#8b4a42',padding:'4px 0'}}>
-              {r.email || r.building || ('Row ' + (i+1))}: {r.error}
+              {r.email || r.vendor || r.building || ('Row ' + (i+1))}: {r.error}
             </div>
           ))}
         </div>

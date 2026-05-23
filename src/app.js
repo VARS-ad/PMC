@@ -295,7 +295,7 @@ const App = () => {
       case 'chat': return <ChatPage/>;
       case 'guards': return <PMCGuardsPage/>;
       case 'properties': return <PMCPropertiesPage setPage={setPage}/>;
-      case 'vendors': return <PMCVendorsPage/>;
+      case 'vendors': return <PMCVendorsPage setPage={setPage}/>;
       // Escalations page removed — page no longer routed.
       case 'reports': return <PMCReportsPage/>;
       case 'settings': return <SettingsPage/>;
