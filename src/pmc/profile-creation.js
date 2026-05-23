@@ -1,6 +1,22 @@
 // ==================== PROFILE CREATION (PMC admin) ====================
 
 const PC_TEMPLATES = {
+  buildings: {
+    label: 'Buildings',
+    headers: ['Building name','Floor','Unit','Address','Notes'],
+    examples: [
+      ['Aljil Tower',1,'A-101','Sheikh Zayed Rd, Dubai, UAE','Mixed residential/commercial.'],
+      ['Aljil Tower',1,'A-102','',''],
+      ['Aljil Tower',2,'A-201','',''],
+      ['Al Qurm View',1,'Q-101','Shams Abu Dhabi, Al Reem Island, Abu Dhabi','Low-rise residential.'],
+    ],
+    filename: 'buildings-template',
+    rules: [
+      'One row per unit. A building with 100 units = 100 rows; the same building name repeats on every row.',
+      'Address and Notes are optional. Fill them on the FIRST row of each building; subsequent rows can leave them blank.',
+      'Re-running the upload is safe: existing buildings/units are skipped (matched on Building + Unit).',
+    ],
+  },
   residents: {
     label: 'Residents',
     headers: [
@@ -41,22 +57,6 @@ const PC_TEMPLATES = {
       'Email must be unique across all VARS users.',
       'Date of birth — use ISO format YYYY-MM-DD.',
       'Passport number — letters + digits, as printed on the document.',
-    ],
-  },
-  buildings: {
-    label: 'Buildings',
-    headers: ['Building name','Floor','Unit','Address','Notes'],
-    examples: [
-      ['Aljil Tower',1,'A-101','Sheikh Zayed Rd, Dubai, UAE','Mixed residential/commercial.'],
-      ['Aljil Tower',1,'A-102','',''],
-      ['Aljil Tower',2,'A-201','',''],
-      ['Al Qurm View',1,'Q-101','Shams Abu Dhabi, Al Reem Island, Abu Dhabi','Low-rise residential.'],
-    ],
-    filename: 'buildings-template',
-    rules: [
-      'One row per unit. A building with 100 units = 100 rows; the same building name repeats on every row.',
-      'Address and Notes are optional. Fill them on the FIRST row of each building; subsequent rows can leave them blank.',
-      'Re-running the upload is safe: existing buildings/units are skipped (matched on Building + Unit).',
     ],
   },
   vendors: {
@@ -260,9 +260,14 @@ const PCSummary = ({ section }) => {
         if (pe) throw pe;
         const ids = (profs || []).map(p => p.id);
         let assignments = [];
+        let emailMap = {};
         if (ids.length) {
-          const { data: ras } = await supabaseClient.from('resident_assignments').select('profile_id,unit_id,tenure,lease_start,lease_end,monthly_payment_aed,ownership_start').in('profile_id', ids);
+          const [{ data: ras }, { data: emails }] = await Promise.all([
+            supabaseClient.from('resident_assignments').select('profile_id,unit_id,tenure,lease_start,lease_end,monthly_payment_aed,ownership_start').in('profile_id', ids),
+            supabaseClient.rpc('get_emails_for_profiles', { p_ids: ids }),
+          ]);
           assignments = ras || [];
+          emailMap = Object.fromEntries((emails || []).map(e => [e.id, e.email]));
         }
         const unitIds = assignments.map(a => a.unit_id);
         let units = [];
@@ -284,6 +289,7 @@ const PCSummary = ({ section }) => {
           const building = unit && buildingById[unit.building_id];
           return {
             id: p.id, full_name: p.full_name, phone: p.phone, created_at: p.created_at,
+            email: emailMap[p.id] || '—',
             date_of_birth: p.date_of_birth, passport_number: p.passport_number,
             building_name: building ? building.name : '—',
             floor: unit ? unit.floor : '—',
@@ -460,12 +466,15 @@ const PCSummary = ({ section }) => {
           <button className="btn btn-sm" onClick={reload}>Refresh</button>
         </div>
         <table className="data-table">
-          <thead><tr><th>Name</th><th>Phone</th><th>Building</th><th>Floor</th><th>Unit</th><th>Created</th><th style={{textAlign:'right'}}>Actions</th></tr></thead>
+          <thead><tr><th>Name</th><th>Email</th><th>Phone</th><th>Passport</th><th>DOB</th><th>Building</th><th>Floor</th><th>Unit</th><th>Created</th><th style={{textAlign:'right'}}>Actions</th></tr></thead>
           <tbody>
             {rows.map(r => (
               <tr key={r.id} onClick={() => setViewingResident(r)} style={{cursor:'pointer'}}>
                 <td style={{fontWeight:500}}>{r.full_name}</td>
+                <td style={{fontSize:12,color:'var(--accent-warm-dark)'}}>{r.email}</td>
                 <td>{r.phone || '—'}</td>
+                <td>{r.passport_number || '—'}</td>
+                <td>{r.date_of_birth || '—'}</td>
                 <td>{r.building_name}</td>
                 <td>{r.floor}</td>
                 <td>{r.unit_number}</td>
@@ -1243,32 +1252,37 @@ const BuildingManualForm = () => {
   );
 };
 
+const RESIDENT_FORM_DEFAULTS = {
+  fullName: '', email: '', phone: '', password: 'Welcome2026!',
+  buildingId: '', unitId: '',
+  dob: '', passport: '', emiratesId: '',
+  emergencyContactName: '', emergencyContactPhone: '',
+  employer: '', occupation: '',
+  tenure: '', leaseStart: '', leaseEnd: '', monthlyPayment: '', ownershipStart: '',
+};
+
 const ResidentManualForm = () => {
-  const [fullName, setFullName] = useState('');
-  const [email, setEmail] = useState('');
-  const [phone, setPhone] = useState('');
-  const [buildingId, setBuildingId] = useState('');
-  const [unitId, setUnitId] = useState('');
-  const [password, setPassword] = useState('Welcome2026!');
+  const [form, setForm] = useState(RESIDENT_FORM_DEFAULTS);
   const [buildings, setBuildings] = useState([]);
   const [units, setUnits] = useState([]);
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState(null);
+  const set = (k) => (v) => setForm(f => ({ ...f, [k]: v }));
 
   useEffect(() => {
     if (!supabaseClient) return;
     supabaseClient.from('buildings').select('id,name').order('name').then(({ data }) => setBuildings(data || []));
   }, []);
   useEffect(() => {
-    if (!buildingId || !supabaseClient) { setUnits([]); setUnitId(''); return; }
-    supabaseClient.from('units').select('id,floor,unit_number').eq('building_id', buildingId).order('floor').order('unit_number').then(({ data }) => setUnits(data || []));
-  }, [buildingId]);
+    if (!form.buildingId || !supabaseClient) { setUnits([]); setForm(f => ({ ...f, unitId: '' })); return; }
+    supabaseClient.from('units').select('id,floor,unit_number').eq('building_id', form.buildingId).order('floor').order('unit_number').then(({ data }) => setUnits(data || []));
+  }, [form.buildingId]);
 
   const submit = async () => {
     setBusy(true); setResult(null);
     try {
-      const building = buildings.find(b => b.id === buildingId);
-      const unit = units.find(u => u.id === unitId);
+      const building = buildings.find(b => b.id === form.buildingId);
+      const unit = units.find(u => u.id === form.unitId);
       if (!building || !unit) { setResult({ ok: false, error: 'Pick a building and unit' }); setBusy(false); return; }
       const { data: { session } } = await supabaseClient.auth.getSession();
       const headers = { 'Content-Type': 'application/json' };
@@ -1276,15 +1290,27 @@ const ResidentManualForm = () => {
       const resp = await fetch(SUPABASE_URL + '/functions/v1/bulk-onboard', {
         method: 'POST', headers,
         body: JSON.stringify({ records: [{
-          email: email.trim(), password, full_name: fullName.trim(), phone: phone.trim() || null,
+          email: form.email.trim(), password: form.password, full_name: form.fullName.trim(), phone: form.phone.trim() || null,
           role: 'resident', building_name: building.name, unit_number: unit.unit_number,
+          date_of_birth:           form.dob || null,
+          passport_number:         form.passport.trim() || null,
+          emirates_id:             form.emiratesId.trim() || null,
+          emergency_contact_name:  form.emergencyContactName.trim() || null,
+          emergency_contact_phone: form.emergencyContactPhone.trim() || null,
+          employer:                form.employer.trim() || null,
+          occupation:              form.occupation.trim() || null,
+          tenure:                  form.tenure || null,
+          lease_start:             form.leaseStart || null,
+          lease_end:               form.leaseEnd   || null,
+          monthly_payment_aed:     form.monthlyPayment === '' ? null : Number(form.monthlyPayment),
+          ownership_start:         form.ownershipStart || null,
         }]}),
       });
       const out = await resp.json();
       const r = out.results && out.results[0];
       if (r && r.ok) {
-        setResult({ ok: true, msg: 'Created resident ' + email + ' (sign in with the temp password to test)' });
-        setFullName(''); setEmail(''); setPhone(''); setUnitId('');
+        setResult({ ok: true, msg: 'Created resident ' + form.email + ' (sign in with the temp password to test)' });
+        setForm(RESIDENT_FORM_DEFAULTS);
       } else {
         setResult({ ok: false, error: (r && r.error) || out.error || 'Unknown error' });
       }
@@ -1294,37 +1320,78 @@ const ResidentManualForm = () => {
     setBusy(false);
   };
 
-  const canSubmit = fullName.trim() && email.trim() && buildingId && unitId && password;
+  const isTenant = form.tenure === 'Tenant';
+  const isOwner  = form.tenure === 'Owner';
+  const canSubmit = form.fullName.trim() && form.email.trim() && form.buildingId && form.unitId && form.password;
+  const sectionLabel = { fontSize: 10, fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--text-secondary)', margin: '4px 0 10px' };
+
   return (
     <div className="card">
       <div style={{fontSize:13,fontWeight:600,marginBottom:14}}>Add a resident</div>
       <div style={{fontSize:11,color:'var(--text-secondary)',marginBottom:18}}>Creates a Supabase Auth account so this person can immediately sign in with the temp password.</div>
+
+      <div style={sectionLabel}>Personal</div>
       <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:14,marginBottom:14}}>
-        <PCField label="Full name" required value={fullName} onChange={setFullName}/>
-        <PCField label="Email" type="email" required value={email} onChange={setEmail}/>
-        <PCField label="Phone" value={phone} onChange={setPhone} placeholder="+971 …"/>
-        <PCField label="Temporary password" required value={password} onChange={setPassword}/>
+        <PCField label="Full name" required value={form.fullName} onChange={set('fullName')}/>
+        <PCField label="Email" type="email" required value={form.email} onChange={set('email')}/>
+        <PCField label="Phone" value={form.phone} onChange={set('phone')} placeholder="+971 …"/>
+        <PCField label="Temporary password" required value={form.password} onChange={set('password')}/>
+        <PCField label="Date of birth" type="date" value={form.dob} onChange={set('dob')}/>
+        <PCField label="Passport number" value={form.passport} onChange={set('passport')} placeholder="e.g. AB1234567"/>
+        <PCField label="Emirates ID" value={form.emiratesId} onChange={set('emiratesId')} placeholder="784-YYYY-NNNNNNN-N"/>
       </div>
-      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:14,marginBottom:20}}>
-        <PCSelect label="Building" required value={buildingId} onChange={setBuildingId} options={buildings.map(b => ({ value: b.id, label: b.name }))}/>
-        <PCSelect label="Unit" required value={unitId} onChange={setUnitId} disabled={!buildingId} options={units.map(u => ({ value: u.id, label: 'Floor ' + u.floor + ' · ' + u.unit_number }))}/>
+
+      <div style={sectionLabel}>Emergency contact</div>
+      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:14,marginBottom:14}}>
+        <PCField label="Contact name" value={form.emergencyContactName} onChange={set('emergencyContactName')}/>
+        <PCField label="Contact phone" value={form.emergencyContactPhone} onChange={set('emergencyContactPhone')} placeholder="+971 …"/>
       </div>
+
+      <div style={sectionLabel}>Employment</div>
+      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:14,marginBottom:14}}>
+        <PCField label="Employer" value={form.employer} onChange={set('employer')}/>
+        <PCField label="Occupation" value={form.occupation} onChange={set('occupation')}/>
+      </div>
+
+      <div style={sectionLabel}>Location</div>
+      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:14,marginBottom:14}}>
+        <PCSelect label="Building" required value={form.buildingId} onChange={set('buildingId')} options={buildings.map(b => ({ value: b.id, label: b.name }))}/>
+        <PCSelect label="Unit" required value={form.unitId} onChange={set('unitId')} disabled={!form.buildingId} options={units.map(u => ({ value: u.id, label: 'Floor ' + u.floor + ' · ' + u.unit_number }))}/>
+      </div>
+
+      <div style={sectionLabel}>Tenure</div>
+      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:14,marginBottom:14}}>
+        <PCSelect label="Tenure" value={form.tenure} onChange={set('tenure')} options={[{value:'Owner',label:'Owner'},{value:'Tenant',label:'Tenant'}]}/>
+        <div/>
+        <PCField label="Lease start" type="date" value={form.leaseStart} onChange={set('leaseStart')} />
+        <PCField label="Lease end"   type="date" value={form.leaseEnd}   onChange={set('leaseEnd')}   />
+        <PCField label="Monthly payment (AED)" type="number" value={form.monthlyPayment} onChange={set('monthlyPayment')} placeholder="Tenant only"/>
+        <PCField label="Ownership start" type="date" value={form.ownershipStart} onChange={set('ownershipStart')} />
+      </div>
+      <div style={{fontSize:11,color:'var(--text-muted)',marginBottom:18,marginTop:-4}}>
+        {isTenant && 'Fill Lease start, Lease end, and Monthly payment. Ownership start should be empty.'}
+        {isOwner  && 'Fill Ownership start. Lease fields should be empty.'}
+        {!form.tenure && 'Pick a tenure to see which fields apply.'}
+      </div>
+
       <button className="btn btn-primary" disabled={busy || !canSubmit} onClick={submit}>{busy ? 'Creating…' : 'Create resident'}</button>
       <FormBanner result={result}/>
     </div>
   );
 };
 
+const SECURITY_FORM_DEFAULTS = {
+  fullName: '', email: '', phone: '', password: 'Welcome2026!',
+  buildingId: '', shift: 'Day',
+  dob: '', passport: '',
+};
+
 const SecurityManualForm = () => {
-  const [fullName, setFullName] = useState('');
-  const [email, setEmail] = useState('');
-  const [phone, setPhone] = useState('');
-  const [buildingId, setBuildingId] = useState('');
-  const [shift, setShift] = useState('Day');
-  const [password, setPassword] = useState('Welcome2026!');
+  const [form, setForm] = useState(SECURITY_FORM_DEFAULTS);
   const [buildings, setBuildings] = useState([]);
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState(null);
+  const set = (k) => (v) => setForm(f => ({ ...f, [k]: v }));
 
   useEffect(() => {
     if (!supabaseClient) return;
@@ -1334,7 +1401,7 @@ const SecurityManualForm = () => {
   const submit = async () => {
     setBusy(true); setResult(null);
     try {
-      const building = buildings.find(b => b.id === buildingId);
+      const building = buildings.find(b => b.id === form.buildingId);
       if (!building) { setResult({ ok: false, error: 'Pick a building' }); setBusy(false); return; }
       const { data: { session } } = await supabaseClient.auth.getSession();
       const headers = { 'Content-Type': 'application/json' };
@@ -1342,15 +1409,17 @@ const SecurityManualForm = () => {
       const resp = await fetch(SUPABASE_URL + '/functions/v1/bulk-onboard', {
         method: 'POST', headers,
         body: JSON.stringify({ records: [{
-          email: email.trim(), password, full_name: fullName.trim(), phone: phone.trim() || null,
-          role: 'security', building_name: building.name, shift,
+          email: form.email.trim(), password: form.password, full_name: form.fullName.trim(), phone: form.phone.trim() || null,
+          role: 'security', building_name: building.name, shift: form.shift,
+          date_of_birth:   form.dob || null,
+          passport_number: form.passport.trim() || null,
         }]}),
       });
       const out = await resp.json();
       const r = out.results && out.results[0];
       if (r && r.ok) {
-        setResult({ ok: true, msg: 'Created guard ' + email + ' assigned to ' + building.name + ' (' + shift + ' shift)' });
-        setFullName(''); setEmail(''); setPhone('');
+        setResult({ ok: true, msg: 'Created guard ' + form.email + ' assigned to ' + building.name + ' (' + form.shift + ' shift)' });
+        setForm(SECURITY_FORM_DEFAULTS);
       } else {
         setResult({ ok: false, error: (r && r.error) || out.error || 'Unknown error' });
       }
@@ -1360,20 +1429,22 @@ const SecurityManualForm = () => {
     setBusy(false);
   };
 
-  const canSubmit = fullName.trim() && email.trim() && buildingId && shift && password;
+  const canSubmit = form.fullName.trim() && form.email.trim() && form.buildingId && form.shift && form.password;
   return (
     <div className="card">
       <div style={{fontSize:13,fontWeight:600,marginBottom:14}}>Add a security guard</div>
       <div style={{fontSize:11,color:'var(--text-secondary)',marginBottom:18}}>Creates a Supabase Auth account so this guard can immediately sign in with the temp password.</div>
       <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:14,marginBottom:14}}>
-        <PCField label="Full name" required value={fullName} onChange={setFullName}/>
-        <PCField label="Email" type="email" required value={email} onChange={setEmail}/>
-        <PCField label="Phone" value={phone} onChange={setPhone} placeholder="+971 …"/>
-        <PCField label="Temporary password" required value={password} onChange={setPassword}/>
+        <PCField label="Full name" required value={form.fullName} onChange={set('fullName')}/>
+        <PCField label="Email" type="email" required value={form.email} onChange={set('email')}/>
+        <PCField label="Phone" value={form.phone} onChange={set('phone')} placeholder="+971 …"/>
+        <PCField label="Temporary password" required value={form.password} onChange={set('password')}/>
+        <PCField label="Date of birth" type="date" value={form.dob} onChange={set('dob')}/>
+        <PCField label="Passport number" value={form.passport} onChange={set('passport')} placeholder="e.g. AB1234567"/>
       </div>
       <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:14,marginBottom:20}}>
-        <PCSelect label="Building" required value={buildingId} onChange={setBuildingId} options={buildings.map(b => ({ value: b.id, label: b.name }))}/>
-        <PCSelect label="Shift" required value={shift} onChange={setShift} options={[{value:'Day',label:'Day'},{value:'Night',label:'Night'},{value:'24h',label:'24h'}]}/>
+        <PCSelect label="Building" required value={form.buildingId} onChange={set('buildingId')} options={buildings.map(b => ({ value: b.id, label: b.name }))}/>
+        <PCSelect label="Shift" required value={form.shift} onChange={set('shift')} options={[{value:'Day',label:'Day'},{value:'Night',label:'Night'},{value:'24h',label:'24h'}]}/>
       </div>
       <button className="btn btn-primary" disabled={busy || !canSubmit} onClick={submit}>{busy ? 'Creating…' : 'Create guard'}</button>
       <FormBanner result={result}/>
