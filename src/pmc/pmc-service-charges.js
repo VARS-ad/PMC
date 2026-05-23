@@ -6,6 +6,7 @@ const PMCServiceChargesPage = () => {
   const [error, setError] = useState(null);
   const [statusFilter, setStatusFilter] = useState('all');
   const [search, setSearch] = useState('');
+  const [showExport, setShowExport] = useState(false);
 
   useEffect(() => {
     let mounted = true;
@@ -66,7 +67,40 @@ const PMCServiceChargesPage = () => {
           <h1>Service Charges</h1>
           <div className="subtitle">All invoices across selected properties. Filter by status, search by invoice/resident/unit.</div>
         </div>
+        <div className="btn-group">
+          <button className="btn" onClick={() => setShowExport(true)} disabled={!invoices || invoices.length === 0}>Export / Print</button>
+        </div>
       </div>
+
+      <ExportPrintModal
+        isOpen={showExport}
+        onClose={() => setShowExport(false)}
+        title="Invoices"
+        sheetName="Invoices"
+        filenameBase="invoices"
+        rows={filtered}
+        dateField="created_at"
+        columns={[
+          { key: 'invoice_number', header: 'Invoice #',    width: 14 },
+          { key: 'resident_name',  header: 'Resident',     width: 24 },
+          { key: 'unit_number',    header: 'Unit',         width: 10 },
+          { key: 'building_name',  header: 'Building',     width: 24 },
+          { key: 'description',    header: 'Description',  width: 30 },
+          { key: 'amount_aed',     header: 'Amount (AED)', width: 14, halign: 'right' },
+          { key: 'status',         header: 'Status',       width: 12 },
+          { key: 'due_date',       header: 'Due Date',     width: 12 },
+          { key: 'created_at',     header: 'Issued',       width: 18,
+            value: (r) => r.created_at ? new Date(r.created_at).toLocaleDateString() : '' },
+        ]}
+        extraMetadata={{
+          'Status Filter': statusFilter === 'all' ? 'All' : statusFilter,
+          'Search':        search || '—',
+          'Total Billed':  'AED ' + Math.round(totals.total).toLocaleString(),
+          'Collected':     'AED ' + Math.round(totals.paid).toLocaleString(),
+          'Pending':       'AED ' + Math.round(totals.pending).toLocaleString(),
+          'Overdue':       'AED ' + Math.round(totals.overdue).toLocaleString(),
+        }}
+      />
 
       <div className="kpi-row">
         <div className="kpi-card"><div className="label">Total Billed</div><div className="value">{fmt(totals.total)}</div></div>

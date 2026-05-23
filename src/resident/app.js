@@ -12,6 +12,7 @@ const ResidentApp = ({ onLogout }) => {
   const [showNotifications, setShowNotifications] = useState(false);
   const [selectedNotifDetail, setSelectedNotifDetail] = useState(null);
   const [showResPropertyDropdown, setShowResPropertyDropdown] = useState(false);
+  const [showPaymentExport, setShowPaymentExport] = useState(false);
   const dismissedNotifIds = data.dismissedNotifIds || [];
   const [resHhTab, setResHhTab] = useState('family');
   const [payModal, setPayModal] = useState(null); // null or { amount: 'AED 3,200' }
@@ -583,9 +584,47 @@ const ResidentApp = ({ onLogout }) => {
           return datePart + ' · ' + methodLabel + (item.refNum ? ' · ' + t('res.ref') + ' #' + item.refNum : '');
         };
         const statusLabelP = (st) => st === 'Paid' ? t('res.paid') : st === 'Penalty' ? t('res.penalty') : st === 'Unpaid' ? t('res.unpaid') : st;
+        // Flatten transactions for Export / Print
+        const paymentRows = transactions.flatMap(group => group.items.map(item => ({
+          item:        titleFor(item),
+          date:        monthShort(item.mIdx) + ' ' + item.day + ', ' + group.year,
+          isoDate:     new Date(group.year, item.mIdx, item.day).toISOString().slice(0, 10),
+          payMethod:   item.payMethod || '',
+          refNum:      item.refNum || '',
+          amount:      item.amount,
+          status:      statusLabelP(item.status),
+        })));
         return (
           <div className="res-content" style={{padding:'12px 16px',paddingBottom:80}}>
-            <div style={{fontSize:20,fontWeight:600,color:'#1a1a1a',marginBottom:20}}>{t('res.payment')}</div>
+            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:20}}>
+              <div style={{fontSize:20,fontWeight:600,color:'#1a1a1a'}}>{t('res.payment')}</div>
+              <button
+                onClick={() => setShowPaymentExport(true)}
+                style={{padding:'8px 14px',border:'1px solid #d5cfc8',borderRadius:5,background:'#fff',color:'#1a1a1a',fontSize:12,fontWeight:500,cursor:'pointer'}}>
+                Export / Print
+              </button>
+            </div>
+            <ExportPrintModal
+              isOpen={showPaymentExport}
+              onClose={() => setShowPaymentExport(false)}
+              title="My Payments"
+              sheetName="Payments"
+              filenameBase="my_payments"
+              rows={paymentRows}
+              dateField="isoDate"
+              columns={[
+                { key: 'item',      header: 'Item',          width: 32 },
+                { key: 'date',      header: 'Date',          width: 14 },
+                { key: 'amount',    header: 'Amount',        width: 14, halign: 'right' },
+                { key: 'payMethod', header: 'Method',        width: 12 },
+                { key: 'refNum',    header: 'Reference #',   width: 14 },
+                { key: 'status',    header: 'Status',        width: 12 },
+              ]}
+              extraMetadata={{
+                'Resident':  (data.currentUser && data.currentUser.name) || 'Resident',
+                'Unit':      'A-304',
+              }}
+            />
 
             {/* Total Due Card — derived from data.invoices for this resident */}
             {(() => {

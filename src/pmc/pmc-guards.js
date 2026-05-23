@@ -9,6 +9,7 @@ const PMCGuardsPage = () => {
   const [buildings, setBuildings] = useState([]);
   const [shiftFilter, setShiftFilter] = useState('all');
   const [search, setSearch] = useState('');
+  const [showExport, setShowExport] = useState(false);
 
   const load = async () => {
     setError(null);
@@ -69,8 +70,36 @@ const PMCGuardsPage = () => {
           <h1>Guards</h1>
           <div className="subtitle">Security staff across managed buildings — duty status, contact, and oversight actions.</div>
         </div>
-        <button className="btn btn-sm" onClick={load}>Refresh</button>
+        <div className="btn-group">
+          <button className="btn" onClick={() => setShowExport(true)} disabled={!guards || guards.length === 0}>Export / Print</button>
+          <button className="btn btn-sm" onClick={load}>Refresh</button>
+        </div>
       </div>
+
+      <ExportPrintModal
+        isOpen={showExport}
+        onClose={() => setShowExport(false)}
+        title="Guards"
+        sheetName="Guards"
+        filenameBase="guards"
+        rows={filtered.map(g => ({ ...g, on_duty: isOnDuty(g.shift) ? 'On Duty' : 'Off Duty' }))}
+        dateField="created_at"
+        columns={[
+          { key: 'full_name',     header: 'Name',     width: 26 },
+          { key: 'phone',         header: 'Phone',    width: 18 },
+          { key: 'building_name', header: 'Building', width: 26 },
+          { key: 'shift',         header: 'Shift',    width: 10 },
+          { key: 'on_duty',       header: 'Status',   width: 12 },
+          { key: 'created_at',    header: 'Joined',   width: 14,
+            value: (r) => r.created_at ? new Date(r.created_at).toLocaleDateString() : '' },
+        ]}
+        extraMetadata={{
+          'Shift Filter':   shiftFilter === 'all' ? 'All' : shiftFilter,
+          'Search':         search || '—',
+          'On Duty Now':    String(onDutyCount),
+          'Off Duty':       String(offDutyCount),
+        }}
+      />
 
       <div className="kpi-row">
         <div className="kpi-card"><div className="label">Total Guards</div><div className="value">{filtered.length}</div></div>

@@ -9,6 +9,8 @@ const PMCPropertiesPage = ({ setPage }) => {
   const [error, setError] = useState(null);
   const [selectedBuilding, setSelectedBuilding] = useState(null);
   const [drill, setDrill] = useState(null); // { building, view }
+  const [showExportBuildings, setShowExportBuildings] = useState(false);
+  const [showExportTenants, setShowExportTenants] = useState(false);
 
   useEffect(() => {
     let mounted = true;
@@ -83,7 +85,67 @@ const PMCPropertiesPage = ({ setPage }) => {
           <h1>Properties</h1>
           <div className="subtitle">Buildings under management. Use the top-bar property selector to focus on specific assets.</div>
         </div>
+        <div className="btn-group">
+          <button className="btn" onClick={() => setShowExportTenants(true)} disabled={!buildings || buildings.length === 0}>Export / Print — Tenants</button>
+          <button className="btn" onClick={() => setShowExportBuildings(true)} disabled={!buildings || buildings.length === 0}>Export / Print — Buildings</button>
+        </div>
       </div>
+
+      <ExportPrintModal
+        isOpen={showExportBuildings}
+        onClose={() => setShowExportBuildings(false)}
+        title="Buildings"
+        sheetName="Buildings"
+        filenameBase="buildings"
+        rows={buildings || []}
+        columns={[
+          { key: 'name',           header: 'Building',      width: 28 },
+          { key: 'address',        header: 'Address',       width: 36 },
+          { key: 'unitCount',      header: 'Units',         width: 8,  halign: 'right' },
+          { key: 'occupiedCount',  header: 'Occupied',      width: 10, halign: 'right' },
+          { key: 'monthlyRev',     header: 'Monthly Rev (AED)',  width: 16, halign: 'right',
+            value: (r) => Math.round(r.monthlyRev || 0) },
+          { key: 'collected',      header: 'Collected (AED)',    width: 16, halign: 'right',
+            value: (r) => Math.round(r.collected || 0) },
+          { key: 'outstanding',    header: 'Outstanding (AED)',  width: 16, halign: 'right',
+            value: (r) => Math.round(r.outstanding || 0) },
+          { key: 'openSRs',        header: 'Open SRs',      width: 10, halign: 'right' },
+          { key: 'totalSRs',       header: 'Total SRs',     width: 10, halign: 'right' },
+          { key: 'notes',          header: 'Notes',         width: 30 },
+        ]}
+        extraMetadata={{
+          'Property Filter': selectedProperties.length === 0 ? 'All buildings' : (selectedProperties.length + ' selected'),
+          'Total Buildings': String((buildings || []).length),
+        }}
+      />
+
+      <ExportPrintModal
+        isOpen={showExportTenants}
+        onClose={() => setShowExportTenants(false)}
+        title="Tenants"
+        sheetName="Tenants"
+        filenameBase="tenants"
+        rows={(buildings || []).flatMap(b => (b.assignments || []).map(a => ({
+          ...a,
+          building_name: b.name,
+        })))}
+        dateField="lease_start"
+        columns={[
+          { key: 'resident_name',       header: 'Resident',          width: 26 },
+          { key: 'resident_phone',      header: 'Phone',             width: 18 },
+          { key: 'building_name',       header: 'Building',          width: 24 },
+          { key: 'unit_number',         header: 'Unit',              width: 10 },
+          { key: 'floor',               header: 'Floor',             width: 8,  halign: 'right' },
+          { key: 'tenure',              header: 'Tenure',            width: 10 },
+          { key: 'monthly_payment_aed', header: 'Monthly (AED)',     width: 14, halign: 'right' },
+          { key: 'lease_start',         header: 'Lease Start',       width: 12 },
+          { key: 'lease_end',           header: 'Lease End',         width: 12 },
+          { key: 'ownership_start',     header: 'Ownership Start',   width: 14 },
+        ]}
+        extraMetadata={{
+          'Property Filter':  selectedProperties.length === 0 ? 'All buildings' : (selectedProperties.length + ' selected'),
+        }}
+      />
 
       {error && <div className="card"><div style={{color:'#8b4a42',fontSize:13}}>{error}</div></div>}
       {buildings === null ? (

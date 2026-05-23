@@ -11,6 +11,7 @@ const PMCVisitorsPage = () => {
   const [dateFromFilter, setDateFromFilter] = useState('');
   const [dateToFilter, setDateToFilter] = useState('');
   const [search, setSearch] = useState('');
+  const [showExport, setShowExport] = useState(false);
 
   const load = async () => {
     setError(null);
@@ -89,8 +90,41 @@ const PMCVisitorsPage = () => {
           <h1>Visitors</h1>
           <div className="subtitle">All visitor activity across managed buildings — past, today, and scheduled.</div>
         </div>
-        <button className="btn btn-sm" onClick={load}>Refresh</button>
+        <div className="btn-group">
+          <button className="btn" onClick={() => setShowExport(true)} disabled={!visits || visits.length === 0}>Export / Print</button>
+          <button className="btn btn-sm" onClick={load}>Refresh</button>
+        </div>
       </div>
+
+      <ExportPrintModal
+        isOpen={showExport}
+        onClose={() => setShowExport(false)}
+        title="Visitors"
+        sheetName="Visitors"
+        filenameBase="visitors"
+        rows={filtered}
+        dateField="visit_date"
+        columns={[
+          { key: 'permit_ref',    header: 'Permit Ref', width: 14 },
+          { key: 'visitor_name',  header: 'Visitor',    width: 26 },
+          { key: 'visitor_phone', header: 'Phone',      width: 18 },
+          { key: 'type',          header: 'Type',       width: 16 },
+          { key: 'unit_number',   header: 'Unit',       width: 10 },
+          { key: 'building_name', header: 'Building',   width: 24 },
+          { key: 'visit_date',    header: 'Visit Date', width: 12 },
+          { key: 'visit_time',    header: 'Visit Time', width: 12 },
+          { key: 'purpose',       header: 'Purpose',    width: 24 },
+          { key: 'vehicle',       header: 'Vehicle',    width: 14 },
+          { key: 'status',        header: 'Status',     width: 14 },
+        ]}
+        extraMetadata={{
+          'Status Filter': statusFilter === 'all' ? 'All'  : statusFilter,
+          'Type Filter':   typeFilter   === 'all' ? 'All'  : typeFilter,
+          'Search':        search || '—',
+          'On-Premise Now':String(counts.onPremise),
+          'Upcoming':      String(counts.upcoming),
+        }}
+      />
 
       <div className="kpi-row">
         <div className="kpi-card"><div className="label">Total</div><div className="value">{counts.total}</div></div>

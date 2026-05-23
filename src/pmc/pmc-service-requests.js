@@ -106,25 +106,6 @@ const PMCServiceRequestsPage = () => {
     urgent:      filtered.filter(s => s.priority === 'Urgent' && !['Done','Closed'].includes(s.status)).length,
   };
 
-  const exportTo = (format) => {
-    setShowExport(false);
-    // Stub: real generation TBD. Provide CSV stub right here.
-    if (format === 'CSV') {
-      const headers = ['ID','Category','Description','Priority','Status','Building','Unit','Resident','Preferred date','Created'];
-      const lines = [headers.join(',')].concat(filtered.map(s => [
-        s.id, s.category, '"' + (s.description || '').replace(/"/g, '""') + '"', s.priority, s.status, s.building_name, s.unit_number, s.resident_name, s.preferred_date || '', s.created_at || ''
-      ].join(',')));
-      const blob = new Blob([lines.join('\n')], { type: 'text/csv;charset=utf-8' });
-      const a = document.createElement('a');
-      a.href = URL.createObjectURL(blob);
-      a.download = 'service-requests-' + new Date().toISOString().slice(0,10) + '.csv';
-      a.click();
-      setTimeout(() => URL.revokeObjectURL(a.href), 1000);
-      return;
-    }
-    alert('Export → ' + format + '\n\n' + filtered.length + ' rows ready. File generation gateway is under development — coming soon.');
-  };
-
   const statusBadge = (s) => {
     const c = ({
       'New':         { bg: '#f5f3f0', fg: '#7a6e60' },
@@ -144,22 +125,43 @@ const PMCServiceRequestsPage = () => {
           <h1>Service Requests</h1>
           <div className="subtitle">All maintenance + service tickets across selected properties. Click a row for details.</div>
         </div>
-        <div style={{position:'relative'}}>
-          <button className="btn btn-primary" onClick={() => setShowExport(!showExport)}>Export ▾</button>
-          {showExport && (
-            <>
-              <div onClick={() => setShowExport(false)} style={{position:'fixed',top:0,left:0,right:0,bottom:0,zIndex:899}}/>
-              <div style={{position:'absolute',right:0,top:'100%',marginTop:6,minWidth:200,background:'#fff',border:'1px solid var(--border-light)',borderRadius:8,boxShadow:'0 8px 24px rgba(0,0,0,0.1)',zIndex:900,overflow:'hidden'}}>
-                {['PDF','Word','CSV','Excel'].map(f => (
-                  <div key={f} onClick={() => exportTo(f)} style={{padding:'12px 16px',cursor:'pointer',fontSize:13,borderBottom:'1px solid var(--border-light)'}} onMouseEnter={e=>e.currentTarget.style.background='var(--bg-page)'} onMouseLeave={e=>e.currentTarget.style.background='#fff'}>
-                    Export as {f}
-                  </div>
-                ))}
-              </div>
-            </>
-          )}
+        <div className="btn-group">
+          <button className="btn" onClick={() => setShowExport(true)} disabled={!rows || rows.length === 0}>Export / Print</button>
         </div>
       </div>
+
+      <ExportPrintModal
+        isOpen={showExport}
+        onClose={() => setShowExport(false)}
+        title="Service Requests"
+        sheetName="Service Requests"
+        filenameBase="service_requests"
+        rows={filtered}
+        dateField="created_at"
+        columns={[
+          { key: 'id',             header: 'ID',          width: 14 },
+          { key: 'category',       header: 'Category',    width: 18 },
+          { key: 'description',    header: 'Description', width: 36 },
+          { key: 'priority',       header: 'Priority',    width: 10 },
+          { key: 'status',         header: 'Status',      width: 14 },
+          { key: 'building_name',  header: 'Building',    width: 22 },
+          { key: 'unit_number',    header: 'Unit',        width: 10 },
+          { key: 'resident_name',  header: 'Resident',    width: 22 },
+          { key: 'preferred_date', header: 'Preferred',   width: 12 },
+          { key: 'created_at',     header: 'Created',     width: 18,
+            value: (r) => r.created_at ? new Date(r.created_at).toLocaleDateString() : '' },
+          { key: 'resolved_at',    header: 'Resolved',    width: 18,
+            value: (r) => r.resolved_at ? new Date(r.resolved_at).toLocaleDateString() : '' },
+        ]}
+        extraMetadata={{
+          'Status Filter':   statusFilter   === 'all' ? 'All' : statusFilter,
+          'Priority Filter': priorityFilter === 'all' ? 'All' : priorityFilter,
+          'Category Filter': categoryFilter === 'all' ? 'All' : categoryFilter,
+          'Search':          search || '—',
+          'Open Tickets':    String(counts.open),
+          'Urgent Open':     String(counts.urgent),
+        }}
+      />
 
       <div className="kpi-row">
         <div className="kpi-card"><div className="label">Total</div><div className="value">{counts.total}</div></div>
