@@ -50,13 +50,29 @@ const _buildMetaPairs = (title, rows, extra) => {
   return base.concat(extraPairs);
 };
 
-// Convert a row + columns array into a plain text 2D array for the table body.
+// Convert a row + columns array into a 2D value array for the table body.
+// Numeric columns (column.numeric === true, or values that already are numbers)
+// are coerced to Number so downstream renderers (PDF + Excel) can apply thousand
+// separators and right-align. PostgREST returns NUMERIC types as strings, so we
+// coerce here rather than asking every caller to wrap with `value: r => Number(...)`.
 const _rowsToAOA = (rows, columns) =>
   rows.map(r => columns.map(c => {
     const raw = typeof c.value === 'function' ? c.value(r) : r[c.key];
-    if (raw == null) return '';
+    if (raw == null || raw === '') return '';
+    if (c.numeric) {
+      const n = Number(raw);
+      return Number.isFinite(n) ? n : raw;
+    }
     return raw;
   }));
+
+// Format a numeric value with locale-aware thousand separators. Integer-looking
+// numbers stay integers; anything with decimals keeps up to 2 places.
+const _formatNumber = (v) => {
+  if (typeof v !== 'number' || !Number.isFinite(v)) return v == null ? '' : String(v);
+  const fractionDigits = Number.isInteger(v) ? 0 : 2;
+  return v.toLocaleString('en-US', { minimumFractionDigits: fractionDigits, maximumFractionDigits: fractionDigits });
+};
 
 // ---------- PDF export ----------
 
@@ -157,7 +173,7 @@ const exportReportPDF = ({ title, subtitle, columns, rows, metadata, filename })
   doc.autoTable({
     startY: y,
     head: [columns.map(c => c.header)],
-    body: aoa.map(r => r.map(v => v == null ? '' : String(v))),
+    body: aoa.map(r => r.map(v => v == null ? '' : (typeof v === 'number' ? _formatNumber(v) : String(v)))),
     theme: 'grid',
     tableWidth: usableW,
     styles: {
@@ -294,12 +310,14 @@ const exportReportExcel = ({ title, subtitle, sheetName, columns, rows, metadata
     const isAlt = idx % 2 === 1;
     row.forEach((val, c) => {
       const isNumber = typeof val === 'number';
-      setCell(r, c, val, {
+      const style = {
         font: baseFont,
         alignment: { horizontal: isNumber ? 'right' : 'left', vertical: 'center' },
         border: cellBorder,
         fill: { patternType: 'solid', fgColor: { rgb: isAlt ? C.surface : 'FFFFFF' } },
-      });
+      };
+      if (isNumber) style.numFmt = Number.isInteger(val) ? '#,##0' : '#,##0.00';
+      setCell(r, c, val, style);
     });
     r++;
   });

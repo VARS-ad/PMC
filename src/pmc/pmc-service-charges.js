@@ -86,7 +86,7 @@ const PMCServiceChargesPage = () => {
           { key: 'unit_number',    header: 'Unit',         width: 10 },
           { key: 'building_name',  header: 'Building',     width: 24 },
           { key: 'description',    header: 'Description',  width: 30 },
-          { key: 'amount_aed',     header: 'Amount (AED)', width: 14, halign: 'right' },
+          { key: 'amount_aed',     header: 'Amount (AED)', width: 14, halign: 'right', numeric: true },
           { key: 'status',         header: 'Status',       width: 12 },
           { key: 'due_date',       header: 'Due Date',     width: 12 },
           { key: 'created_at',     header: 'Issued',       width: 18,
