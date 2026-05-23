@@ -856,6 +856,3 @@ const ComplianceReports = ({ stats }) => {
   );
 };
 
-</script>
-<script type="text/babel" src="src/resident/payment-method-modal.js"></script>
-<script type="text/babel">

@@ -13,5 +13,3 @@ const PlaceholderPage = ({ title, description }) => {
   );
 };
 
-</script>
-<script type="text/babel" src="src/resident/pre-approve-form.js"></script>
