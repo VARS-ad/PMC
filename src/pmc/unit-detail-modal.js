@@ -11,16 +11,20 @@
 // mount.
 
 const UnitDetailModal = ({ unit, building, assignment: passedAssignment, profile: passedProfile, onClose }) => {
-  const [assignment, setAssignment] = useState(passedAssignment || null);
-  const [profile, setProfile]       = useState(passedProfile || null);
-  const [invoices, setInvoices]     = useState(null);
+  const [assignment, setAssignment]         = useState(passedAssignment || null);
+  const [profile, setProfile]               = useState(passedProfile || null);
+  // When the unit is vacant but unpaid invoices remain, we resolve the
+  // most-recent invoice's resident_profile_id into a profile and show
+  // them as the "former resident" responsible for the outstanding balance.
+  const [formerResident, setFormerResident] = useState(null);
+  const [invoices, setInvoices]             = useState(null);
   const [showAttachments, setShowAttachments] = useState(false);
 
   useEffect(() => {
     let mounted = true;
     if (!supabaseClient) { setInvoices([]); return; }
     (async () => {
-      // Fetch assignment if caller didn't pass one
+      // Fetch current assignment + profile if caller didn't pass them
       let a = passedAssignment;
       let p = passedProfile;
       if (!a) {
@@ -43,14 +47,31 @@ const UnitDetailModal = ({ unit, building, assignment: passedAssignment, profile
       setAssignment(a);
       setProfile(p);
 
-      // Unpaid invoices for this unit
+      // Unpaid invoices for this unit — include resident_profile_id so we
+      // can surface the historical resident when the unit is vacant.
       const { data: invs } = await supabaseClient
         .from('invoices')
-        .select('id,invoice_number,description,amount_aed,due_date,status')
+        .select('id,invoice_number,description,amount_aed,due_date,status,resident_profile_id,created_at')
         .eq('unit_id', unit.id)
         .in('status', ['Pending', 'Overdue'])
         .order('due_date', { ascending: true });
-      if (mounted) setInvoices(invs || []);
+      if (!mounted) return;
+      setInvoices(invs || []);
+
+      // Vacant unit + outstanding balance → look up the most recent invoice's
+      // resident and present them as the former resident.
+      if (!p && (invs || []).length > 0) {
+        const sorted = [...invs].sort((x, y) => (y.created_at || '').localeCompare(x.created_at || ''));
+        const lastPid = sorted.find(i => i.resident_profile_id)?.resident_profile_id;
+        if (lastPid) {
+          const { data: fp } = await supabaseClient
+            .from('profiles')
+            .select('id,full_name,phone,email')
+            .eq('id', lastPid)
+            .maybeSingle();
+          if (mounted) setFormerResident(fp || null);
+        }
+      }
     })();
     return () => { mounted = false; };
   }, [unit.id]);
@@ -88,13 +109,22 @@ const UnitDetailModal = ({ unit, building, assignment: passedAssignment, profile
           <div style={{padding:18,fontSize:13,color:'var(--text-muted)'}}>Loading…</div>
         ) : (
           <>
-            <Section label="Resident">
+            <Section label={profile ? 'Resident' : (formerResident ? 'Former Resident' : 'Resident')}>
               {profile ? (
                 <>
                   <Field label="Name">{profile.full_name}</Field>
                   <Field label="Phone">{profile.phone}</Field>
                   <Field label="Email">{profile.email}</Field>
                   <Field label="Tenure">{assignment && assignment.tenure}</Field>
+                </>
+              ) : formerResident ? (
+                <>
+                  <div style={{padding:'8px 10px',background:'#fdf2dc',border:'1px solid #f0e2bd',borderRadius:6,fontSize:12,color:'#7a5a1f',marginBottom:12}}>
+                    ⚠ Unit is currently vacant. Outstanding balance below was billed to the previous resident.
+                  </div>
+                  <Field label="Name">{formerResident.full_name}</Field>
+                  <Field label="Phone">{formerResident.phone}</Field>
+                  <Field label="Email">{formerResident.email}</Field>
                 </>
               ) : (
                 <div style={{fontSize:13,color:'#61707D',padding:'6px 0'}}>Vacant — no resident assigned to this unit.</div>
