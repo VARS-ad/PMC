@@ -126,7 +126,7 @@ const PMCVisitorsPage = () => {
         }}
       />
 
-      <div className="kpi-row">
+      <div className="kpi-row" style={{gridTemplateColumns:'repeat(5, minmax(0, 1fr))'}}>
         <div className="kpi-card"><div className="label">Total</div><div className="value">{counts.total}</div></div>
         <div className="kpi-card"><div className="label">Today</div><div className="value">{counts.today}</div></div>
         <div className="kpi-card"><div className="label">On-Premise</div><div className="value" style={{color:'#3E4C59'}}>{counts.onPremise}</div></div>

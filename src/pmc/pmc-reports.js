@@ -412,7 +412,7 @@ const FinanceReports = ({ stats, fmt, fmtShort }) => {
       {/* 1. Hero KPI strip */}
       <div className="card">
         <div style={{fontSize:13,fontWeight:600,marginBottom:14}}>Portfolio Health Summary</div>
-        <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit, minmax(160px, 1fr))',gap:14}}>
+        <div style={{display:'grid',gridTemplateColumns:'repeat(6, minmax(0, 1fr))',gap:14}}>
           {[
             { label: 'Occupancy Rate', value: stats.occupancyRate + '%' },
             { label: 'Monthly Revenue (run-rate)', value: fmtShort(stats.monthlyRevenue) },
@@ -421,9 +421,9 @@ const FinanceReports = ({ stats, fmt, fmtShort }) => {
             { label: 'Open Maintenance', value: stats.openSRs },
             { label: 'Net Operating Income (est.)', value: fmtShort(stats.noi) },
           ].map((k, i) => (
-            <div key={i} style={{padding:'18px 16px',background:'var(--bg-surface)',borderRadius:10,border:'1px solid var(--border-light)'}}>
+            <div key={i} style={{padding:'18px 16px',background:'var(--bg-surface)',borderRadius:10,border:'1px solid var(--border-light)',minWidth:0}}>
               <div style={{fontSize:10,letterSpacing:'0.06em',textTransform:'uppercase',color:'var(--text-secondary)',marginBottom:6}}>{k.label}</div>
-              <div style={{fontSize:26,fontWeight:600,color:'var(--text-dark)',letterSpacing:'-0.03em'}}>{k.value}</div>
+              <div style={{fontSize:22,fontWeight:600,color:'var(--text-dark)',letterSpacing:'-0.025em',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{k.value}</div>
             </div>
           ))}
         </div>
@@ -477,8 +477,8 @@ const FinanceReports = ({ stats, fmt, fmtShort }) => {
         )}
       </div>
 
-      {/* Side-by-side: Invoice Status (stacked bar) + Cumulative Revenue (line) */}
-      <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit, minmax(440px, 1fr))',gap:18}}>
+      {/* Charts stacked full-width */}
+      <div style={{display:'grid',gridTemplateColumns:'1fr',gap:18}}>
       <div className="card">
         <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:6}}>
           <div>

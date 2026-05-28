@@ -102,7 +102,7 @@ const PMCServiceChargesPage = () => {
         }}
       />
 
-      <div className="kpi-row">
+      <div className="kpi-row" style={{gridTemplateColumns:'repeat(4, minmax(0, 1fr))'}}>
         <div className="kpi-card"><div className="label">Total Billed</div><div className="value">{fmt(totals.total)}</div></div>
         <div className="kpi-card"><div className="label">Collected</div><div className="value" style={{color:'#5a6b4f'}}>{fmt(totals.paid)}</div></div>
         <div className="kpi-card"><div className="label">Pending</div><div className="value" style={{color:'#a07d3c'}}>{fmt(totals.pending)}</div></div>
@@ -176,7 +176,7 @@ const PMCServiceChargesPage = () => {
           bySource[key] = (bySource[key] || 0) + Number(i.amount_aed);
         });
         return (
-          <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit, minmax(420px, 1fr))',gap:18}}>
+          <div style={{display:'grid',gridTemplateColumns:'1fr',gap:18}}>
             <div className="card">
               <div style={{marginBottom:6}}>
                 <div style={{fontSize:13,fontWeight:600}}>Invoices by Month</div>

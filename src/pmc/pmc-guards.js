@@ -101,7 +101,7 @@ const PMCGuardsPage = () => {
         }}
       />
 
-      <div className="kpi-row">
+      <div className="kpi-row" style={{gridTemplateColumns:'repeat(4, minmax(0, 1fr))'}}>
         <div className="kpi-card"><div className="label">Total Guards</div><div className="value">{filtered.length}</div></div>
         <div className="kpi-card"><div className="label">On Duty Now</div><div className="value" style={{color:'#5a6b4f'}}>{onDutyCount}</div></div>
         <div className="kpi-card"><div className="label">Off Duty</div><div className="value" style={{color:'#61707D'}}>{offDutyCount}</div></div>

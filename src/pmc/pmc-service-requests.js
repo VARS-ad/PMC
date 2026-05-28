@@ -163,7 +163,7 @@ const PMCServiceRequestsPage = () => {
         }}
       />
 
-      <div className="kpi-row">
+      <div className="kpi-row" style={{gridTemplateColumns:'repeat(5, minmax(0, 1fr))'}}>
         <div className="kpi-card"><div className="label">Total</div><div className="value">{counts.total}</div></div>
         <div className="kpi-card"><div className="label">Open</div><div className="value" style={{color:'#a07d3c'}}>{counts.open}</div></div>
         <div className="kpi-card"><div className="label">In Progress</div><div className="value">{counts.inProgress}</div></div>
