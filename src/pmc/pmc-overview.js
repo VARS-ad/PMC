@@ -28,8 +28,11 @@ const PMCOverviewPage = ({ setPage }) => {
   const [stats, setStats] = useState(null);
   const [error, setError] = useState(null);
   // Selected period for the financial KPIs and Service Charge Collection card.
-  // '1m' = current calendar month; otherwise the last N months including this one.
+  // '1m' / '2m' / '3m' / '12m' = rolling last N months (1m = this month only).
+  // 'custom' = user-picked from/to dates.
   const [timeRange, setTimeRange] = useState('1m');
+  const [customStart, setCustomStart] = useState('');
+  const [customEnd, setCustomEnd] = useState('');
   const monthsBack = ({ '1m': 1, '2m': 2, '3m': 3, '12m': 12 })[timeRange] || 1;
 
   useEffect(() => {
@@ -55,9 +58,17 @@ const PMCOverviewPage = ({ setPage }) => {
 
         const today = new Date().toISOString().slice(0,10);
         const now = new Date();
-        // Period start = first day of (now.month - monthsBack + 1). So '1m' is
-        // this month only, '3m' is the rolling window of this + 2 prior months.
-        const periodStart = new Date(now.getFullYear(), now.getMonth() - monthsBack + 1, 1).toISOString().slice(0,10);
+        // Period bounds — depend on the user's time-range pick.
+        // For custom mode, fall back to "this month" if either bound is empty
+        // so the data still loads sensibly while the user types dates.
+        let periodStart, periodEnd;
+        if (timeRange === 'custom' && customStart && customEnd) {
+          periodStart = customStart;
+          periodEnd   = customEnd;
+        } else {
+          periodStart = new Date(now.getFullYear(), now.getMonth() - monthsBack + 1, 1).toISOString().slice(0,10);
+          periodEnd   = today;
+        }
         const thisMonthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0,10);
         const lastMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1).toISOString().slice(0,10);
         const lastMonthEnd   = new Date(now.getFullYear(), now.getMonth(), 0).toISOString().slice(0,10);
@@ -99,8 +110,11 @@ const PMCOverviewPage = ({ setPage }) => {
 
         // -------- Service Charge Collection (SELECTED PERIOD) --------
         // Three buckets so the card can show Collection / Pending / Outstanding
-        // distinctly. periodInvoices honours the user's time-range pill.
-        const periodInvoices = (invoices || []).filter(i => i.created_at && i.created_at.slice(0,10) >= periodStart);
+        // distinctly. periodInvoices honours the user's time-range dropdown.
+        const periodInvoices = (invoices || []).filter(i => {
+          const d = (i.created_at || '').slice(0,10);
+          return d && d >= periodStart && d <= periodEnd;
+        });
         const monthBilled = periodInvoices.reduce((s, i) => s + Number(i.amount_aed), 0);
         const monthCollected = periodInvoices.filter(i => i.status === 'Paid').reduce((s, i) => s + Number(i.amount_aed), 0);
         const monthPending = periodInvoices.filter(i => i.status === 'Pending').reduce((s, i) => s + Number(i.amount_aed), 0);
@@ -169,15 +183,19 @@ const PMCOverviewPage = ({ setPage }) => {
       }
     })();
     return () => { mounted = false; };
-  }, [selectedProperties.join(','), timeRange]);
+  }, [selectedProperties.join(','), timeRange, customStart, customEnd]);
 
   const fmt = (n) => 'AED ' + Math.round(n).toLocaleString();
 
   // Dynamic current-month label, e.g. "May 2026". Auto-updates when the
   // calendar month changes — the user explicitly asked for this.
   const monthLabel = new Date().toLocaleString('en-GB', { month: 'long', year: 'numeric' });
-  // Human label for the selected time-range pill (used in KPI captions + card title).
-  const periodLabel = timeRange === '1m' ? monthLabel : ('Last ' + monthsBack + ' Months');
+  // Human label for the selected time-range dropdown (used in KPI captions + card title).
+  const periodLabel = timeRange === 'custom'
+    ? (customStart && customEnd ? customStart + ' → ' + customEnd : monthLabel)
+    : timeRange === '1m'
+      ? monthLabel
+      : 'Last ' + monthsBack + ' Months';
 
   if (error) return (<div><div className="page-header"><h1>Overview</h1></div><div className="card"><div style={{color:'#8b4a42',fontSize:13}}>{error}</div></div></div>);
 
@@ -214,24 +232,25 @@ const PMCOverviewPage = ({ setPage }) => {
     <div>
       <div className="page-header">
         <div><h1>Overview</h1></div>
-        <div style={{display:'flex',gap:6,alignItems:'center'}}>
-          {[{id:'1m',label:'1M'},{id:'2m',label:'2M'},{id:'3m',label:'3M'},{id:'12m',label:'12M'}].map(opt => (
-            <button key={opt.id} onClick={()=>setTimeRange(opt.id)}
-              style={{
-                padding:'7px 14px',
-                fontSize:12,
-                fontWeight:500,
-                borderRadius:6,
-                cursor:'pointer',
-                background: timeRange === opt.id ? 'var(--accent-warm-dark)' : 'transparent',
-                color: timeRange === opt.id ? '#fff' : 'var(--text-secondary)',
-                border: '1px solid ' + (timeRange === opt.id ? 'var(--accent-warm-dark)' : 'var(--border-light)'),
-                transition:'all .12s',
-                fontFamily:'inherit',
-              }}>
-              {opt.label}
-            </button>
-          ))}
+        <div style={{display:'flex',gap:10,alignItems:'center',flexWrap:'wrap'}}>
+          <label style={{fontSize:11,letterSpacing:'0.06em',textTransform:'uppercase',color:'var(--text-secondary)',fontWeight:600}}>Selected time range</label>
+          <select value={timeRange} onChange={e => setTimeRange(e.target.value)}
+            style={{padding:'8px 14px',fontSize:13,fontWeight:500,borderRadius:6,background:'#fff',border:'1px solid var(--border-light)',color:'var(--text-dark)',cursor:'pointer',fontFamily:'inherit',outline:'none'}}>
+            <option value="1m">1 Month (this month)</option>
+            <option value="2m">2 Months</option>
+            <option value="3m">3 Months</option>
+            <option value="12m">12 Months</option>
+            <option value="custom">Custom range…</option>
+          </select>
+          {timeRange === 'custom' && (
+            <>
+              <input type="date" value={customStart} onChange={e => setCustomStart(e.target.value)}
+                style={{padding:'8px 12px',fontSize:13,borderRadius:6,background:'#fff',border:'1px solid var(--border-light)',color:'var(--text-dark)',fontFamily:'inherit',outline:'none'}}/>
+              <span style={{color:'var(--text-muted)',fontSize:13}}>→</span>
+              <input type="date" value={customEnd} onChange={e => setCustomEnd(e.target.value)}
+                style={{padding:'8px 12px',fontSize:13,borderRadius:6,background:'#fff',border:'1px solid var(--border-light)',color:'var(--text-dark)',fontFamily:'inherit',outline:'none'}}/>
+            </>
+          )}
         </div>
       </div>
 
