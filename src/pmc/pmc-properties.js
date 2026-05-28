@@ -440,25 +440,25 @@ const PMCPropertiesPage = ({ setPage }) => {
             const cols = isCommercial ? 7 : 6;
             return (
               <div key={b.id} className="card">
-                <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:10}}>
+                <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:14}}>
                   <div style={{flex:1,minWidth:0,cursor:'pointer'}} onClick={open}>
-                    <div style={{fontSize:18,fontWeight:600,color:'var(--text-dark)'}}>{b.name}</div>
-                    <div style={{fontSize:12,color:'var(--text-muted)',marginTop:2}}>{b.address || '—'}</div>
+                    <div style={{fontSize:20,fontWeight:500,color:'var(--text-dark)',letterSpacing:'-0.02em',lineHeight:1.15}}>{b.name}</div>
+                    <div style={{fontSize:12,color:'var(--text-muted)',marginTop:4}}>{b.address || '—'}</div>
                   </div>
                 </div>
                 <div style={{display:'grid',gridTemplateColumns:`repeat(${cols}, minmax(0, 1fr))`,gap:8,marginTop:14}}>
-                  {/* Custom Units stat: value · % occupied subline · existing hint.
-                      Mirrors PMCStat styling so it lines up with the rest. */}
+                  {/* Custom Units stat. Matches PMCStat exactly so the
+                      tile row lines up. The "View floors & units" tail
+                      caption is gone; the whole tile is clickable. */}
                   <div
                     onClick={(e) => { e.stopPropagation(); open(); }}
-                    style={{padding:'12px 14px',background:'var(--bg-surface)',borderRadius:6,border:'1px solid var(--border-light)',cursor:'pointer',transition:'background 0.15s, border-color 0.15s'}}
+                    title="View floors & units"
+                    style={{padding:'14px 16px',background:'var(--bg-surface)',borderRadius:6,border:'1px solid var(--border-light)',cursor:'pointer',transition:'background 0.15s, border-color 0.15s'}}
                     onMouseEnter={e => { e.currentTarget.style.background = 'var(--accent-warm-light)'; e.currentTarget.style.borderColor = 'var(--accent-warm)'; }}
                     onMouseLeave={e => { e.currentTarget.style.background = 'var(--bg-surface)'; e.currentTarget.style.borderColor = 'var(--border-light)'; }}
                   >
-                    <div style={{fontSize:10,letterSpacing:'0.04em',textTransform:'uppercase',color:'var(--text-secondary)',marginBottom:4}}>Units</div>
-                    <div style={{fontSize:15,fontWeight:600,color:'var(--text-dark)'}}>{b.unitCount}</div>
-                    <div style={{fontSize:11,color:'var(--text-secondary)',marginTop:2}}>{occupancyPct}% occupied</div>
-                    <div style={{fontSize:10,color:'var(--text-muted)',marginTop:3}}>View floors & units</div>
+                    <div style={{fontSize:11,letterSpacing:'0.08em',textTransform:'uppercase',color:'var(--text-secondary)',marginBottom:6,fontWeight:500}}>Units</div>
+                    <div style={{fontSize:16,fontWeight:600,color:'var(--text-dark)',letterSpacing:'-0.015em'}}>{b.unitCount} <span style={{fontSize:12,fontWeight:400,color:'var(--text-muted)',letterSpacing:0}}>· {occupancyPct}% occupied</span></div>
                   </div>
                   {isCommercial && (
                     <PMCStat label="Monthly Run-Rate"  value={'AED ' + Math.round(b.monthlyRev).toLocaleString()}          onClick={() => setDrill({ building: b, view: 'tenants' })}        hint="Tenants + lease rates"/>
@@ -474,12 +474,14 @@ const PMCPropertiesPage = ({ setPage }) => {
             );
           };
 
-          // Section block: eyebrow + count subline + cards (or empty state).
+          // Section block: single-line header + cards. The old design
+          // stacked "RESIDENTIAL" + "2 buildings" on two rows; we now
+          // append the count as a quiet suffix on the eyebrow itself.
           const renderSection = (label, kind, list) => (
             <div style={{marginBottom:32}}>
-              <div style={{...sectionEyebrow, marginBottom:4}}>{label}</div>
-              <div style={{fontSize:12,color:'var(--text-muted)',marginBottom:14}}>
-                {list.length} {list.length === 1 ? 'building' : 'buildings'}
+              <div style={{...sectionEyebrow, marginBottom:14, display:'flex', alignItems:'center', gap:10}}>
+                <span>{label}</span>
+                <span style={{color:'var(--text-muted)',fontWeight:400,letterSpacing:0,textTransform:'none',fontSize:12}}>· {list.length} {list.length === 1 ? 'building' : 'buildings'}</span>
               </div>
               {list.length === 0 ? (
                 <div className="card"><div style={{padding:32,color:'var(--text-muted)',fontSize:13,textAlign:'center'}}>No {label.toLowerCase()} buildings yet. Add via <strong>Profile Creation → Buildings</strong>.</div></div>

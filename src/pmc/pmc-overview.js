@@ -3,11 +3,16 @@
 // eyebrow headings. Below: Service Request Summary → Service Charge Collection
 // (this month) → Units in Arrears → Service Requests Requiring Action.
 
+// The hint used to render as a permanent third line under every tile,
+// which added noise to dense building cards. It now lives on the
+// title attribute (browser tooltip on hover) so the tile reads as a
+// clean label + value pair.
 const PMCStat = ({ label, value, color, onClick, hint }) => (
   <div
     onClick={(e) => { if (onClick) { e.stopPropagation(); onClick(); } }}
+    title={hint || ''}
     style={{
-      padding:'12px 14px',
+      padding:'14px 16px',
       background:'var(--bg-surface)',
       borderRadius:6,
       border:'1px solid var(--border-light)',
@@ -17,9 +22,8 @@ const PMCStat = ({ label, value, color, onClick, hint }) => (
     onMouseEnter={e => { if (onClick) { e.currentTarget.style.background = 'var(--accent-warm-light)'; e.currentTarget.style.borderColor = 'var(--accent-warm)'; } }}
     onMouseLeave={e => { if (onClick) { e.currentTarget.style.background = 'var(--bg-surface)'; e.currentTarget.style.borderColor = 'var(--border-light)'; } }}
   >
-    <div style={{fontSize:10,letterSpacing:'0.04em',textTransform:'uppercase',color:'var(--text-secondary)',marginBottom:4}}>{label}</div>
-    <div style={{fontSize:15,fontWeight:600,color:color||'var(--text-dark)'}}>{value}</div>
-    {hint && <div style={{fontSize:10,color:'var(--text-muted)',marginTop:3}}>{hint}</div>}
+    <div style={{fontSize:11,letterSpacing:'0.08em',textTransform:'uppercase',color:'var(--text-secondary)',marginBottom:6,fontWeight:500}}>{label}</div>
+    <div style={{fontSize:16,fontWeight:600,color:color||'var(--text-dark)',letterSpacing:'-0.015em'}}>{value}</div>
   </div>
 );
 
