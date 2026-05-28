@@ -3,7 +3,182 @@
 // by the `property_type` column on `buildings`. Each card aggregates:
 // units count · occupancy (subline) · billed · collected · outstanding · open SRs.
 // Commercial cards additionally show monthly run-rate.
-// Click a card → BuildingDetailModal (reused from Profile Creation).
+// Click the building header → BuildingDetailModal (reused from Profile Creation).
+// Click a KPI tile → BuildingDrillModal scoped to that data type.
+
+// ---- BuildingDrillModal ----------------------------------------------------
+// Opens when a KPI tile on a building card is clicked. Shows the underlying
+// rows (invoices or service requests) filtered by the picked status, with a
+// link out to the full Service Charges / Service Requests page if the user
+// needs more controls.
+const BuildingDrillModal = ({ building, view, onClose, setPage }) => {
+  // Apply the same Pending/Upcoming/Overdue rule we use everywhere else.
+  const now = new Date();
+  const dayMs = 24 * 60 * 60 * 1000;
+  const effectiveStatusOf = (i) => {
+    if (!i) return 'Pending';
+    if (i.status === 'Paid' || i.status === 'Cancelled') return i.status;
+    if (!i.due_date) return i.status;
+    const due = new Date(i.due_date);
+    if (isNaN(due.getTime())) return i.status;
+    const daysUntilDue = Math.floor((due.getTime() - now.getTime()) / dayMs);
+    if (daysUntilDue < 0)  return 'Overdue';
+    if (daysUntilDue > 30) return 'Upcoming';
+    return 'Pending';
+  };
+  const fmt = (n) => 'AED ' + Math.round(Number(n) || 0).toLocaleString();
+
+  const VIEWS = {
+    invoices:    { label: 'Total Billed',  page: 'payment', kind: 'invoices' },
+    collected:   { label: 'Collected',     page: 'payment', kind: 'invoices' },
+    outstanding: { label: 'Outstanding',   page: 'payment', kind: 'invoices' },
+    upcoming:    { label: 'Upcoming',      page: 'payment', kind: 'invoices' },
+    srs:         { label: 'Open Service Requests', page: 'service', kind: 'srs' },
+    tenants:     { label: 'Tenants',       page: 'profileCreation', kind: 'tenants' },
+  };
+  const v = VIEWS[view] || VIEWS.invoices;
+
+  let rows = [];
+  if (v.kind === 'invoices') {
+    rows = (building.invoices || []).map(i => ({ ...i, effective_status: effectiveStatusOf(i) }));
+    if (view === 'collected')   rows = rows.filter(r => r.effective_status === 'Paid');
+    if (view === 'outstanding') rows = rows.filter(r => r.effective_status === 'Pending' || r.effective_status === 'Overdue');
+    if (view === 'upcoming')    rows = rows.filter(r => r.effective_status === 'Upcoming');
+  } else if (v.kind === 'srs') {
+    rows = (building.srs || []).filter(s => ['New','Acknowledged','In Progress'].includes(s.status));
+  } else if (v.kind === 'tenants') {
+    rows = (building.tenants || []);
+  }
+
+  const total = v.kind === 'invoices'
+    ? rows.reduce((s, r) => s + Number(r.amount_aed || 0), 0)
+    : null;
+
+  const statusStyles = {
+    'Paid':     { bg:'#e6efe1', fg:'#5a6b4f' },
+    'Pending':  { bg:'#fdf2dc', fg:'#7a5a1f' },
+    'Overdue':  { bg:'#fdf2f1', fg:'#8b4a42' },
+    'Upcoming': { bg:'#E6EAE9', fg:'#61707D' },
+    'Cancelled':{ bg:'#E6EAE9', fg:'#61707D' },
+  };
+
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal modal-wide" onClick={e => e.stopPropagation()} style={{maxWidth:920,maxHeight:'88vh',overflowY:'auto'}}>
+        <div className="modal-header">
+          <div>
+            <div style={{fontSize:11,letterSpacing:'0.08em',textTransform:'uppercase',color:'var(--text-muted)',marginBottom:4}}>{v.label}</div>
+            <h2>{building.name}</h2>
+            <div className="modal-sub">
+              {rows.length} {v.kind === 'srs' ? (rows.length === 1 ? 'request' : 'requests') : (v.kind === 'tenants' ? (rows.length === 1 ? 'tenant' : 'tenants') : (rows.length === 1 ? 'invoice' : 'invoices'))}
+              {total != null && ' · ' + fmt(total)}
+            </div>
+          </div>
+          <div className="btn-group">
+            {setPage && (
+              <button className="btn btn-sm" onClick={() => { onClose(); setPage(v.page); }}>
+                View in {v.page === 'payment' ? 'Service Charges' : v.page === 'service' ? 'Service Requests' : 'Profile Creation'} →
+              </button>
+            )}
+            <button className="modal-close" onClick={onClose}>×</button>
+          </div>
+        </div>
+
+        {rows.length === 0 ? (
+          <div style={{padding:32,color:'var(--text-muted)',fontSize:13,textAlign:'center'}}>
+            {v.kind === 'srs' ? 'No open service requests for this building ✓'
+             : v.kind === 'tenants' ? 'No tenants in this building yet.'
+             : 'No matching invoices for this building ✓'}
+          </div>
+        ) : v.kind === 'srs' ? (
+          <table className="data-table" style={{fontSize:12}}>
+            <thead>
+              <tr>
+                <th style={{width:'18%'}}>Category</th>
+                <th style={{width:'36%'}}>Description</th>
+                <th style={{width:'14%'}}>Resident</th>
+                <th style={{width:'10%'}}>Unit</th>
+                <th style={{width:'10%'}}>Priority</th>
+                <th style={{width:'12%'}}>Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map(s => (
+                <tr key={s.id}>
+                  <td style={{fontWeight:500}}>{s.category}</td>
+                  <td style={{maxWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}} title={s.description}>{s.description}</td>
+                  <td>{s.resident_name}</td>
+                  <td>{s.unit_number}</td>
+                  <td>{s.priority}</td>
+                  <td>{s.status}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        ) : v.kind === 'tenants' ? (
+          <table className="data-table" style={{fontSize:12}}>
+            <thead>
+              <tr>
+                <th style={{width:'30%'}}>Resident</th>
+                <th style={{width:'12%'}}>Unit</th>
+                <th style={{width:'8%'}}>Floor</th>
+                <th style={{width:'14%'}}>Tenure</th>
+                <th style={{width:'18%',textAlign:'right'}}>Monthly</th>
+                <th style={{width:'18%'}}>Lease</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map(t => (
+                <tr key={t.profile_id + '_' + t.unit_id}>
+                  <td style={{fontWeight:500}}>{t.resident_name}</td>
+                  <td>{t.unit_number}</td>
+                  <td>{t.floor ?? '—'}</td>
+                  <td>{t.tenure}</td>
+                  <td style={{textAlign:'right'}}>{t.monthly_payment_aed ? fmt(t.monthly_payment_aed) : '—'}</td>
+                  <td>{t.lease_start ? (t.lease_start + ' → ' + (t.lease_end || '…')) : '—'}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        ) : (
+          <table className="data-table" style={{fontSize:12}}>
+            <thead>
+              <tr>
+                <th style={{width:'14%'}}>Invoice #</th>
+                <th style={{width:'28%'}}>Description</th>
+                <th style={{width:'18%'}}>Resident</th>
+                <th style={{width:'10%'}}>Unit</th>
+                <th style={{width:'12%'}}>Due</th>
+                <th style={{width:'10%'}}>Status</th>
+                <th style={{width:'12%',textAlign:'right'}}>Amount</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map(i => {
+                const c = statusStyles[i.effective_status] || { bg:'#E6EAE9', fg:'#61707D' };
+                return (
+                  <tr key={i.id}>
+                    <td style={{fontWeight:500}}>{i.invoice_number || '—'}</td>
+                    <td style={{maxWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}} title={i.description}>{i.description}</td>
+                    <td>{i.resident_name}</td>
+                    <td>{i.unit_number}</td>
+                    <td style={{whiteSpace:'nowrap'}}>{i.due_date || '—'}</td>
+                    <td style={{whiteSpace:'nowrap'}}>
+                      <span style={{display:'inline-block',padding:'2px 8px',borderRadius:4,fontSize:10,fontWeight:500,background:c.bg,color:c.fg,whiteSpace:'nowrap'}}>
+                        {i.effective_status}
+                      </span>
+                    </td>
+                    <td style={{textAlign:'right',fontWeight:600,whiteSpace:'nowrap'}}>{fmt(i.amount_aed)}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        )}
+      </div>
+    </div>
+  );
+};
 
 const PMCPropertiesPage = ({ setPage }) => {
   const { selectedProperties = [] } = useApp();
@@ -236,6 +411,7 @@ const PMCPropertiesPage = ({ setPage }) => {
       }
 
       {selectedBuilding && <BuildingDetailModal building={selectedBuilding} onClose={() => setSelectedBuilding(null)}/>}
+      {drill && <BuildingDrillModal building={drill.building} view={drill.view} setPage={setPage} onClose={() => setDrill(null)}/>}
     </div>
   );
 };

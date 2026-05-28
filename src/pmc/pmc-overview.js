@@ -58,6 +58,22 @@ const PMCOverviewPage = ({ setPage }) => {
 
         const today = new Date().toISOString().slice(0,10);
         const now = new Date();
+        // Same rule as Service Charges / UnitDetailModal: split DB-Pending into
+        // Upcoming (due >30 days out) vs the actually-outstanding ones.
+        const dayMs = 24 * 60 * 60 * 1000;
+        const effectiveStatusOf = (i) => {
+          if (!i) return 'Pending';
+          if (i.status === 'Paid' || i.status === 'Cancelled') return i.status;
+          if (!i.due_date) return i.status;
+          const due = new Date(i.due_date);
+          if (isNaN(due.getTime())) return i.status;
+          const daysUntilDue = Math.floor((due.getTime() - now.getTime()) / dayMs);
+          if (daysUntilDue < 0)  return 'Overdue';
+          if (daysUntilDue > 30) return 'Upcoming';
+          return 'Pending';
+        };
+        // Annotate every invoice once so downstream filters can use it.
+        (invoices || []).forEach(i => { i._eff = effectiveStatusOf(i); });
         // Period bounds — depend on the user's time-range pick.
         // For custom mode, fall back to "this month" if either bound is empty
         // so the data still loads sensibly while the user types dates.
@@ -83,8 +99,13 @@ const PMCOverviewPage = ({ setPage }) => {
         const lastMonthCollected = (invoices || [])
           .filter(i => i.status === 'Paid' && i.created_at && i.created_at.slice(0,10) >= lastMonthStart && i.created_at.slice(0,10) <= lastMonthEnd)
           .reduce((s, i) => s + Number(i.amount_aed), 0);
+        // Only count things that are truly outstanding (Pending due ≤30d + Overdue).
+        // Upcoming cheques (>30 days out) are scheduled cash, not outstanding receivables.
         const pendingSCAmount = (invoices || [])
-          .filter(i => i.status === 'Pending' || i.status === 'Overdue')
+          .filter(i => i._eff === 'Pending' || i._eff === 'Overdue')
+          .reduce((s, i) => s + Number(i.amount_aed), 0);
+        const upcomingSCAmount = (invoices || [])
+          .filter(i => i._eff === 'Upcoming')
           .reduce((s, i) => s + Number(i.amount_aed), 0);
 
         // -------- Service Requests group --------
@@ -116,9 +137,10 @@ const PMCOverviewPage = ({ setPage }) => {
           return d && d >= periodStart && d <= periodEnd;
         });
         const monthBilled = periodInvoices.reduce((s, i) => s + Number(i.amount_aed), 0);
-        const monthCollected = periodInvoices.filter(i => i.status === 'Paid').reduce((s, i) => s + Number(i.amount_aed), 0);
-        const monthPending = periodInvoices.filter(i => i.status === 'Pending').reduce((s, i) => s + Number(i.amount_aed), 0);
-        const monthOverdue = periodInvoices.filter(i => i.status === 'Overdue').reduce((s, i) => s + Number(i.amount_aed), 0);
+        const monthCollected  = periodInvoices.filter(i => i._eff === 'Paid').reduce((s, i) => s + Number(i.amount_aed), 0);
+        const monthPending    = periodInvoices.filter(i => i._eff === 'Pending').reduce((s, i) => s + Number(i.amount_aed), 0);
+        const monthOverdue    = periodInvoices.filter(i => i._eff === 'Overdue').reduce((s, i) => s + Number(i.amount_aed), 0);
+        const monthUpcoming   = periodInvoices.filter(i => i._eff === 'Upcoming').reduce((s, i) => s + Number(i.amount_aed), 0);
         const monthOutstanding = monthPending + monthOverdue;
         const monthCollectionRate = monthBilled > 0 ? Math.round((monthCollected / monthBilled) * 100) : 0;
 
@@ -147,7 +169,7 @@ const PMCOverviewPage = ({ setPage }) => {
           .sort((a, b) => b.amount - a.amount).slice(0, 4);
 
         const pendingByUnit = {};
-        (invoices || []).filter(i => i.status === 'Pending' || i.status === 'Overdue').forEach(i => {
+        (invoices || []).filter(i => i._eff === 'Pending' || i._eff === 'Overdue').forEach(i => {
           if (!pendingByUnit[i.unit_id]) pendingByUnit[i.unit_id] = { amount: 0, count: 0, oldest_due: null };
           pendingByUnit[i.unit_id].amount += Number(i.amount_aed);
           pendingByUnit[i.unit_id].count++;
@@ -164,13 +186,13 @@ const PMCOverviewPage = ({ setPage }) => {
 
         setStats({
           // Portfolio Summary KPIs
-          selectedPropsCount, totalUnits, occupied, occupancyRate, lastMonthCollected, pendingSCAmount,
+          selectedPropsCount, totalUnits, occupied, occupancyRate, lastMonthCollected, pendingSCAmount, upcomingSCAmount,
           // Service Requests KPIs
           todaySRs, completedToday, pendingRequests,
           // Visitors KPIs
           upcomingVisits, todayVisits,
           // Financial Summary cards
-          monthBilled, monthCollected, monthPending, monthOverdue, monthOutstanding, monthCollectionRate,
+          monthBilled, monthCollected, monthPending, monthOverdue, monthUpcoming, monthOutstanding, monthCollectionRate,
           paidList, pendingList,
           totalUnitsPaid:    paidList.length    > 0 ? Object.keys(paidByUnit).length    : 0,
           totalUnitsPending: pendingList.length > 0 ? Object.keys(pendingByUnit).length : 0,
@@ -299,18 +321,22 @@ const PMCOverviewPage = ({ setPage }) => {
               <div style={{fontSize:14,fontWeight:600,color:'var(--text-dark)'}}>Service Charge Collection</div>
               <span onClick={() => setPage && setPage('payment')} style={{fontSize:11,color:'var(--accent-warm-dark)',cursor:'pointer'}}>View all →</span>
             </div>
-            <div style={{display:'grid',gridTemplateColumns:'repeat(3, minmax(0, 1fr))',gap:18}}>
-              <div>
+            <div style={{display:'grid',gridTemplateColumns:'repeat(4, minmax(0, 1fr))',gap:18}}>
+              <div title="Paid invoices in the selected period">
                 <div style={{fontSize:10,letterSpacing:'0.08em',textTransform:'uppercase',color:'var(--text-secondary)',marginBottom:6,fontWeight:600}}>Collection</div>
                 <div style={{fontSize:24,fontWeight:600,color:'#5a6b4f',letterSpacing:'-0.03em'}}>{fmt(stats.monthCollected)}</div>
               </div>
-              <div>
+              <div title="Due within the next 30 days">
                 <div style={{fontSize:10,letterSpacing:'0.08em',textTransform:'uppercase',color:'var(--text-secondary)',marginBottom:6,fontWeight:600}}>Pending</div>
                 <div style={{fontSize:24,fontWeight:600,color:'#a07d3c',letterSpacing:'-0.03em'}}>{fmt(stats.monthPending)}</div>
               </div>
-              <div>
-                <div style={{fontSize:10,letterSpacing:'0.08em',textTransform:'uppercase',color:'var(--text-secondary)',marginBottom:6,fontWeight:600}}>Outstanding</div>
+              <div title="Past due — not yet paid">
+                <div style={{fontSize:10,letterSpacing:'0.08em',textTransform:'uppercase',color:'var(--text-secondary)',marginBottom:6,fontWeight:600}}>Overdue</div>
                 <div style={{fontSize:24,fontWeight:600,color:'#8b4a42',letterSpacing:'-0.03em'}}>{fmt(stats.monthOverdue)}</div>
+              </div>
+              <div title="Scheduled cheques due more than 30 days out">
+                <div style={{fontSize:10,letterSpacing:'0.08em',textTransform:'uppercase',color:'var(--text-secondary)',marginBottom:6,fontWeight:600}}>Upcoming</div>
+                <div style={{fontSize:24,fontWeight:600,color:'#61707D',letterSpacing:'-0.03em'}}>{fmt(stats.monthUpcoming)}</div>
               </div>
             </div>
           </div>

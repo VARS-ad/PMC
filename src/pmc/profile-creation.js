@@ -249,7 +249,7 @@ const PCSummary = ({ section }) => {
     try {
       let data;
       if (section === 'buildings') {
-        const { data: buildings, error: be } = await supabaseClient.from('buildings').select('id,name,address,notes,created_at').order('name');
+        const { data: buildings, error: be } = await supabaseClient.from('buildings').select('id,name,address,notes,created_at,property_type,commercial_use_type,gross_leasable_area_sqft,parking_spots,service_charge_rate_aed_per_sqft,villa_count,plot_area_sqft,bedrooms_per_villa,amenities').order('name');
         if (be) throw be;
         const { data: units, error: ue } = await supabaseClient.from('units').select('id,building_id,floor,unit_number').order('floor').order('unit_number');
         if (ue) throw ue;
@@ -1227,21 +1227,69 @@ const FormBanner = ({ result }) => result ? (
   </div>
 ) : null;
 
+const VILLA_AMENITIES = ['Pool', 'Garden', 'Gym', '24h Security'];
+
+// Build the property-type-specific payload subset for insert/update on buildings.
+// Always returns ALL eight type-specific columns: the unrelated ones are
+// explicitly set to null so switching property type clears stale data.
+const buildBuildingTypePayload = (propertyType, fields) => {
+  const numOrNull = (v) => (v === '' || v == null) ? null : Number(v);
+  const intOrNull = (v) => (v === '' || v == null) ? null : parseInt(v, 10);
+  const isCommercial = propertyType === 'Commercial';
+  const isVilla = propertyType === 'Villa';
+  return {
+    property_type: propertyType,
+    commercial_use_type:              isCommercial ? (fields.commercial_use_type || null) : null,
+    gross_leasable_area_sqft:         isCommercial ? numOrNull(fields.gross_leasable_area_sqft) : null,
+    parking_spots:                    isCommercial ? intOrNull(fields.parking_spots) : null,
+    service_charge_rate_aed_per_sqft: isCommercial ? numOrNull(fields.service_charge_rate_aed_per_sqft) : null,
+    villa_count:                      isVilla ? intOrNull(fields.villa_count) : null,
+    plot_area_sqft:                   isVilla ? numOrNull(fields.plot_area_sqft) : null,
+    bedrooms_per_villa:               isVilla ? intOrNull(fields.bedrooms_per_villa) : null,
+    amenities:                        isVilla ? (Array.isArray(fields.amenities) ? fields.amenities : []) : null,
+  };
+};
+
 const BuildingManualForm = () => {
+  const [propertyType, setPropertyType] = useState('Residential');
   const [name, setName] = useState('');
   const [address, setAddress] = useState('');
   const [notes, setNotes] = useState('');
+  // Commercial-only
+  const [commercialUseType, setCommercialUseType] = useState('');
+  const [gla, setGla] = useState('');
+  const [parkingSpots, setParkingSpots] = useState('');
+  const [serviceChargeRate, setServiceChargeRate] = useState('');
+  // Villa-only
+  const [villaCount, setVillaCount] = useState('');
+  const [plotArea, setPlotArea] = useState('');
+  const [bedroomsPerVilla, setBedroomsPerVilla] = useState('');
+  const [amenities, setAmenities] = useState([]);
   const [units, setUnits] = useState([{ floor: '', unit_number: '' }]);
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState(null);
 
+  const toggleAmenity = (label) => {
+    setAmenities(prev => prev.includes(label) ? prev.filter(a => a !== label) : [...prev, label]);
+  };
+
   const submit = async () => {
     setBusy(true); setResult(null);
     try {
+      const typePayload = buildBuildingTypePayload(propertyType, {
+        commercial_use_type: commercialUseType,
+        gross_leasable_area_sqft: gla,
+        parking_spots: parkingSpots,
+        service_charge_rate_aed_per_sqft: serviceChargeRate,
+        villa_count: villaCount,
+        plot_area_sqft: plotArea,
+        bedrooms_per_villa: bedroomsPerVilla,
+        amenities: amenities,
+      });
       const { data: existing } = await supabaseClient.from('buildings').select('id').eq('name', name).maybeSingle();
       let buildingId = existing && existing.id;
       if (!buildingId) {
-        const { data: b, error } = await supabaseClient.from('buildings').insert({ name: name.trim(), address: address.trim() || null, notes: notes.trim() || null }).select('id').single();
+        const { data: b, error } = await supabaseClient.from('buildings').insert({ name: name.trim(), address: address.trim() || null, notes: notes.trim() || null, ...typePayload }).select('id').single();
         if (error) { setResult({ ok: false, error: 'building: ' + error.message }); setBusy(false); return; }
         buildingId = b.id;
       }
@@ -1261,21 +1309,62 @@ const BuildingManualForm = () => {
       }
       setResult({ ok: true, msg: 'Saved "' + name + '" with ' + inserted + ' new unit' + (inserted === 1 ? '' : 's') + '.' });
       setName(''); setAddress(''); setNotes(''); setUnits([{ floor: '', unit_number: '' }]);
+      setPropertyType('Residential');
+      setCommercialUseType(''); setGla(''); setParkingSpots(''); setServiceChargeRate('');
+      setVillaCount(''); setPlotArea(''); setBedroomsPerVilla(''); setAmenities([]);
     } catch (e) {
       setResult({ ok: false, error: String(e.message || e) });
     }
     setBusy(false);
   };
 
+  const sectionLabelStyle = {margin:'20px 0 10px',fontSize:10,fontWeight:600,color:'var(--text-secondary)',textTransform:'uppercase',letterSpacing:'0.06em'};
   return (
     <div className="card">
       <div style={{fontSize:13,fontWeight:600,marginBottom:14}}>Add a building</div>
+      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:14,marginBottom:14}}>
+        <PCSelect label="Property type" required value={propertyType} onChange={setPropertyType} options={[{value:'Residential',label:'Residential'},{value:'Commercial',label:'Commercial'},{value:'Villa',label:'Villa'}]}/>
+        <div/>
+      </div>
       <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:14,marginBottom:14}}>
         <PCField label="Building name" required value={name} onChange={setName} placeholder="e.g. Aljil Tower"/>
         <PCField label="Address" value={address} onChange={setAddress} placeholder="Optional"/>
       </div>
       <PCField label="Notes" value={notes} onChange={setNotes} textarea placeholder="Optional"/>
-      <div style={{margin:'20px 0 10px',fontSize:10,fontWeight:600,color:'var(--text-secondary)',textTransform:'uppercase',letterSpacing:'0.06em'}}>Units (optional — you can add them later via bulk upload)</div>
+      {propertyType === 'Commercial' && (
+        <>
+          <div style={sectionLabelStyle}>Commercial details</div>
+          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:14,marginBottom:14}}>
+            <PCSelect label="Commercial use type" value={commercialUseType} onChange={setCommercialUseType} options={[{value:'Office',label:'Office'},{value:'Retail',label:'Retail'},{value:'Mixed',label:'Mixed'}]}/>
+            <PCField label="Gross Leasable Area (sqft)" type="number" value={gla} onChange={setGla} placeholder="Optional"/>
+            <PCField label="Parking spots" type="number" value={parkingSpots} onChange={setParkingSpots} placeholder="Optional"/>
+            <PCField label="Service charge rate (AED / sqft / year)" type="number" value={serviceChargeRate} onChange={setServiceChargeRate} placeholder="Optional"/>
+          </div>
+        </>
+      )}
+      {propertyType === 'Villa' && (
+        <>
+          <div style={sectionLabelStyle}>Villa details</div>
+          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:14,marginBottom:14}}>
+            <PCField label="Number of villas" type="number" value={villaCount} onChange={setVillaCount} placeholder="Optional"/>
+            <PCField label="Plot area per villa (sqft)" type="number" value={plotArea} onChange={setPlotArea} placeholder="Optional"/>
+            <PCField label="Bedrooms per villa" type="number" value={bedroomsPerVilla} onChange={setBedroomsPerVilla} placeholder="Optional"/>
+            <div/>
+          </div>
+          <div>
+            <label style={{display:'block',fontSize:10,letterSpacing:'0.06em',textTransform:'uppercase',color:'var(--text-secondary)',marginBottom:6,fontWeight:500}}>Amenities</label>
+            <div style={{display:'flex',flexWrap:'wrap',gap:14}}>
+              {VILLA_AMENITIES.map(a => (
+                <label key={a} style={{display:'flex',alignItems:'center',gap:6,fontSize:12,cursor:'pointer'}}>
+                  <input type="checkbox" checked={amenities.includes(a)} onChange={() => toggleAmenity(a)}/>
+                  <span>{a}</span>
+                </label>
+              ))}
+            </div>
+          </div>
+        </>
+      )}
+      <div style={sectionLabelStyle}>Units (optional — you can add them later via bulk upload)</div>
       {units.map((u, i) => (
         <div key={i} style={{display:'grid',gridTemplateColumns:'130px 1fr 40px',gap:10,marginBottom:8,alignItems:'start'}}>
           <PCField label="" type="number" placeholder="Floor" value={u.floor} onChange={v => setUnits(us => us.map((x,j) => j===i ? {...x, floor:v} : x))}/>
@@ -1488,6 +1577,146 @@ const SecurityManualForm = () => {
       </div>
       <button className="btn btn-primary" disabled={busy || !canSubmit} onClick={submit}>{busy ? 'Creating…' : 'Create guard'}</button>
       <FormBanner result={result}/>
+    </div>
+  );
+};
+
+// ==================== EDIT RECORD MODAL ====================
+// Opened from the Summary tab (Edit button on each row). The building variant
+// mirrors BuildingManualForm: property-type selector + conditional fields,
+// persisting null for the unrelated subset so type switches clear stale data.
+const EditRecordModal = ({ kind, record, onClose, onSaved }) => {
+  const initial = (() => {
+    if (kind === 'building') return {
+      name: record.name || '',
+      address: record.address || '',
+      notes: record.notes || '',
+      property_type: record.property_type || 'Residential',
+      commercial_use_type: record.commercial_use_type || '',
+      gross_leasable_area_sqft: record.gross_leasable_area_sqft == null ? '' : String(record.gross_leasable_area_sqft),
+      parking_spots: record.parking_spots == null ? '' : String(record.parking_spots),
+      service_charge_rate_aed_per_sqft: record.service_charge_rate_aed_per_sqft == null ? '' : String(record.service_charge_rate_aed_per_sqft),
+      villa_count: record.villa_count == null ? '' : String(record.villa_count),
+      plot_area_sqft: record.plot_area_sqft == null ? '' : String(record.plot_area_sqft),
+      bedrooms_per_villa: record.bedrooms_per_villa == null ? '' : String(record.bedrooms_per_villa),
+      amenities: Array.isArray(record.amenities) ? record.amenities : [],
+    };
+    if (kind === 'resident') return { full_name: record.full_name || '', phone: record.phone || '' };
+    return { full_name: record.full_name || '', phone: record.phone || '', shift: record.shift || 'Day' };
+  })();
+  const [form, setForm] = useState(initial);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState(null);
+  const setF = (k) => (v) => setForm(f => ({ ...f, [k]: v }));
+  const toggleAmenity = (label) => setForm(f => ({ ...f, amenities: f.amenities.includes(label) ? f.amenities.filter(a => a !== label) : [...f.amenities, label] }));
+
+  const save = async () => {
+    setBusy(true); setError(null);
+    try {
+      if (kind === 'building') {
+        const typePayload = buildBuildingTypePayload(form.property_type, form);
+        const { error: e } = await supabaseClient.from('buildings').update({
+          name: form.name.trim(),
+          address: form.address.trim() || null,
+          notes: form.notes.trim() || null,
+          ...typePayload,
+        }).eq('id', record.id);
+        if (e) throw e;
+      } else if (kind === 'resident' || kind === 'security') {
+        const { error: e } = await supabaseClient.from('profiles').update({
+          full_name: form.full_name.trim(),
+          phone: form.phone.trim() || null,
+        }).eq('id', record.id);
+        if (e) throw e;
+        if (kind === 'security' && form.shift !== record.shift) {
+          const { error: se } = await supabaseClient.from('security_assignments').update({
+            shift: form.shift,
+          }).eq('profile_id', record.id);
+          if (se) throw se;
+        }
+      }
+      if (onSaved) onSaved();
+      onClose();
+    } catch (e) {
+      setError(String(e.message || e));
+    }
+    setBusy(false);
+  };
+
+  const sectionLabelStyle = {margin:'14px 0 10px',fontSize:10,fontWeight:600,color:'var(--text-secondary)',textTransform:'uppercase',letterSpacing:'0.06em'};
+
+  return (
+    <div className="modal-overlay" onClick={onClose} style={{zIndex:1050}}>
+      <div className="modal" onClick={e => e.stopPropagation()} style={{maxWidth:560}}>
+        <div className="modal-header">
+          <div>
+            <div style={{fontSize:10,letterSpacing:'0.08em',textTransform:'uppercase',color:'var(--text-muted)',marginBottom:4}}>Edit {kind}</div>
+            <h2>{kind === 'building' ? record.name : record.full_name}</h2>
+          </div>
+          <button className="modal-close" onClick={onClose}>×</button>
+        </div>
+        {kind === 'building' && (
+          <div>
+            <div style={{marginBottom:14}}><PCSelect label="Property type" required value={form.property_type} onChange={setF('property_type')} options={[{value:'Residential',label:'Residential'},{value:'Commercial',label:'Commercial'},{value:'Villa',label:'Villa'}]}/></div>
+            <div style={{marginBottom:14}}><PCField label="Building name" required value={form.name} onChange={setF('name')}/></div>
+            <div style={{marginBottom:14}}><PCField label="Address" value={form.address} onChange={setF('address')}/></div>
+            <div style={{marginBottom:14}}><PCField label="Notes" value={form.notes} onChange={setF('notes')} textarea/></div>
+            {form.property_type === 'Commercial' && (
+              <>
+                <div style={sectionLabelStyle}>Commercial details</div>
+                <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:14,marginBottom:14}}>
+                  <PCSelect label="Commercial use type" value={form.commercial_use_type} onChange={setF('commercial_use_type')} options={[{value:'Office',label:'Office'},{value:'Retail',label:'Retail'},{value:'Mixed',label:'Mixed'}]}/>
+                  <PCField label="Gross Leasable Area (sqft)" type="number" value={form.gross_leasable_area_sqft} onChange={setF('gross_leasable_area_sqft')}/>
+                  <PCField label="Parking spots" type="number" value={form.parking_spots} onChange={setF('parking_spots')}/>
+                  <PCField label="Service charge rate (AED / sqft / year)" type="number" value={form.service_charge_rate_aed_per_sqft} onChange={setF('service_charge_rate_aed_per_sqft')}/>
+                </div>
+              </>
+            )}
+            {form.property_type === 'Villa' && (
+              <>
+                <div style={sectionLabelStyle}>Villa details</div>
+                <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:14,marginBottom:14}}>
+                  <PCField label="Number of villas" type="number" value={form.villa_count} onChange={setF('villa_count')}/>
+                  <PCField label="Plot area per villa (sqft)" type="number" value={form.plot_area_sqft} onChange={setF('plot_area_sqft')}/>
+                  <PCField label="Bedrooms per villa" type="number" value={form.bedrooms_per_villa} onChange={setF('bedrooms_per_villa')}/>
+                  <div/>
+                </div>
+                <div style={{marginBottom:14}}>
+                  <label style={{display:'block',fontSize:10,letterSpacing:'0.06em',textTransform:'uppercase',color:'var(--text-secondary)',marginBottom:6,fontWeight:500}}>Amenities</label>
+                  <div style={{display:'flex',flexWrap:'wrap',gap:14}}>
+                    {VILLA_AMENITIES.map(a => (
+                      <label key={a} style={{display:'flex',alignItems:'center',gap:6,fontSize:12,cursor:'pointer'}}>
+                        <input type="checkbox" checked={form.amenities.includes(a)} onChange={() => toggleAmenity(a)}/>
+                        <span>{a}</span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
+        )}
+        {kind === 'resident' && (
+          <div>
+            <div style={{marginBottom:14}}><PCField label="Full name" required value={form.full_name} onChange={setF('full_name')}/></div>
+            <div style={{marginBottom:14}}><PCField label="Phone" value={form.phone} onChange={setF('phone')}/></div>
+            <div style={{fontSize:11,color:'var(--text-muted)',marginBottom:14,padding:10,background:'var(--bg-page)',borderRadius:6}}>Email, building, and unit cannot be changed here. Delete and re-add the resident to move them to a different unit.</div>
+          </div>
+        )}
+        {kind === 'security' && (
+          <div>
+            <div style={{marginBottom:14}}><PCField label="Full name" required value={form.full_name} onChange={setF('full_name')}/></div>
+            <div style={{marginBottom:14}}><PCField label="Phone" value={form.phone} onChange={setF('phone')}/></div>
+            <div style={{marginBottom:14}}><PCSelect label="Shift" value={form.shift} onChange={setF('shift')} options={[{value:'Day',label:'Day'},{value:'Night',label:'Night'},{value:'24h',label:'24h'}]}/></div>
+            <div style={{fontSize:11,color:'var(--text-muted)',marginBottom:14,padding:10,background:'var(--bg-page)',borderRadius:6}}>Email and building cannot be changed here. Delete and re-add to move the guard to a different building.</div>
+          </div>
+        )}
+        {error && <div style={{padding:10,background:'#fdf2f1',color:'#8b4a42',borderRadius:6,fontSize:12,marginBottom:14}}>{error}</div>}
+        <div style={{display:'flex',gap:10,justifyContent:'flex-end',marginTop:8}}>
+          <button className="btn" onClick={onClose}>Cancel</button>
+          <button className="btn btn-primary" disabled={busy} onClick={save}>{busy ? 'Saving…' : 'Save changes'}</button>
+        </div>
+      </div>
     </div>
   );
 };

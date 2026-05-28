@@ -2,8 +2,9 @@
 // One stop for everything a PMC needs on a single tenant: personal details,
 // contract & tenancy, payment history (paid / outstanding / future), and
 // documents. Opens from the Profile Creation residents summary and from the
-// Properties page drill-downs. The "Export / Print Statement" button renders
-// a one-page branded PDF via exportTenantStatementPDF.
+// Properties page drill-downs. The "Download Data" button opens the shared
+// ExportPrintModal so the tenant statement uses the same PDF/Excel/CSV
+// pipeline (and brand template) as every other PMC export.
 
 const ResidentDetailModal = ({ resident, onClose }) => {
   // The caller passes a profile-shaped object enriched with building / unit
@@ -18,6 +19,7 @@ const ResidentDetailModal = ({ resident, onClose }) => {
   const [documents, setDocuments] = useState(null);
   const [uploadingKind, setUploadingKind] = useState(null);
   const [error, setError] = useState(null);
+  const [showDownload, setShowDownload] = useState(false);
 
   const reloadDocs = async () => {
     const { data, error: e } = await supabaseClient.from('resident_documents')
@@ -102,44 +104,6 @@ const ResidentDetailModal = ({ resident, onClose }) => {
 
   const fmt = (n) => 'AED ' + Math.round(Number(n) || 0).toLocaleString('en-US');
 
-  const handleExportStatement = () => {
-    const tenant = {
-      full_name:    resident.full_name,
-      building_name:resident.building_name,
-      unit_number:  resident.unit_number,
-      floor:        resident.floor,
-      emirates_id:           extra ? extra.emirates_id            : null,
-      passport_number:       resident.passport_number,
-      date_of_birth:         resident.date_of_birth,
-      phone:                 resident.phone,
-      email:                 extra ? extra.email                  : null,
-      emergency_contact_name:extra ? extra.emergency_contact_name : null,
-      emergency_contact_phone:extra ? extra.emergency_contact_phone: null,
-      employer:              extra ? extra.employer               : null,
-      occupation:            extra ? extra.occupation             : null,
-      created_at:            resident.created_at,
-    };
-    const contract = {
-      tenure:              resident.tenure,
-      lease_start:         resident.lease_start,
-      lease_end:           resident.lease_end,
-      monthly_payment_aed: resident.monthly_payment_aed,
-      ownership_start:     resident.ownership_start,
-    };
-    const paymentsForPdf = (invoices || []).map(i => ({
-      invoice_number: i.invoice_number,
-      description:    i.description,
-      amount_aed:     i.amount_aed,
-      due_date:       i.due_date,
-      status:         i.status,
-      paid_at:        null, // we don't fetch payments table here — PDF tolerates null
-      payment_method: null,
-    }));
-    exportTenantStatementPDF({
-      tenant, contract, payments: paymentsForPdf,
-      filename: 'tenant_statement_' + (resident.full_name || 'resident').replace(/\s+/g, '_'),
-    });
-  };
 
   // === UI helpers ===
   const InfoCell = ({ label, value }) => (
@@ -200,7 +164,7 @@ const ResidentDetailModal = ({ resident, onClose }) => {
             <div className="modal-sub">{resident.building_name} · Floor {resident.floor} · Unit {resident.unit_number}{resident.tenure ? ' · ' + resident.tenure : ''}</div>
           </div>
           <div className="btn-group">
-            <button className="btn" onClick={handleExportStatement}>Export / Print Statement</button>
+            <button className="btn" onClick={() => setShowDownload(true)}>Download Data</button>
             <button className="modal-close" onClick={onClose}>×</button>
           </div>
         </div>
@@ -291,6 +255,54 @@ const ResidentDetailModal = ({ resident, onClose }) => {
           </div>
         )}
       </div>
+
+      <ExportPrintModal
+        isOpen={showDownload}
+        onClose={() => setShowDownload(false)}
+        dataTypes={[
+          {
+            id:           'payment_history',
+            label:        'Payment History',
+            title:        'Tenant Statement · ' + (resident.full_name || 'Resident'),
+            sheetName:    'Payments',
+            filenameBase: 'tenant_statement_' + String(resident.full_name || 'resident').replace(/\s+/g, '_'),
+            dateField:    'due_date',
+            rows: [
+              ...splitInvoices.outstanding.map(i => ({ ...i, bucket: 'Outstanding' })),
+              ...splitInvoices.future.map(i      => ({ ...i, bucket: 'Future' })),
+              ...splitInvoices.paid.map(i        => ({ ...i, bucket: 'Paid' })),
+            ],
+            columns: [
+              { key: 'invoice_number', header: 'Invoice #',    width: 14 },
+              { key: 'description',    header: 'Description',  width: 32 },
+              { key: 'bucket',         header: 'Bucket',       width: 12 },
+              { key: 'status',         header: 'Status',       width: 12 },
+              { key: 'due_date',       header: 'Due Date',     width: 12 },
+              { key: 'amount_aed',     header: 'Amount (AED)', width: 14, halign: 'right', numeric: true },
+              { key: 'created_at',     header: 'Issued',       width: 12,
+                value: (r) => r.created_at ? new Date(r.created_at).toLocaleDateString() : '' },
+            ],
+            extraMetadata: {
+              'Resident':       resident.full_name || '—',
+              'Building':       resident.building_name || '—',
+              'Unit':           resident.unit_number ? ('Unit ' + resident.unit_number + (resident.floor != null ? ' · Floor ' + resident.floor : '')) : '—',
+              'Tenure':         resident.tenure || '—',
+              'Phone':          resident.phone || '—',
+              'Email':          (extra && extra.email) || '—',
+              'Emirates ID':    (extra && extra.emirates_id) || '—',
+              'Passport #':     resident.passport_number || '—',
+              'Date of birth':  resident.date_of_birth || '—',
+              'Lease start':    resident.lease_start || '—',
+              'Lease end':      resident.lease_end || '—',
+              'Monthly rent':   resident.monthly_payment_aed ? ('AED ' + Math.round(Number(resident.monthly_payment_aed)).toLocaleString()) : '—',
+              'Total Billed':   'AED ' + Math.round(splitInvoices.total).toLocaleString(),
+              'Paid':           'AED ' + Math.round(splitInvoices.paidTotal).toLocaleString(),
+              'Outstanding':    'AED ' + Math.round(splitInvoices.outstandingTotal).toLocaleString(),
+              'Future':         'AED ' + Math.round(splitInvoices.futureTotal).toLocaleString(),
+            },
+          },
+        ]}
+      />
     </div>
   );
 };
