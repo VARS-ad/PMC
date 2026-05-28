@@ -666,11 +666,12 @@ const VendorDetailModal = ({ vendor, buildings, vendorBuildingIds, onClose, onEd
               <table className="data-table" style={{fontSize: 12}}>
                 <thead>
                   <tr>
-                    <th style={{width:'14%'}}>{t('vendors.pay.th.invoice')}</th>
-                    <th style={{width:'14%'}}>{t('vendors.pay.th.date')}</th>
-                    <th style={{width:'40%'}}>{t('vendors.pay.th.description')}</th>
+                    <th style={{width:'13%'}}>{t('vendors.pay.th.invoice')}</th>
+                    <th style={{width:'12%'}}>{t('vendors.pay.th.date')}</th>
+                    <th style={{width:'33%'}}>{t('vendors.pay.th.description')}</th>
                     <th style={{width:'12%',textAlign:'right'}}>{t('vendors.pay.th.amount')}</th>
-                    <th style={{width:'15%'}}>{t('vendors.pay.th.status')}</th>
+                    <th style={{width:'14%'}}>{t('vendors.pay.th.status')}</th>
+                    <th style={{width:'11%',textAlign:'center'}}>Docs</th>
                     <th style={{width:'5%'}}></th>
                   </tr>
                 </thead>
@@ -682,6 +683,7 @@ const VendorDetailModal = ({ vendor, buildings, vendorBuildingIds, onClose, onEd
                       <td>{p.description}</td>
                       <td style={{textAlign:'right'}}>{fmtAED(p.amount_aed)}</td>
                       <td>{paymentStatusBadge(p.payment_status, t(_payKey(p.payment_status)))}</td>
+                      <VendorInvoiceDocsCell payment={p} vendorId={vendor.id}/>
                       <td style={{textAlign:'right'}}><button onClick={(e) => { e.stopPropagation(); handleDeletePayment(p); }} style={{background:'none', border:'none', color:'#8b4a42', cursor:'pointer', fontSize: 11}}>×</button></td>
                     </tr>
                   ))}

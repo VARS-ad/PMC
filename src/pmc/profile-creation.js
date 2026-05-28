@@ -2342,13 +2342,16 @@ const ReminderSettingsSection = () => {
 
 // ==================== INVOICE DOCUMENTS — BULK UPLOAD ====================
 // Drop a folder of PDFs / images named {invoice_number}_{kind}.{ext}
-// where {kind} is one of: invoice, payment, payment_proof, proof, receipt, bill.
-// The system parses each filename, batch-looks-up invoice ids by
-// invoice_number, then uploads each file into the `invoice-attachments`
-// bucket and inserts a row into public.invoice_attachments. If a slot
-// already has a file the old object is deleted first (same behaviour as
-// the per-row "Replace" button).
+// and the page parses each filename, batch-looks-up the matching invoice,
+// uploads to the right Storage bucket, and inserts metadata. Works for
+// two targets:
+//   • Resident invoices  → invoices + invoice_attachments + invoice-attachments
+//   • Contractor invoices → vendor_payments + vendor_documents + maintenance-documents
+// Both targets share the same filename convention; the "kind" hint
+// (payment / receipt / proof) maps to the right DB enum per target.
 
+// Generic parser — returns { invoice_number, hint } or null. The hint is
+// resolved into a concrete kind by the active target's kindMap.
 function parseInvoiceDocFilename(name) {
   const dot  = name.lastIndexOf('.');
   const base = dot > 0 ? name.slice(0, dot) : name;
@@ -2356,52 +2359,105 @@ function parseInvoiceDocFilename(name) {
   if (u <= 0) return null;
   const invoice_number = base.slice(0, u).trim();
   const hint           = base.slice(u + 1).trim().toLowerCase();
-  let kind = null;
-  if (['invoice','bill'].includes(hint))                                 kind = 'invoice';
-  else if (['payment','payment_proof','proof','receipt'].includes(hint)) kind = 'payment_proof';
-  if (!kind || !invoice_number) return null;
-  return { invoice_number, kind };
+  if (!invoice_number || !hint) return null;
+  return { invoice_number, hint };
 }
 
+const INVOICE_BULK_TARGETS = {
+  resident: {
+    label:        'Resident invoices',
+    lookupTable:  'invoices',
+    lookupSelect: 'id,invoice_number',
+    metaTable:    'invoice_attachments',
+    metaFkColumn: 'invoice_id',
+    bucket:       'invoice-attachments',
+    kindMap: {
+      invoice: 'invoice', bill: 'invoice',
+      payment: 'payment_proof', payment_proof: 'payment_proof', proof: 'payment_proof', receipt: 'payment_proof',
+    },
+    storagePath: (parent, kind, file) => parent.id + '/' + kind + '/' + Date.now() + '-' + file.name.replace(/[^a-zA-Z0-9._-]/g, '_'),
+    metaRow:     (parent, kind, path, file) => ({
+      invoice_id:   parent.id,
+      kind,
+      storage_path: path,
+      file_name:    file.name,
+      mime_type:    file.type || null,
+      size_bytes:   file.size || null,
+    }),
+    replaceExisting: true,
+    slotHints: ['invoice (or bill)', 'payment_proof (or payment, proof, receipt)'],
+  },
+  contractor: {
+    label:        'Contractor invoices',
+    lookupTable:  'vendor_payments',
+    lookupSelect: 'id,invoice_number,vendor_id',
+    metaTable:    'vendor_documents',
+    metaFkColumn: 'payment_id',
+    bucket:       'maintenance-documents',
+    kindMap: {
+      invoice: 'invoice', bill: 'invoice',
+      payment: 'payment_receipt', payment_receipt: 'payment_receipt', proof: 'payment_receipt', receipt: 'payment_receipt',
+    },
+    storagePath: (parent, kind, file) => parent.vendor_id + '/payment-' + parent.id + '/' + kind + '/' + Date.now() + '-' + file.name.replace(/[^a-zA-Z0-9._-]/g, '_'),
+    metaRow:     (parent, kind, path, file) => ({
+      vendor_id:    parent.vendor_id,
+      payment_id:   parent.id,
+      kind,
+      storage_path: path,
+      filename:     file.name,
+    }),
+    replaceExisting: false,
+    slotHints: ['invoice (or bill)', 'payment_receipt (or payment, proof, receipt)'],
+  },
+};
+
 const InvoiceDocumentsBulkSection = () => {
-  const [files,   setFiles]   = useState([]);   // [{ file, parsed, status, message }]
-  const [busy,    setBusy]    = useState(false);
-  const [results, setResults] = useState(null); // { ok, replaced, skipped, errored, rows: [...] }
+  const [targetKey, setTargetKey] = useState('resident');
+  const [files,     setFiles]     = useState([]);
+  const [busy,      setBusy]      = useState(false);
+  const [results,   setResults]   = useState(null);
   const inputRef = useRef(null);
+  const target = INVOICE_BULK_TARGETS[targetKey];
+
+  const reset = () => { setFiles([]); setResults(null); if (inputRef.current) inputRef.current.value = ''; };
+
+  const switchTarget = (key) => { setTargetKey(key); reset(); };
 
   const handlePick = async (fileList) => {
     setResults(null);
     const arr = Array.from(fileList || []);
     if (arr.length === 0) { setFiles([]); return; }
 
-    // 1. Parse filenames locally.
+    // 1. Parse filenames + resolve hint → DB kind for this target.
     const parsedRows = arr.map(file => {
       const parsed = parseInvoiceDocFilename(file.name);
-      if (!parsed) return { file, parsed: null, status: 'skip-unparseable', message: 'Filename must be {invoice_number}_{kind}.pdf' };
-      return { file, parsed, status: 'parsed', message: null };
+      if (!parsed) return { file, parsed: null, kind: null, status: 'skip-unparseable', message: 'Filename must be {invoice_number}_{kind}.pdf' };
+      const kind = target.kindMap[parsed.hint] || null;
+      if (!kind) return { file, parsed, kind: null, status: 'skip-unparseable', message: 'Unknown kind "' + parsed.hint + '" for ' + target.label.toLowerCase() };
+      return { file, parsed, kind, status: 'parsed', message: null };
     });
 
-    // 2. Batch-lookup invoice ids for everything that parsed.
-    const numbers = Array.from(new Set(parsedRows.filter(r => r.parsed).map(r => r.parsed.invoice_number)));
-    let idByNumber = {};
+    // 2. Batch-lookup parents by invoice_number.
+    const numbers = Array.from(new Set(parsedRows.filter(r => r.kind).map(r => r.parsed.invoice_number)));
+    let parentByNumber = {};
     if (numbers.length > 0 && supabaseClient) {
       const { data, error } = await supabaseClient
-        .from('invoices')
-        .select('id,invoice_number')
+        .from(target.lookupTable)
+        .select(target.lookupSelect)
         .in('invoice_number', numbers);
       if (error) {
         setFiles(parsedRows.map(r => ({ ...r, status: 'error', message: 'Lookup failed: ' + error.message })));
         return;
       }
-      (data || []).forEach(row => { idByNumber[row.invoice_number] = row.id; });
+      (data || []).forEach(row => { parentByNumber[row.invoice_number] = row; });
     }
 
-    // 3. Annotate each row with what we'll do.
+    // 3. Annotate each row with the matched parent.
     const withMatches = parsedRows.map(r => {
-      if (!r.parsed) return r;
-      const invoice_id = idByNumber[r.parsed.invoice_number];
-      if (!invoice_id) return { ...r, status: 'skip-no-invoice', message: 'No invoice with number ' + r.parsed.invoice_number };
-      return { ...r, status: 'ready', invoice_id, message: 'Will upload to ' + r.parsed.kind + ' slot' };
+      if (!r.kind) return r;
+      const parent = parentByNumber[r.parsed.invoice_number];
+      if (!parent) return { ...r, status: 'skip-no-invoice', message: 'No ' + target.lookupTable + ' with number ' + r.parsed.invoice_number };
+      return { ...r, status: 'ready', parent, message: 'Will upload to ' + r.kind + ' slot' };
     });
     setFiles(withMatches);
   };
@@ -2412,47 +2468,38 @@ const InvoiceDocumentsBulkSection = () => {
     if (ready.length === 0) { alert('No files ready to upload.'); return; }
     setBusy(true);
 
-    // For each ready file, check if a slot already has an attachment; if so,
-    // delete it first. Then upload + insert. We do them sequentially so we
-    // can show progress and so we don't blow the rate limit.
     const rows = [];
     for (let i = 0; i < ready.length; i++) {
       const r = ready[i];
-      const { file, parsed, invoice_id } = r;
+      const { file, parsed, kind, parent } = r;
       try {
-        // a) Check existing slot.
-        const { data: existing } = await supabaseClient
-          .from('invoice_attachments')
-          .select('id,storage_path')
-          .eq('invoice_id', invoice_id)
-          .eq('kind', parsed.kind)
-          .maybeSingle();
+        // a) If this target enforces one-per-slot, delete the existing one first.
         let replaced = false;
-        if (existing) {
-          await supabaseClient.storage.from('invoice-attachments').remove([existing.storage_path]);
-          await supabaseClient.from('invoice_attachments').delete().eq('id', existing.id);
-          replaced = true;
+        if (target.replaceExisting) {
+          const { data: existing } = await supabaseClient
+            .from(target.metaTable)
+            .select('id,storage_path')
+            .eq(target.metaFkColumn, parent.id)
+            .eq('kind', kind)
+            .maybeSingle();
+          if (existing) {
+            await supabaseClient.storage.from(target.bucket).remove([existing.storage_path]);
+            await supabaseClient.from(target.metaTable).delete().eq('id', existing.id);
+            replaced = true;
+          }
         }
-        // b) Upload to storage.
-        const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
-        const path = invoice_id + '/' + parsed.kind + '/' + Date.now() + '-' + safeName;
+        // b) Upload object.
+        const path = target.storagePath(parent, kind, file);
         const { error: upErr } = await supabaseClient.storage
-          .from('invoice-attachments')
+          .from(target.bucket)
           .upload(path, file, { contentType: file.type || undefined });
         if (upErr) throw new Error(upErr.message);
-        // c) Insert metadata.
-        const { error: insErr } = await supabaseClient.from('invoice_attachments').insert({
-          invoice_id,
-          kind:         parsed.kind,
-          storage_path: path,
-          file_name:    file.name,
-          mime_type:    file.type || null,
-          size_bytes:   file.size || null,
-        });
+        // c) Insert metadata row.
+        const { error: insErr } = await supabaseClient.from(target.metaTable).insert(target.metaRow(parent, kind, path, file));
         if (insErr) throw new Error(insErr.message);
-        rows.push({ name: file.name, invoice_number: parsed.invoice_number, kind: parsed.kind, ok: true, replaced });
+        rows.push({ name: file.name, invoice_number: parsed.invoice_number, kind, ok: true, replaced });
       } catch (e) {
-        rows.push({ name: file.name, invoice_number: parsed.invoice_number, kind: parsed.kind, ok: false, error: e.message || String(e) });
+        rows.push({ name: file.name, invoice_number: parsed.invoice_number, kind, ok: false, error: e.message || String(e) });
       }
     }
 
@@ -2463,8 +2510,6 @@ const InvoiceDocumentsBulkSection = () => {
     setResults({ ok, replaced, skipped, errored, rows });
     setBusy(false);
   };
-
-  const reset = () => { setFiles([]); setResults(null); if (inputRef.current) inputRef.current.value = ''; };
 
   const statusPill = (status) => {
     const colours = {
@@ -2482,24 +2527,40 @@ const InvoiceDocumentsBulkSection = () => {
   const unparseable    = files.filter(r => r.status === 'skip-unparseable').length;
   const noInvoice      = files.filter(r => r.status === 'skip-no-invoice').length;
 
+  const examplesFor = (key) => key === 'resident'
+    ? 'RNT-2026-00431_invoice.pdf, RNT-2026-00431_payment.pdf, INV-MD-202605-cc08f0_receipt.jpg'
+    : 'INV-VENDOR-001_invoice.pdf, INV-VENDOR-001_receipt.pdf, BILL-2025-09_payment.jpg';
+
   return (
     <div className="card">
       <div style={{fontSize:13,fontWeight:600,marginBottom:6}}>Bulk upload invoice documents</div>
       <div style={{fontSize:12,color:'var(--text-secondary)',marginBottom:14}}>
-        Use this to backfill historical invoice PDFs and payment proofs in one batch. The system reads each filename, matches it to an existing invoice, and uploads the file into the matching slot. Re-uploading the same slot replaces the previous file.
+        Backfill historical invoice files in one batch. The system reads each filename, matches it to an existing invoice, and uploads the file into the matching slot.
+        {target.replaceExisting
+          ? ' Re-uploading the same slot replaces the previous file.'
+          : ' Multiple files can land in the same slot (no replace).'}
+      </div>
+
+      <div style={{display:'flex',gap:8,marginBottom:16}}>
+        {Object.entries(INVOICE_BULK_TARGETS).map(([key, t]) => (
+          <div key={key}
+            onClick={() => switchTarget(key)}
+            style={{padding:'7px 14px',cursor:'pointer',fontSize:12,fontWeight:targetKey===key?500:400,color:targetKey===key?'var(--text-dark)':'var(--text-secondary)',border: targetKey===key ? '1.5px solid var(--bg-warm-dark)' : '1px solid var(--border-light)',borderRadius:8,background:targetKey===key?'var(--bg-surface)':'#fff'}}>
+            {t.label}
+          </div>
+        ))}
       </div>
 
       <div style={{padding:14,background:'var(--bg-surface)',border:'1px solid var(--border-light)',borderRadius:8,marginBottom:18}}>
         <div style={{fontSize:12,fontWeight:600,marginBottom:8}}>Filename convention</div>
         <div style={{fontSize:12,color:'var(--text-secondary)',marginBottom:10}}>
-          Each file must be named <code style={{padding:'1px 6px',background:'#fff',borderRadius:4,border:'1px solid var(--border-light)'}}>{'{invoice_number}_{kind}.{ext}'}</code>. Kind is one of:
+          Each file must be named <code style={{padding:'1px 6px',background:'#fff',borderRadius:4,border:'1px solid var(--border-light)'}}>{'{invoice_number}_{kind}.{ext}'}</code>. For <strong>{target.label.toLowerCase()}</strong>, kind is one of:
         </div>
         <ul style={{fontSize:12,color:'var(--text-secondary)',margin:0,paddingLeft:18,lineHeight:1.7}}>
-          <li><strong>invoice</strong> (or <em>bill</em>) — the issued bill itself</li>
-          <li><strong>payment_proof</strong> (or <em>payment</em>, <em>proof</em>, <em>receipt</em>) — bank slip, cheque image, receipt</li>
+          {target.slotHints.map((h, i) => <li key={i}><strong>{h.split(' (')[0]}</strong>{h.includes('(') ? ' (' + h.split('(')[1] : ''}</li>)}
         </ul>
         <div style={{fontSize:12,color:'var(--text-secondary)',marginTop:10}}>
-          Examples: <code>RNT-2026-00431_invoice.pdf</code>, <code>RNT-2026-00431_payment.pdf</code>, <code>INV-MD-202605-cc08f0_receipt.jpg</code>
+          Examples: <code>{examplesFor(targetKey)}</code>
         </div>
       </div>
 
@@ -2544,7 +2605,7 @@ const InvoiceDocumentsBulkSection = () => {
                 <tr key={i}>
                   <td style={{wordBreak:'break-all'}}>{r.file.name}</td>
                   <td>{r.parsed ? r.parsed.invoice_number : '—'}</td>
-                  <td>{r.parsed ? r.parsed.kind : '—'}</td>
+                  <td>{r.kind || '—'}</td>
                   <td>
                     {statusPill(r.status)}
                     {r.message && <div style={{fontSize:10,color:'var(--text-muted)',marginTop:2}}>{r.message}</div>}
