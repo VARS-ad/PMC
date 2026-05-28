@@ -10,16 +10,18 @@
 // Hoisted to module scope so the property-card aggregates can use it too,
 // not just the drill modal.
 const _PROPERTIES_DAY_MS = 24 * 60 * 60 * 1000;
+// Display labels follow the Operating Income vocabulary used everywhere:
+// past due → 'Pending', within 30d → 'Upcoming', >30d → 'Future'.
 const propertiesEffectiveStatus = (i, nowMs) => {
-  if (!i) return 'Pending';
+  if (!i) return 'Upcoming';
   if (i.status === 'Paid' || i.status === 'Cancelled') return i.status;
   if (!i.due_date) return i.status;
   const due = new Date(i.due_date);
   if (isNaN(due.getTime())) return i.status;
   const daysUntilDue = Math.floor((due.getTime() - nowMs) / _PROPERTIES_DAY_MS);
-  if (daysUntilDue < 0)  return 'Overdue';
-  if (daysUntilDue > 30) return 'Upcoming';
-  return 'Pending';
+  if (daysUntilDue < 0)  return 'Pending';   // past due
+  if (daysUntilDue > 30) return 'Future';    // beyond 30 days
+  return 'Upcoming';                          // within next 30 days
 };
 
 // ---- BuildingDrillModal ----------------------------------------------------
@@ -50,8 +52,9 @@ const BuildingDrillModal = ({ building, view, onClose, setPage }) => {
   const VIEWS = {
     invoices:    { label: 'Total Billed',  page: 'payment', kind: 'invoices' },
     collected:   { label: 'Collected',     page: 'payment', kind: 'invoices' },
-    outstanding: { label: 'Outstanding',   page: 'payment', kind: 'invoices' },
+    pending:     { label: 'Pending',       page: 'payment', kind: 'invoices' },
     upcoming:    { label: 'Upcoming',      page: 'payment', kind: 'invoices' },
+    future:      { label: 'Future',        page: 'payment', kind: 'invoices' },
     srs:         { label: 'Open Service Requests', page: 'service', kind: 'srs' },
     tenants:     { label: 'Tenants',       page: 'profileCreation', kind: 'tenants' },
   };
@@ -60,9 +63,10 @@ const BuildingDrillModal = ({ building, view, onClose, setPage }) => {
   let rows = [];
   if (v.kind === 'invoices') {
     rows = (localInvoices || []).map(i => ({ ...i, effective_status: effectiveStatusOf(i) }));
-    if (view === 'collected')   rows = rows.filter(r => r.effective_status === 'Paid');
-    if (view === 'outstanding') rows = rows.filter(r => r.effective_status === 'Pending' || r.effective_status === 'Overdue');
-    if (view === 'upcoming')    rows = rows.filter(r => r.effective_status === 'Upcoming');
+    if (view === 'collected') rows = rows.filter(r => r.effective_status === 'Paid');
+    if (view === 'pending')   rows = rows.filter(r => r.effective_status === 'Pending');
+    if (view === 'upcoming')  rows = rows.filter(r => r.effective_status === 'Upcoming');
+    if (view === 'future')    rows = rows.filter(r => r.effective_status === 'Future');
   } else if (v.kind === 'srs') {
     rows = (building.srs || []).filter(s => ['New','Acknowledged','In Progress'].includes(s.status));
   } else if (v.kind === 'tenants') {
@@ -75,9 +79,9 @@ const BuildingDrillModal = ({ building, view, onClose, setPage }) => {
 
   const statusStyles = {
     'Paid':     { bg:'#e6efe1', fg:'#5a6b4f' },
-    'Pending':  { bg:'#fdf2dc', fg:'#7a5a1f' },
-    'Overdue':  { bg:'#fdf2f1', fg:'#8b4a42' },
-    'Upcoming': { bg:'#E6EAE9', fg:'#61707D' },
+    'Pending':  { bg:'#fdf2f1', fg:'#8b4a42' },  // past due
+    'Upcoming': { bg:'#fdf2dc', fg:'#7a5a1f' },  // within 30 days
+    'Future':   { bg:'#E6EAE9', fg:'#61707D' },  // beyond 30 days
     'Cancelled':{ bg:'#E6EAE9', fg:'#61707D' },
   };
 
@@ -252,9 +256,10 @@ const PMCPropertiesPage = ({ setPage }) => {
               unit_number: unitMap[i.unit_id]?.unit_number || '—',
               effective_status: propertiesEffectiveStatus(i, _nowMs),
             }));
-          const collected   = bInvoices.filter(i => i.effective_status === 'Paid').reduce((s, i) => s + Number(i.amount_aed), 0);
-          const outstanding = bInvoices.filter(i => i.effective_status === 'Pending' || i.effective_status === 'Overdue').reduce((s, i) => s + Number(i.amount_aed), 0);
-          const upcoming    = bInvoices.filter(i => i.effective_status === 'Upcoming').reduce((s, i) => s + Number(i.amount_aed), 0);
+          const collected = bInvoices.filter(i => i.effective_status === 'Paid').reduce((s, i) => s + Number(i.amount_aed), 0);
+          const pending   = bInvoices.filter(i => i.effective_status === 'Pending').reduce((s, i) => s + Number(i.amount_aed), 0);   // past due
+          const upcoming  = bInvoices.filter(i => i.effective_status === 'Upcoming').reduce((s, i) => s + Number(i.amount_aed), 0);  // within 30 days
+          const future    = bInvoices.filter(i => i.effective_status === 'Future').reduce((s, i) => s + Number(i.amount_aed), 0);    // beyond 30 days
           const bSRs = (srs || [])
             .filter(s => unitIds.includes(s.unit_id))
             .map(s => ({
@@ -271,7 +276,7 @@ const PMCPropertiesPage = ({ setPage }) => {
             invoices: bInvoices,
             srs: bSRs,
             unitCount: bUnits.length, occupiedCount: occupied.length,
-            monthlyRev, collected, outstanding, upcoming, openSRs, totalSRs: bSRs.length,
+            monthlyRev, collected, pending, upcoming, future, openSRs, totalSRs: bSRs.length,
           };
         });
         setBuildings(result);
@@ -310,10 +315,14 @@ const PMCPropertiesPage = ({ setPage }) => {
               { key: 'occupiedCount',  header: 'Occupied',      width: 10, halign: 'right', numeric: true },
               { key: 'monthlyRev',     header: 'Monthly Rev (AED)',  width: 16, halign: 'right', numeric: true,
                 value: (r) => Math.round(r.monthlyRev || 0) },
-              { key: 'collected',      header: 'Collected (AED)',    width: 16, halign: 'right', numeric: true,
+              { key: 'collected', header: 'Collected (AED)', width: 16, halign: 'right', numeric: true,
                 value: (r) => Math.round(r.collected || 0) },
-              { key: 'outstanding',    header: 'Outstanding (AED)',  width: 16, halign: 'right', numeric: true,
-                value: (r) => Math.round(r.outstanding || 0) },
+              { key: 'pending',   header: 'Pending (AED)',   width: 14, halign: 'right', numeric: true,
+                value: (r) => Math.round(r.pending || 0) },
+              { key: 'upcoming',  header: 'Upcoming (AED)',  width: 14, halign: 'right', numeric: true,
+                value: (r) => Math.round(r.upcoming || 0) },
+              { key: 'future',    header: 'Future (AED)',    width: 14, halign: 'right', numeric: true,
+                value: (r) => Math.round(r.future || 0) },
               { key: 'openSRs',        header: 'Open SRs',      width: 10, halign: 'right', numeric: true },
               { key: 'totalSRs',       header: 'Total SRs',     width: 10, halign: 'right', numeric: true },
               { key: 'notes',          header: 'Notes',         width: 30 },
@@ -367,10 +376,10 @@ const PMCPropertiesPage = ({ setPage }) => {
           // instead of 5).
           const renderBuildingCard = (b, kind) => {
             const occupancyPct = b.unitCount > 0 ? Math.round((b.occupiedCount / b.unitCount) * 100) : 0;
-            const totalBilled = b.collected + b.outstanding + b.upcoming;
+            const totalBilled = b.collected + b.pending + b.upcoming + b.future;
             const open = () => setSelectedBuilding(b);
             const isCommercial = kind === 'Commercial';
-            const cols = isCommercial ? 6 : 5;
+            const cols = isCommercial ? 7 : 6;
             return (
               <div key={b.id} className="card">
                 <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:10}}>
@@ -396,11 +405,12 @@ const PMCPropertiesPage = ({ setPage }) => {
                   {isCommercial && (
                     <PMCStat label="Monthly Run-Rate"  value={'AED ' + Math.round(b.monthlyRev).toLocaleString()}          onClick={() => setDrill({ building: b, view: 'tenants' })}        hint="Tenants + lease rates"/>
                   )}
-                  <PMCStat label="Total Billed"      value={'AED ' + Math.round(totalBilled).toLocaleString()}           onClick={() => setDrill({ building: b, view: 'invoices' })}       hint="All invoices for this building"/>
-                  <PMCStat label="Collected"         value={'AED ' + Math.round(b.collected).toLocaleString()}           onClick={() => setDrill({ building: b, view: 'collected' })}      color="#5a6b4f" hint="Paid invoices only"/>
-                  <PMCStat label="Outstanding"       value={'AED ' + Math.round(b.outstanding).toLocaleString()}         onClick={() => setDrill({ building: b, view: 'outstanding' })}    color={b.outstanding > 0 ? '#8b4a42' : null} hint="Pending + Overdue"/>
-                  <PMCStat label="Upcoming"          value={'AED ' + Math.round(b.upcoming).toLocaleString()}            onClick={() => setDrill({ building: b, view: 'upcoming' })}       color={b.upcoming > 0 ? '#a07d3c' : null} hint="Due more than 30 days out"/>
-                  <PMCStat label="Open SRs"          value={b.openSRs + ' open · ' + b.totalSRs + ' total'}              onClick={() => setDrill({ building: b, view: 'srs' })}            hint="Service requests for this building"/>
+                  <PMCStat label="Total Billed" value={'AED ' + Math.round(totalBilled).toLocaleString()}  onClick={() => setDrill({ building: b, view: 'invoices' })}  hint="All invoices for this building"/>
+                  <PMCStat label="Collected"    value={'AED ' + Math.round(b.collected).toLocaleString()} onClick={() => setDrill({ building: b, view: 'collected' })} color="#5a6b4f" hint="Paid invoices"/>
+                  <PMCStat label="Pending"      value={'AED ' + Math.round(b.pending).toLocaleString()}   onClick={() => setDrill({ building: b, view: 'pending' })}   color={b.pending  > 0 ? '#8b4a42' : null} hint="Past due — not paid yet"/>
+                  <PMCStat label="Upcoming"     value={'AED ' + Math.round(b.upcoming).toLocaleString()}  onClick={() => setDrill({ building: b, view: 'upcoming' })}  color={b.upcoming > 0 ? '#a07d3c' : null} hint="Due within next 30 days"/>
+                  <PMCStat label="Future"       value={'AED ' + Math.round(b.future).toLocaleString()}    onClick={() => setDrill({ building: b, view: 'future' })}    color={b.future   > 0 ? '#61707D' : null} hint="Due more than 30 days out"/>
+                  <PMCStat label="Open SRs"     value={b.openSRs + ' open · ' + b.totalSRs + ' total'}    onClick={() => setDrill({ building: b, view: 'srs' })}       hint="Service requests"/>
                 </div>
               </div>
             );

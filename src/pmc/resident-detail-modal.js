@@ -99,8 +99,12 @@ const ResidentDetailModal = ({ resident, onClose }) => {
   ];
   const groupedDocs = (documents || []).reduce((acc, d) => { (acc[d.kind] = acc[d.kind] || []).push(d); return acc; }, {});
 
-  // === Split invoices into Paid / Outstanding / Future ===
+  // === Split invoices into Paid / Pending / Upcoming / Future ===
+  // Pending  = past due (Operating Income vocabulary)
+  // Upcoming = due within next 30 days
+  // Future   = due more than 30 days out
   const today = new Date(); today.setHours(0, 0, 0, 0);
+  const dayMs = 24 * 60 * 60 * 1000;
   const splitInvoices = (invoices || []).reduce((acc, inv) => {
     const amt = Number(inv.amount_aed) || 0;
     acc.total += amt;
@@ -108,11 +112,17 @@ const ResidentDetailModal = ({ resident, onClose }) => {
       acc.paid.push(inv); acc.paidTotal += amt;
     } else if (inv.status === 'Pending' || inv.status === 'Overdue') {
       const due = inv.due_date ? new Date(inv.due_date) : null;
-      if (due && due > today) { acc.future.push(inv); acc.futureTotal += amt; }
-      else                    { acc.outstanding.push(inv); acc.outstandingTotal += amt; }
+      if (!due || due <= today) {
+        acc.pending.push(inv); acc.pendingTotal += amt;
+      } else {
+        const daysOut = Math.floor((due.getTime() - today.getTime()) / dayMs);
+        if (daysOut > 30) { acc.future.push(inv);   acc.futureTotal   += amt; }
+        else              { acc.upcoming.push(inv); acc.upcomingTotal += amt; }
+      }
     }
     return acc;
-  }, { paid: [], outstanding: [], future: [], paidTotal: 0, outstandingTotal: 0, futureTotal: 0, total: 0 });
+  }, { paid: [], pending: [], upcoming: [], future: [],
+       paidTotal: 0, pendingTotal: 0, upcomingTotal: 0, futureTotal: 0, total: 0 });
 
   const fmt = (n) => 'AED ' + Math.round(Number(n) || 0).toLocaleString('en-US');
 
@@ -154,13 +164,23 @@ const ResidentDetailModal = ({ resident, onClose }) => {
               <td>{inv.description}</td>
               <td>{inv.due_date || '—'}</td>
               <td style={{textAlign:'right'}}>{fmt(inv.amount_aed)}</td>
-              {!isPaid && (
-                <td>
-                  <span style={{padding:'2px 8px',borderRadius:3,fontSize:10,fontWeight:600,background: inv.status === 'Overdue' ? '#fdf2f1' : '#fdf2dc',color: inv.status === 'Overdue' ? '#8b4a42' : '#a07d3c'}}>
-                    {inv.status}
-                  </span>
-                </td>
-              )}
+              {!isPaid && (() => {
+                // Map raw DB status + due-date proximity to the new
+                // Operating Income vocabulary so the badge agrees with
+                // the section heading.
+                const due = inv.due_date ? new Date(inv.due_date) : null;
+                let label = 'Pending', bg = '#fdf2f1', fg = '#8b4a42';
+                if (due && due > today) {
+                  const daysOut = Math.floor((due.getTime() - today.getTime()) / dayMs);
+                  if (daysOut > 30) { label = 'Future';   bg = '#E6EAE9'; fg = '#61707D'; }
+                  else              { label = 'Upcoming'; bg = '#fdf2dc'; fg = '#a07d3c'; }
+                }
+                return (
+                  <td>
+                    <span style={{padding:'2px 8px',borderRadius:3,fontSize:10,fontWeight:600,background:bg,color:fg}}>{label}</span>
+                  </td>
+                );
+              })()}
               <InvoiceSlotCell invoice={inv} slot="invoice"/>
               <InvoiceSlotCell invoice={inv} slot="payment_proof"/>
             </tr>
@@ -233,26 +253,33 @@ const ResidentDetailModal = ({ resident, onClose }) => {
           <div>
             <div className="kpi-row" style={{marginBottom:14}}>
               <div className="kpi-card"><div className="label">Total Billed</div><div className="value" style={{fontSize:18}}>{fmt(splitInvoices.total)}</div></div>
-              <div className="kpi-card"><div className="label">Paid</div><div className="value" style={{fontSize:18,color:'#5a6b4f'}}>{fmt(splitInvoices.paidTotal)}</div></div>
-              <div className="kpi-card"><div className="label">Outstanding</div><div className="value" style={{fontSize:18,color:'#8b4a42'}}>{fmt(splitInvoices.outstandingTotal)}</div></div>
-              <div className="kpi-card"><div className="label">Future</div><div className="value" style={{fontSize:18,color:'#a07d3c'}}>{fmt(splitInvoices.futureTotal)}</div></div>
+              <div className="kpi-card"><div className="label">Collected</div><div className="value" style={{fontSize:18,color:'#5a6b4f'}}>{fmt(splitInvoices.paidTotal)}</div></div>
+              <div className="kpi-card"><div className="label">Pending</div><div className="value" style={{fontSize:18,color:'#8b4a42'}}>{fmt(splitInvoices.pendingTotal)}</div></div>
+              <div className="kpi-card"><div className="label">Upcoming</div><div className="value" style={{fontSize:18,color:'#a07d3c'}}>{fmt(splitInvoices.upcomingTotal)}</div></div>
+              <div className="kpi-card"><div className="label">Future</div><div className="value" style={{fontSize:18,color:'#61707D'}}>{fmt(splitInvoices.futureTotal)}</div></div>
             </div>
 
-            {splitInvoices.outstanding.length > 0 && (
+            {splitInvoices.pending.length > 0 && (
               <>
-                <div style={{fontSize:12,fontWeight:600,color:'#8b4a42',marginBottom:6}}>Outstanding — needs collection</div>
-                <PaymentTable rows={splitInvoices.outstanding}/>
+                <div style={{fontSize:12,fontWeight:600,color:'#8b4a42',marginBottom:6}}>Pending — past due</div>
+                <PaymentTable rows={splitInvoices.pending}/>
+              </>
+            )}
+            {splitInvoices.upcoming.length > 0 && (
+              <>
+                <div style={{fontSize:12,fontWeight:600,color:'#a07d3c',marginBottom:6}}>Upcoming — due in next 30 days</div>
+                <PaymentTable rows={splitInvoices.upcoming}/>
               </>
             )}
             {splitInvoices.future.length > 0 && (
               <>
-                <div style={{fontSize:12,fontWeight:600,color:'#a07d3c',marginBottom:6}}>Future — not yet due</div>
+                <div style={{fontSize:12,fontWeight:600,color:'#61707D',marginBottom:6}}>Future — more than 30 days out</div>
                 <PaymentTable rows={splitInvoices.future}/>
               </>
             )}
             {splitInvoices.paid.length > 0 && (
               <>
-                <div style={{fontSize:12,fontWeight:600,color:'#5a6b4f',marginBottom:6}}>Paid</div>
+                <div style={{fontSize:12,fontWeight:600,color:'#5a6b4f',marginBottom:6}}>Collected</div>
                 <PaymentTable rows={splitInvoices.paid} kind="paid"/>
               </>
             )}
@@ -284,9 +311,10 @@ const ResidentDetailModal = ({ resident, onClose }) => {
             filenameBase: 'tenant_statement_' + String(resident.full_name || 'resident').replace(/\s+/g, '_'),
             dateField:    'due_date',
             rows: [
-              ...splitInvoices.outstanding.map(i => ({ ...i, bucket: 'Outstanding' })),
-              ...splitInvoices.future.map(i      => ({ ...i, bucket: 'Future' })),
-              ...splitInvoices.paid.map(i        => ({ ...i, bucket: 'Paid' })),
+              ...splitInvoices.pending.map(i  => ({ ...i, bucket: 'Pending' })),
+              ...splitInvoices.upcoming.map(i => ({ ...i, bucket: 'Upcoming' })),
+              ...splitInvoices.future.map(i   => ({ ...i, bucket: 'Future' })),
+              ...splitInvoices.paid.map(i     => ({ ...i, bucket: 'Collected' })),
             ],
             columns: [
               { key: 'invoice_number', header: 'Invoice #',    width: 14 },
@@ -312,8 +340,9 @@ const ResidentDetailModal = ({ resident, onClose }) => {
               'Lease end':      resident.lease_end || '—',
               'Monthly rent':   resident.monthly_payment_aed ? ('AED ' + Math.round(Number(resident.monthly_payment_aed)).toLocaleString()) : '—',
               'Total Billed':   'AED ' + Math.round(splitInvoices.total).toLocaleString(),
-              'Paid':           'AED ' + Math.round(splitInvoices.paidTotal).toLocaleString(),
-              'Outstanding':    'AED ' + Math.round(splitInvoices.outstandingTotal).toLocaleString(),
+              'Collected':      'AED ' + Math.round(splitInvoices.paidTotal).toLocaleString(),
+              'Pending':        'AED ' + Math.round(splitInvoices.pendingTotal).toLocaleString(),
+              'Upcoming':       'AED ' + Math.round(splitInvoices.upcomingTotal).toLocaleString(),
               'Future':         'AED ' + Math.round(splitInvoices.futureTotal).toLocaleString(),
             },
           },

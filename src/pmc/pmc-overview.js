@@ -312,8 +312,8 @@ const PMCOverviewPage = ({ setPage }) => {
           <KpiCard label="Total Properties Selected" value={stats.selectedPropsCount + ' ' + (stats.selectedPropsCount === 1 ? 'property' : 'properties')} page="properties"/>
           <KpiCard label="Units Occupied"            value={stats.occupied + ' / ' + stats.totalUnits}        page="properties"/>
           <KpiCard label="Occupancy Rate"            value={stats.occupancyRate + '%'}                         page="properties"/>
-          <KpiCard label="Collected Service Charges" value={fmt(stats.monthCollected)}    color="#5a6b4f" page="payment"/>
-          <KpiCard label="Pending Service Charges"   value={fmt(stats.monthOutstanding)} color="#8b4a42" page="payment"/>
+          <KpiCard label="Operating Income Collected" value={fmt(stats.monthCollected)} color="#5a6b4f" page="payment"/>
+          <KpiCard label="Operating Income Pending"   value={fmt(stats.monthOverdue)}  color="#8b4a42" page="payment"/>
         </div>
 
         {/* ============ FINANCIAL SUMMARY ============ */}
@@ -322,24 +322,24 @@ const PMCOverviewPage = ({ setPage }) => {
           {/* Service Charge Collection — Collection / Pending / Outstanding for selected period */}
           <div className="card">
             <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:14}}>
-              <div style={{fontSize:14,fontWeight:600,color:'var(--text-dark)'}}>Service Charge Collection</div>
+              <div style={{fontSize:14,fontWeight:600,color:'var(--text-dark)'}}>Operating Income</div>
               <span onClick={() => setPage && setPage('payment')} style={{fontSize:11,color:'var(--accent-warm-dark)',cursor:'pointer'}}>View all →</span>
             </div>
             <div style={{display:'grid',gridTemplateColumns:'repeat(4, minmax(0, 1fr))',gap:18}}>
               <div title="Paid invoices in the selected period">
-                <div style={{fontSize:10,letterSpacing:'0.08em',textTransform:'uppercase',color:'var(--text-secondary)',marginBottom:6,fontWeight:600}}>Collection</div>
+                <div style={{fontSize:10,letterSpacing:'0.08em',textTransform:'uppercase',color:'var(--text-secondary)',marginBottom:6,fontWeight:600}}>Collected</div>
                 <div style={{fontSize:24,fontWeight:600,color:'#5a6b4f',letterSpacing:'-0.03em'}}>{fmt(stats.monthCollected)}</div>
               </div>
-              <div title="Due within the next 30 days">
-                <div style={{fontSize:10,letterSpacing:'0.08em',textTransform:'uppercase',color:'var(--text-secondary)',marginBottom:6,fontWeight:600}}>Pending</div>
-                <div style={{fontSize:24,fontWeight:600,color:'#a07d3c',letterSpacing:'-0.03em'}}>{fmt(stats.monthPending)}</div>
-              </div>
               <div title="Past due — not yet paid">
-                <div style={{fontSize:10,letterSpacing:'0.08em',textTransform:'uppercase',color:'var(--text-secondary)',marginBottom:6,fontWeight:600}}>Overdue</div>
+                <div style={{fontSize:10,letterSpacing:'0.08em',textTransform:'uppercase',color:'var(--text-secondary)',marginBottom:6,fontWeight:600}}>Pending</div>
                 <div style={{fontSize:24,fontWeight:600,color:'#8b4a42',letterSpacing:'-0.03em'}}>{fmt(stats.monthOverdue)}</div>
               </div>
-              <div title="Scheduled cheques due more than 30 days out">
+              <div title="Due within the next 30 days">
                 <div style={{fontSize:10,letterSpacing:'0.08em',textTransform:'uppercase',color:'var(--text-secondary)',marginBottom:6,fontWeight:600}}>Upcoming</div>
+                <div style={{fontSize:24,fontWeight:600,color:'#a07d3c',letterSpacing:'-0.03em'}}>{fmt(stats.monthPending)}</div>
+              </div>
+              <div title="Scheduled cheques due more than 30 days out">
+                <div style={{fontSize:10,letterSpacing:'0.08em',textTransform:'uppercase',color:'var(--text-secondary)',marginBottom:6,fontWeight:600}}>Future</div>
                 <div style={{fontSize:24,fontWeight:600,color:'#61707D',letterSpacing:'-0.03em'}}>{fmt(stats.monthUpcoming)}</div>
               </div>
             </div>

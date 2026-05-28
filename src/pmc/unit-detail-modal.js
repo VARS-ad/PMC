@@ -115,13 +115,13 @@ const UnitDetailModal = ({ unit, building, assignment: passedAssignment, profile
     const due = new Date(i.due_date);
     if (isNaN(due.getTime())) return i.status;
     const daysUntilDue = Math.floor((due.getTime() - _now.getTime()) / (24*60*60*1000));
-    if (daysUntilDue < 0)  return 'Due';
-    if (daysUntilDue > 30) return 'Upcoming';
-    return 'Ongoing';
+    if (daysUntilDue < 0)  return 'Pending';   // past due
+    if (daysUntilDue > 30) return 'Future';    // >30 days out
+    return 'Upcoming';                          // due within next 30 days
   };
   const annotatedInvoices = (invoices || []).map(i => ({ ...i, effective_status: _eff(i) }));
-  const outstandingInvoices = annotatedInvoices.filter(i => i.effective_status === 'Ongoing' || i.effective_status === 'Due');
-  const upcomingInvoices    = annotatedInvoices.filter(i => i.effective_status === 'Upcoming');
+  const outstandingInvoices = annotatedInvoices.filter(i => i.effective_status === 'Upcoming' || i.effective_status === 'Pending');
+  const upcomingInvoices    = annotatedInvoices.filter(i => i.effective_status === 'Future');
   const totalOutstanding    = outstandingInvoices.reduce((s, i) => s + Number(i.amount_aed), 0);
   const totalUpcoming       = upcomingInvoices.reduce((s, i) => s + Number(i.amount_aed), 0);
 
@@ -215,9 +215,9 @@ const UnitDetailModal = ({ unit, building, assignment: passedAssignment, profile
                 const currentMatch = assignment && i.resident_profile_id && i.resident_profile_id === assignment.profile_id;
                 const statusStyle = ({
                   'Paid':     { bg: '#e6efe1', fg: '#5a6b4f' },
-                  'Ongoing':  { bg: '#fdf2dc', fg: '#7a5a1f' },
-                  'Due':      { bg: '#fdf2f1', fg: '#8b4a42' },
-                  'Upcoming': { bg: '#E6EAE9', fg: '#61707D' },
+                  'Pending':  { bg: '#fdf2f1', fg: '#8b4a42' },  // past due
+                  'Upcoming': { bg: '#fdf2dc', fg: '#7a5a1f' },  // within 30 days
+                  'Future':   { bg: '#E6EAE9', fg: '#61707D' },  // >30 days
                 })[i.effective_status] || { bg: '#E6EAE9', fg: '#61707D' };
                 return (
                   <tr key={i.id}>
@@ -283,7 +283,7 @@ const UnitDetailModal = ({ unit, building, assignment: passedAssignment, profile
                   </Section>
 
                   {upcomingInvoices.length > 0 && (
-                    <Section label={'Upcoming Cheques · ' + upcomingInvoices.length}>
+                    <Section label={'Future Cheques · ' + upcomingInvoices.length}>
                       <div style={{fontSize:11,color:'#61707D',marginBottom:8}}>
                         Scheduled cheques due more than 30 days out — not yet outstanding.
                       </div>

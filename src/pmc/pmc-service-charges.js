@@ -9,16 +9,21 @@
 // Outstanding receivables = Pending + Overdue; Upcoming is scheduled cash that
 // has not been billed-out yet by accounting convention.
 const SC_UPCOMING_THRESHOLD_DAYS = 30;
+// Display labels follow the Operating Income naming agreed with the user:
+//   Paid (cash received)  → 'Paid'
+//   Past due              → 'Pending'
+//   Due within next 30d   → 'Upcoming'
+//   Due more than 30d out → 'Future'
 const effectiveInvoiceStatus = (inv, today = new Date()) => {
-  if (!inv) return 'Pending';
+  if (!inv) return 'Upcoming';
   if (inv.status === 'Paid' || inv.status === 'Cancelled') return inv.status;
   const due = inv.due_date ? new Date(inv.due_date) : null;
   if (!due || isNaN(due.getTime())) return inv.status;
   const dayMs = 24 * 60 * 60 * 1000;
   const daysUntilDue = Math.floor((due.getTime() - today.getTime()) / dayMs);
-  if (daysUntilDue < 0) return 'Overdue';
-  if (daysUntilDue > SC_UPCOMING_THRESHOLD_DAYS) return 'Upcoming';
-  return 'Pending';
+  if (daysUntilDue < 0) return 'Pending';                              // past due
+  if (daysUntilDue > SC_UPCOMING_THRESHOLD_DAYS) return 'Future';      // beyond 30 days
+  return 'Upcoming';                                                    // within next 30 days
 };
 
 const PMCServiceChargesPage = () => {
@@ -101,11 +106,11 @@ const PMCServiceChargesPage = () => {
   const totals = {
     total:    filtered.reduce((s, i) => s + Number(i.amount_aed), 0),
     paid:     sumWhere(i => i.effective_status === 'Paid'),
-    pending:  sumWhere(i => i.effective_status === 'Pending'),   // due within next 30 days
-    overdue:  sumWhere(i => i.effective_status === 'Overdue'),
-    upcoming: sumWhere(i => i.effective_status === 'Upcoming'),  // scheduled, beyond 30 days
+    pending:  sumWhere(i => i.effective_status === 'Pending'),   // past due
+    upcoming: sumWhere(i => i.effective_status === 'Upcoming'),  // within next 30 days
+    future:   sumWhere(i => i.effective_status === 'Future'),    // beyond 30 days
   };
-  totals.outstanding = totals.pending + totals.overdue;
+  totals.outstanding = totals.pending + totals.upcoming;
   const fmt = (n) => 'AED ' + Math.round(n).toLocaleString();
 
   return (
@@ -150,8 +155,8 @@ const PMCServiceChargesPage = () => {
               'Total Billed':    'AED ' + Math.round(totals.total).toLocaleString(),
               'Collected':       'AED ' + Math.round(totals.paid).toLocaleString(),
               'Pending':         'AED ' + Math.round(totals.pending).toLocaleString(),
-              'Overdue':         'AED ' + Math.round(totals.overdue).toLocaleString(),
               'Upcoming':        'AED ' + Math.round(totals.upcoming).toLocaleString(),
+              'Future':          'AED ' + Math.round(totals.future).toLocaleString(),
               'Outstanding':     'AED ' + Math.round(totals.outstanding).toLocaleString(),
             },
           },
@@ -164,7 +169,7 @@ const PMCServiceChargesPage = () => {
             rows: (() => {
               const today = new Date();
               const buckets = { current: 0, b30: 0, b60: 0, b90: 0, b91: 0 };
-              (filtered || []).filter(i => i.effective_status === 'Pending' || i.effective_status === 'Overdue').forEach(i => {
+              (filtered || []).filter(i => i.effective_status === 'Pending' || i.effective_status === 'Upcoming').forEach(i => {
                 if (!i.due_date) { buckets.current += Number(i.amount_aed); return; }
                 const days = Math.floor((today.getTime() - new Date(i.due_date).getTime()) / (1000 * 60 * 60 * 24));
                 if (days <= 0) buckets.current += Number(i.amount_aed);
@@ -194,7 +199,7 @@ const PMCServiceChargesPage = () => {
               'Property Filter':   selectedProperties.length === 0 ? 'All buildings' : (selectedProperties.length + ' selected'),
               'Status Filter':     statusFilter === 'all' ? 'All' : statusFilter,
               'Total Outstanding': 'AED ' + Math.round(totals.outstanding).toLocaleString(),
-              'Upcoming (>30 d)':  'AED ' + Math.round(totals.upcoming).toLocaleString(),
+              'Future (>30 d)':    'AED ' + Math.round(totals.future).toLocaleString(),
             },
           },
         ]}
@@ -203,16 +208,16 @@ const PMCServiceChargesPage = () => {
       <div className="kpi-row" style={{gridTemplateColumns:'repeat(5, minmax(0, 1fr))'}}>
         <div className="kpi-card"><div className="label">Total Billed</div><div className="value">{fmt(totals.total)}</div></div>
         <div className="kpi-card"><div className="label">Collected</div><div className="value" style={{color:'#5a6b4f'}}>{fmt(totals.paid)}</div></div>
-        <div className="kpi-card" title="Due within the next 30 days"><div className="label">Pending</div><div className="value" style={{color:'#a07d3c'}}>{fmt(totals.pending)}</div></div>
-        <div className="kpi-card"><div className="label">Overdue</div><div className="value" style={{color:'#8b4a42'}}>{fmt(totals.overdue)}</div></div>
-        <div className="kpi-card" title="Scheduled cheques due more than 30 days out — not yet outstanding"><div className="label">Upcoming</div><div className="value" style={{color:'#61707D'}}>{fmt(totals.upcoming)}</div></div>
+        <div className="kpi-card" title="Past due — not yet paid"><div className="label">Pending</div><div className="value" style={{color:'#8b4a42'}}>{fmt(totals.pending)}</div></div>
+        <div className="kpi-card" title="Due within the next 30 days"><div className="label">Upcoming</div><div className="value" style={{color:'#a07d3c'}}>{fmt(totals.upcoming)}</div></div>
+        <div className="kpi-card" title="Scheduled cheques due more than 30 days out"><div className="label">Future</div><div className="value" style={{color:'#61707D'}}>{fmt(totals.future)}</div></div>
       </div>
 
-      {/* Aging buckets — receivables by days overdue. Excludes Upcoming (scheduled future cheques). */}
+      {/* Aging buckets — receivables by days overdue. Excludes Future (scheduled cheques >30 days out). */}
       {invoices !== null && filtered.length > 0 && (() => {
         const today = new Date();
         const buckets = { current: 0, b30: 0, b60: 0, b90: 0, b91: 0 };
-        filtered.filter(i => i.effective_status === 'Pending' || i.effective_status === 'Overdue').forEach(i => {
+        filtered.filter(i => i.effective_status === 'Pending' || i.effective_status === 'Upcoming').forEach(i => {
           if (!i.due_date) { buckets.current += Number(i.amount_aed); return; }
           const days = Math.floor((today.getTime() - new Date(i.due_date).getTime()) / (1000 * 60 * 60 * 24));
           if (days <= 0) buckets.current += Number(i.amount_aed);
@@ -259,16 +264,16 @@ const PMCServiceChargesPage = () => {
         // monthly bucket totals for last 12 months
         const buckets = buildMonthlyBuckets(12);
         const idxMap = Object.fromEntries(buckets.map((m, i) => [m.key, i]));
-        const monthly = { paid: new Array(12).fill(0), pending: new Array(12).fill(0), overdue: new Array(12).fill(0), upcoming: new Array(12).fill(0) };
+        const monthly = { paid: new Array(12).fill(0), pending: new Array(12).fill(0), upcoming: new Array(12).fill(0), future: new Array(12).fill(0) };
         filtered.forEach(i => {
           const k = (i.created_at || i.due_date || '').slice(0, 7);
           const idx = idxMap[k]; if (idx == null) return;
           const amt = Number(i.amount_aed) || 0;
           const s = i.effective_status;
           if (s === 'Paid') monthly.paid[idx] += amt;
-          else if (s === 'Pending') monthly.pending[idx] += amt;
-          else if (s === 'Overdue') monthly.overdue[idx] += amt;
+          else if (s === 'Pending')  monthly.pending[idx]  += amt;
           else if (s === 'Upcoming') monthly.upcoming[idx] += amt;
+          else if (s === 'Future')   monthly.future[idx]   += amt;
         });
         // by source type
         const bySource = {};
@@ -281,15 +286,15 @@ const PMCServiceChargesPage = () => {
             <div className="card">
               <div style={{marginBottom:6}}>
                 <div style={{fontSize:13,fontWeight:600}}>Invoices by Month</div>
-                <div style={{fontSize:11,color:'var(--text-secondary)',marginTop:2}}>Stacked Paid · Pending · Overdue · Upcoming across last 12 months.</div>
+                <div style={{fontSize:11,color:'var(--text-secondary)',marginTop:2}}>Stacked Paid · Pending · Upcoming · Future across last 12 months.</div>
               </div>
               <ChartCanvas height={280} config={{
                 type: 'bar',
                 data: { labels: buckets.map(m => m.label), datasets: [
                   { label: 'Paid',     data: monthly.paid,     backgroundColor: '#5a6b4f' },
-                  { label: 'Pending',  data: monthly.pending,  backgroundColor: '#a07d3c' },
-                  { label: 'Overdue',  data: monthly.overdue,  backgroundColor: '#8b4a42' },
-                  { label: 'Upcoming', data: monthly.upcoming, backgroundColor: '#D0D6D5' },
+                  { label: 'Pending',  data: monthly.pending,  backgroundColor: '#8b4a42' },
+                  { label: 'Upcoming', data: monthly.upcoming, backgroundColor: '#a07d3c' },
+                  { label: 'Future',   data: monthly.future,   backgroundColor: '#D0D6D5' },
                 ]},
                 options: {
                   responsive: true, maintainAspectRatio: false,
@@ -335,8 +340,8 @@ const PMCServiceChargesPage = () => {
               <option value="all">All statuses</option>
               <option>Paid</option>
               <option>Pending</option>
-              <option>Overdue</option>
               <option>Upcoming</option>
+              <option>Future</option>
               <option>Cancelled</option>
             </select>
           </div>
@@ -369,14 +374,14 @@ const PMCServiceChargesPage = () => {
                       const s = i.effective_status;
                       const c = ({
                         'Paid':      { bg: '#e6efe1', fg: '#5a6b4f' },
-                        'Pending':   { bg: '#fdf2dc', fg: '#7a5a1f' },
-                        'Overdue':   { bg: '#fdf2f1', fg: '#8b4a42' },
-                        'Upcoming':  { bg: '#E6EAE9', fg: '#61707D' },
+                        'Pending':   { bg: '#fdf2f1', fg: '#8b4a42' },  // past due
+                        'Upcoming':  { bg: '#fdf2dc', fg: '#7a5a1f' },  // within 30 days
+                        'Future':    { bg: '#E6EAE9', fg: '#61707D' },  // beyond 30 days
                         'Cancelled': { bg: '#E6EAE9', fg: '#61707D' },
                       })[s] || { bg: '#E6EAE9', fg: '#61707D' };
                       return (
                         <span style={{padding:'3px 10px',borderRadius:4,fontSize:11,fontWeight:500,background:c.bg,color:c.fg}}
-                              title={s === 'Upcoming' ? 'Due more than 30 days out — not yet outstanding' : (s === 'Pending' ? 'Due within the next 30 days' : '')}>
+                              title={s === 'Future' ? 'Due more than 30 days out' : (s === 'Upcoming' ? 'Due within the next 30 days' : (s === 'Pending' ? 'Past due — not paid yet' : ''))}>
                           {s}
                         </span>
                       );
