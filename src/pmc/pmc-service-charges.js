@@ -306,9 +306,15 @@ const PMCServiceChargesPage = () => {
         ];
         return (
           <div className="card">
-            <div style={{marginBottom:18}}>
-              <div style={{fontSize:13,fontWeight:600}}>Aging — Receivables by Days Overdue</div>
-              <div style={{fontSize:11,color:'var(--text-secondary)',marginTop:2}}>Only unpaid invoices (Pending + Upcoming). Older buckets = redder. Total: <strong style={{color:'var(--text-dark)'}}>{fmt(total)}</strong></div>
+            <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-end',marginBottom:18,gap:14,flexWrap:'wrap'}}>
+              <div>
+                <div style={{fontSize:15,fontWeight:600,color:'var(--text-dark)',letterSpacing:'-0.015em'}}>Aging — Receivables by Days Overdue</div>
+                <div style={{fontSize:11,color:'var(--text-muted)',marginTop:3}}>Unpaid invoices · older = redder</div>
+              </div>
+              <div style={{textAlign:'right'}}>
+                <div style={{fontSize:10,letterSpacing:'0.08em',textTransform:'uppercase',color:'var(--text-secondary)',fontWeight:600}}>Total unpaid</div>
+                <div style={{fontSize:18,fontWeight:600,color:'var(--text-dark)',letterSpacing:'-0.02em'}}>{fmt(total)}</div>
+              </div>
             </div>
             {/* Match the headline KPI row style at the top of the page —
                 each bucket is now a kpi-card with bucket name as the
@@ -364,8 +370,8 @@ const PMCServiceChargesPage = () => {
             <div className="card">
               <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:10,gap:14,flexWrap:'wrap'}}>
                 <div>
-                  <div style={{fontSize:13,fontWeight:600}}>Invoices by Month</div>
-                  <div style={{fontSize:11,color:'var(--text-secondary)',marginTop:2}}>Stacked Paid · Pending · Upcoming · Future across last 12 months.</div>
+                  <div style={{fontSize:15,fontWeight:600,color:'var(--text-dark)',letterSpacing:'-0.015em'}}>Invoices by Month</div>
+                  <div style={{fontSize:11,color:'var(--text-muted)',marginTop:3}}>Last 12 months · stacked by status</div>
                 </div>
                 <div style={{textAlign:'right'}}>
                   <div style={{fontSize:10,letterSpacing:'0.08em',textTransform:'uppercase',color:'var(--text-secondary)',fontWeight:600}}>Total billed</div>
@@ -434,9 +440,9 @@ const PMCServiceChargesPage = () => {
               }}/>
             </div>
             <div className="card">
-              <div style={{marginBottom:6}}>
-                <div style={{fontSize:13,fontWeight:600}}>Charges by Source</div>
-                <div style={{fontSize:11,color:'var(--text-secondary)',marginTop:2}}>Where invoiced amounts come from. Hover slices for AED.</div>
+              <div style={{marginBottom:10}}>
+                <div style={{fontSize:15,fontWeight:600,color:'var(--text-dark)',letterSpacing:'-0.015em'}}>Charges by Source</div>
+                <div style={{fontSize:11,color:'var(--text-muted)',marginTop:3}}>Hover a slice to see the AED amount</div>
               </div>
               <ChartCanvas height={280} config={{
                 type: 'doughnut',
@@ -459,23 +465,19 @@ const PMCServiceChargesPage = () => {
       })()}
 
       <div className="card">
-        <div style={{display:'flex',gap:14,flexWrap:'wrap',alignItems:'flex-end',marginBottom:14}}>
-          <div style={{flex:'1 1 160px'}}>
-            <label style={{fontSize:10,letterSpacing:'0.06em',textTransform:'uppercase',color:'var(--text-secondary)',marginBottom:6,display:'block',fontWeight:500}}>Status</label>
-            <select className="form-input" value={statusFilter} onChange={e => setStatusFilter(e.target.value)}>
-              <option value="all">All statuses</option>
-              <option>Paid</option>
-              <option>Pending</option>
-              <option>Upcoming</option>
-              <option>Future</option>
-              <option>Cancelled</option>
-            </select>
-          </div>
-          <div style={{flex:'2 1 200px'}}>
-            <label style={{fontSize:10,letterSpacing:'0.06em',textTransform:'uppercase',color:'var(--text-secondary)',marginBottom:6,display:'block',fontWeight:500}}>Search</label>
-            <input type="text" className="form-input" placeholder="Invoice number, description, resident, unit…" value={search} onChange={e => setSearch(e.target.value)}/>
-          </div>
-          <button className="btn btn-sm" onClick={() => { setStatusFilter('all'); setSearch(''); }}>Clear</button>
+        <div style={{display:'flex',gap:10,flexWrap:'wrap',alignItems:'center',marginBottom:16}}>
+          <select className="form-input" value={statusFilter} onChange={e => setStatusFilter(e.target.value)} style={{flex:'0 1 180px',width:'auto'}}>
+            <option value="all">All statuses</option>
+            <option>Paid</option>
+            <option>Pending</option>
+            <option>Upcoming</option>
+            <option>Future</option>
+            <option>Cancelled</option>
+          </select>
+          <input type="text" className="form-input" placeholder="Search invoice, description, resident, unit…" value={search} onChange={e => setSearch(e.target.value)} style={{flex:'1 1 260px'}}/>
+          {(statusFilter !== 'all' || search) && (
+            <button className="btn btn-sm" onClick={() => { setStatusFilter('all'); setSearch(''); }}>Clear</button>
+          )}
         </div>
 
         {error && <div style={{padding:10,background:'#fdf2f1',color:'#8b4a42',borderRadius:6,fontSize:12,marginBottom:14}}>{error}</div>}
