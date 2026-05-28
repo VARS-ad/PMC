@@ -303,47 +303,24 @@ const PMCServiceChargesPage = () => {
         ];
         return (
           <div className="card">
-            <div style={{marginBottom:14}}>
+            <div style={{marginBottom:18}}>
               <div style={{fontSize:13,fontWeight:600}}>Aging — Receivables by Days Overdue</div>
               <div style={{fontSize:11,color:'var(--text-secondary)',marginTop:2}}>Only unpaid invoices (Pending + Upcoming). Older buckets = redder. Total: <strong style={{color:'var(--text-dark)'}}>{fmt(total)}</strong></div>
             </div>
-            {/* One tall horizontal stacked bar — each segment is sized by
-                its share of the total unpaid and labelled with its
-                percentage in-place. Segments smaller than ~6% drop the
-                label so it doesn't overflow. */}
-            <div style={{display:'flex',height:64,borderRadius:8,overflow:'hidden',border:'1px solid var(--border-light)',marginBottom:18}}>
-              {rows.map((r, i) => {
-                if (r.amt <= 0) return null;
-                const pct = Math.round(r.amt / total * 100);
-                // Text colour: light segments use dark text, dark segments use white.
-                const isLight = r.color === '#D0D6D5' || r.color === '#a07d3c';
-                return (
-                  <div key={i}
-                       title={r.label + ': ' + fmt(r.amt) + ' (' + pct + '%)'}
-                       style={{flex: r.amt, background: r.color, display:'flex',alignItems:'center',justifyContent:'center',flexDirection:'column',color: isLight ? 'var(--text-dark)' : '#fff',padding:'0 6px',minWidth:0}}>
-                    {pct >= 6 && (
-                      <>
-                        <div style={{fontSize:18,fontWeight:600,letterSpacing:'-0.02em',lineHeight:1.1}}>{pct}%</div>
-                        {pct >= 12 && <div style={{fontSize:10,opacity:0.85,marginTop:2,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis',maxWidth:'100%'}}>{r.label}</div>}
-                      </>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-            {/* Compact legend row underneath: colour swatch · bucket
-                name · AED amount · % of unpaid. Same five buckets, but
-                now one line each so the bar above is the headline. */}
-            <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit, minmax(160px, 1fr))',gap:10}}>
+            {/* One big card per bucket — bucket name on top, AED amount
+                as the dominant headline number, percentage of total
+                unpaid as a secondary line. Coloured top stripe instead
+                of the old swatch so each card carries its bucket colour
+                without taking centre stage from the amount. */}
+            <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit, minmax(180px, 1fr))',gap:12}}>
               {rows.map((r, i) => {
                 const pct = Math.round(r.amt / total * 100);
                 return (
-                  <div key={i} style={{display:'flex',alignItems:'center',gap:10,padding:'8px 10px',background:'var(--bg-surface)',borderRadius:6,border:'1px solid var(--border-light)'}}>
-                    <span style={{width:10,height:32,borderRadius:3,background:r.color,flex:'0 0 auto'}}/>
-                    <div style={{flex:1,minWidth:0}}>
-                      <div style={{fontSize:10,letterSpacing:'0.04em',textTransform:'uppercase',color:'var(--text-secondary)',marginBottom:2}}>{r.label}</div>
-                      <div style={{fontSize:13,fontWeight:600,color:'var(--text-dark)'}}>{fmt(r.amt)} <span style={{fontSize:10,fontWeight:400,color:'var(--text-muted)'}}>· {pct}%</span></div>
-                    </div>
+                  <div key={i} style={{position:'relative',padding:'18px 18px 20px',background:'#fff',borderRadius:8,border:'1px solid var(--border-light)',overflow:'hidden'}}>
+                    <div style={{position:'absolute',top:0,left:0,right:0,height:5,background:r.color}}/>
+                    <div style={{fontSize:11,letterSpacing:'0.06em',textTransform:'uppercase',color:'var(--text-secondary)',fontWeight:600,marginBottom:10}}>{r.label}</div>
+                    <div style={{fontSize:26,fontWeight:700,color:'var(--text-dark)',letterSpacing:'-0.03em',lineHeight:1.05}}>{fmt(r.amt)}</div>
+                    <div style={{fontSize:14,fontWeight:600,color: r.color === '#D0D6D5' ? 'var(--text-secondary)' : r.color,marginTop:8}}>{pct}% of unpaid</div>
                   </div>
                 );
               })}
@@ -422,11 +399,13 @@ const PMCServiceChargesPage = () => {
                   },
                   scales: {
                     x: { stacked: true, grid: { display: false } },
+                    // Y-axis labels removed — the per-column total drawn
+                    // on top of each bar (and the tooltip on hover) make
+                    // the scale ticks redundant.
                     y: {
                       stacked: true, beginAtZero: true,
-                      // Full dirham amounts with comma thousand-separators
-                      // (e.g. "AED 7,000,000"), not the old "AED 7000K".
-                      ticks: { callback: (v) => fmtAed(v) },
+                      display: false,
+                      grid: { display: false },
                     },
                   },
                   // Custom plugin: draw the column total on top of each bar.

@@ -27,6 +27,9 @@ const PMCOverviewPage = ({ setPage }) => {
   const { selectedProperties = [], timeRange, setTimeRange, customStart, setCustomStart, customEnd, setCustomEnd } = useApp();
   const [stats, setStats] = useState(null);
   const [error, setError] = useState(null);
+  // Clicking a row in Unit Payment Activity opens the same UnitDetailModal
+  // used everywhere else (full invoice list, resident, docs slots).
+  const [openedUnit, setOpenedUnit] = useState(null); // { unit, building }
   // Selected period for the financial KPIs and Operating Income card.
   // Lives in AppContext so navigating to Service Charges keeps the choice.
   const monthsBack = ({ '1m': 1, '2m': 2, '3m': 3, '12m': 12 })[timeRange] || 1;
@@ -145,12 +148,17 @@ const PMCOverviewPage = ({ setPage }) => {
         const bMap = Object.fromEntries((buildings || []).map(b => [b.id, b]));
         const enrich = (u_id, amount, count, oldest_due) => {
           const u = uMap[u_id];
+          const b = u && bMap[u.building_id];
           return {
             unit_id: u_id, amount, count, oldest_due,
             unit_number:    u ? u.unit_number : '—',
             floor:          u ? u.floor : null,
-            building_name:  u && bMap[u.building_id] ? bMap[u.building_id].name : '—',
-            building_letter:u && bMap[u.building_id] ? bMap[u.building_id].name.slice(0, 1).toUpperCase() : '?',
+            building_name:  b ? b.name : '—',
+            building_letter:b ? b.name.slice(0, 1).toUpperCase() : '?',
+            // Full unit + building objects so clicking the row can open
+            // UnitDetailModal without another round-trip.
+            unit:      u || null,
+            building:  b || null,
           };
         };
 
@@ -353,7 +361,12 @@ const PMCOverviewPage = ({ setPage }) => {
                 {stats.paidList.length === 0 ? (
                   <div style={{color:'var(--text-muted)',fontSize:12,padding:'14px 0'}}>No paid invoices this month yet.</div>
                 ) : stats.paidList.map((a, i) => (
-                  <div key={i} style={{display:'flex',alignItems:'center',gap:10,padding:'10px 0',borderBottom: i < stats.paidList.length - 1 ? '1px solid var(--border-light)' : 'none'}}>
+                  <div key={i}
+                       onClick={() => a.unit && a.building && setOpenedUnit({ unit: a.unit, building: a.building })}
+                       style={{display:'flex',alignItems:'center',gap:10,padding:'10px 6px',borderRadius:6,borderBottom: i < stats.paidList.length - 1 ? '1px solid var(--border-light)' : 'none',cursor: a.unit && a.building ? 'pointer' : 'default',transition:'background 0.15s'}}
+                       onMouseEnter={e => { if (a.unit && a.building) e.currentTarget.style.background = 'var(--bg-surface)'; }}
+                       onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
+                       title={a.unit && a.building ? 'Open unit detail' : ''}>
                     <div style={{width:30,height:30,borderRadius:'50%',background:'var(--bg-surface)',border:'1px solid var(--border-light)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:12,fontWeight:600,color:'var(--text-secondary)'}}>{a.building_letter}</div>
                     <div style={{flex:1,minWidth:0}}>
                       <div style={{fontSize:13,fontWeight:500,color:'var(--text-dark)'}}>{a.unit_number}</div>
@@ -371,7 +384,12 @@ const PMCOverviewPage = ({ setPage }) => {
                 {stats.pendingList.length === 0 ? (
                   <div style={{color:'var(--text-muted)',fontSize:12,padding:'14px 0'}}>No pending or overdue invoices ✓</div>
                 ) : stats.pendingList.map((a, i) => (
-                  <div key={i} style={{display:'flex',alignItems:'center',gap:10,padding:'10px 0',borderBottom: i < stats.pendingList.length - 1 ? '1px solid var(--border-light)' : 'none'}}>
+                  <div key={i}
+                       onClick={() => a.unit && a.building && setOpenedUnit({ unit: a.unit, building: a.building })}
+                       style={{display:'flex',alignItems:'center',gap:10,padding:'10px 6px',borderRadius:6,borderBottom: i < stats.pendingList.length - 1 ? '1px solid var(--border-light)' : 'none',cursor: a.unit && a.building ? 'pointer' : 'default',transition:'background 0.15s'}}
+                       onMouseEnter={e => { if (a.unit && a.building) e.currentTarget.style.background = 'var(--bg-surface)'; }}
+                       onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
+                       title={a.unit && a.building ? 'Open unit detail' : ''}>
                     <div style={{width:30,height:30,borderRadius:'50%',background:'var(--bg-surface)',border:'1px solid var(--border-light)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:12,fontWeight:600,color:'var(--text-secondary)'}}>{a.building_letter}</div>
                     <div style={{flex:1,minWidth:0}}>
                       <div style={{fontSize:13,fontWeight:500,color:'var(--text-dark)'}}>{a.unit_number}</div>
@@ -430,6 +448,13 @@ const PMCOverviewPage = ({ setPage }) => {
           <KpiCard label="Visitors Today"    value={stats.todayVisits}    page="visitors"/>
         </div>
       </>)}
+      {openedUnit && (
+        <UnitDetailModal
+          unit={openedUnit.unit}
+          building={openedUnit.building}
+          onClose={() => setOpenedUnit(null)}
+        />
+      )}
     </div>
   );
 };
