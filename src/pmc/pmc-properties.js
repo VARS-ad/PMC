@@ -169,8 +169,7 @@ const PMCPropertiesPage = ({ setPage }) => {
                     </div>
                     <div onClick={open} style={{cursor:'pointer',fontSize:12,fontWeight:500,color:occupancyPct >= 80 ? '#5a6b4f' : occupancyPct >= 50 ? 'var(--text-secondary)' : '#8b4a42',padding:'6px 14px',background:'var(--bg-surface)',borderRadius:4,whiteSpace:'nowrap',marginLeft:10,border:'1px solid var(--border-light)'}}>{occupancyPct}% occupied</div>
                   </div>
-                  {b.notes && <div style={{fontSize:12,color:'var(--text-muted)',marginBottom:14,padding:'10px 12px',background:'var(--bg-page)',borderRadius:6,lineHeight:1.5}}>{b.notes}</div>}
-                  <div style={{display:'grid',gridTemplateColumns:'repeat(7, minmax(0, 1fr))',gap:8}}>
+                  <div style={{display:'grid',gridTemplateColumns:'repeat(7, minmax(0, 1fr))',gap:8,marginTop:14}}>
                     <PMCStat label="Units"             value={b.unitCount}                                                  onClick={open}                                                  hint="View floors & units"/>
                     <PMCStat label="Occupied"          value={b.occupiedCount}                                              onClick={() => setDrill({ building: b, view: 'residents' })}      hint="Residents in this property"/>
                     <PMCStat label="Monthly Run-Rate"  value={'AED ' + Math.round(b.monthlyRev).toLocaleString()}          onClick={() => setDrill({ building: b, view: 'tenants' })}        hint="Tenants + lease rates"/>
