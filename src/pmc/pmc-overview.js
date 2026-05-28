@@ -189,11 +189,10 @@ const PMCOverviewPage = ({ setPage }) => {
       ) : (<>
         <div style={{fontSize:11,letterSpacing:'0.06em',textTransform:'uppercase',color:'var(--text-secondary)',margin:'8px 0 10px',fontWeight:500}}>Key Performance Indicators</div>
 
-        {/* Properties — 6 KPIs */}
+        {/* Properties — 5 KPIs */}
         <div style={groupEyebrow}>Properties</div>
-        <div className="kpi-row" style={{gridTemplateColumns:'repeat(6, minmax(0, 1fr))',marginBottom:0}}>
+        <div className="kpi-row" style={{gridTemplateColumns:'repeat(5, minmax(0, 1fr))',marginBottom:0}}>
           <KpiCard label="Total Properties Selected" value={stats.selectedPropsCount + ' ' + (stats.selectedPropsCount === 1 ? 'property' : 'properties')} page="properties"/>
-          <KpiCard label="Total Units"               value={stats.totalUnits}                                  page="properties"/>
           <KpiCard label="Units Occupied"            value={stats.occupied + ' / ' + stats.totalUnits}        page="properties"/>
           <KpiCard label="Occupancy Rate"            value={stats.occupancyRate + '%'}                         page="properties"/>
           <KpiCard label="Collected (last month)"    value={fmt(stats.lastMonthCollected)} color="#5a6b4f"     page="payment"/>
