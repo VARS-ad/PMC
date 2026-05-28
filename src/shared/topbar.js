@@ -6,7 +6,7 @@ const COMING_SOON_PROPERTIES = [
   { id: 'soon-villa',      name: 'Villa Compound',  location: 'Coming soon · low-rise residential', towers: 0, units: 0, comingSoon: true },
 ];
 
-const TopBar = ({ onCreateClick, onMenuToggle, onLogout, onSearchSelect }) => {
+const TopBar = ({ onCreateClick, onMenuToggle, onLogout, onNavigate }) => {
   const { data, setData, t, selectedProperties, setSelectedProperties } = useApp();
   const [showCreate, setShowCreate] = useState(false);
   const [showPmProfile, setShowPmProfile] = useState(false);
@@ -38,10 +38,7 @@ const TopBar = ({ onCreateClick, onMenuToggle, onLogout, onSearchSelect }) => {
     return () => { mounted = false; };
   }, []);
   const realProps = allProperties.filter(p => !p.comingSoon);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [searchFocused, setSearchFocused] = useState(false);
   const [showMyProfileModal, setShowMyProfileModal] = useState(false);
-  const [showSettingsModal, setShowSettingsModal] = useState(false);
   const [profileForm, setProfileForm] = useState({
     name: data.currentUser?.name || '',
     email: data.currentUser?.email || '',
@@ -64,7 +61,37 @@ const TopBar = ({ onCreateClick, onMenuToggle, onLogout, onSearchSelect }) => {
     sessionTimeout: '30 minutes',
   });
   const [profileSaved, setProfileSaved] = useState(false);
-  const [settingsSaved, setSettingsSaved] = useState(false);
+
+  // ===== Notifications =====
+  const [showNotifications, setShowNotifications] = useState(false);
+  const [notifs, setNotifs] = useState({ srs: [], invoices: [], visits: [] });
+  useEffect(() => {
+    if (!supabaseClient) return;
+    let mounted = true;
+    (async () => {
+      try {
+        const filterB = selectedProperties.length > 0 ? selectedProperties : null;
+        const { data: units } = await supabaseClient.from('units').select('id,building_id,unit_number');
+        const filteredUnits = (units || []).filter(u => !filterB || filterB.includes(u.building_id));
+        const fIds = filteredUnits.map(u => u.id);
+        if (fIds.length === 0) { if (mounted) setNotifs({ srs: [], invoices: [], visits: [] }); return; }
+        const today = new Date().toISOString().slice(0, 10);
+        const uMap = Object.fromEntries(filteredUnits.map(u => [u.id, u]));
+        const [{ data: srs }, { data: invs }, { data: visits }] = await Promise.all([
+          supabaseClient.from('service_requests').select('id,category,description,status,priority,created_at,unit_id').in('unit_id', fIds).in('status', ['New','Acknowledged']).order('created_at', { ascending: false }).limit(8),
+          supabaseClient.from('invoices').select('id,invoice_number,description,amount_aed,due_date,status,unit_id').in('unit_id', fIds).eq('status', 'Overdue').order('amount_aed', { ascending: false }).limit(8),
+          supabaseClient.from('visits').select('id,visitor_name,type,status,visit_date,unit_id').in('unit_id', fIds).eq('visit_date', today).eq('status', 'Pre-Approved').limit(8),
+        ]);
+        if (!mounted) return;
+        const addUnit = (rows) => (rows || []).map(r => ({ ...r, unit_number: uMap[r.unit_id]?.unit_number || '—' }));
+        setNotifs({ srs: addUnit(srs), invoices: addUnit(invs), visits: addUnit(visits) });
+      } catch (_) { /* silent */ }
+    })();
+    return () => { mounted = false; };
+  }, [selectedProperties.join(',')]);
+  const notifTotal = notifs.srs.length + notifs.invoices.length + notifs.visits.length;
+  const fmtAED = (n) => 'AED ' + Math.round(Number(n) || 0).toLocaleString();
+  const goTo = (page) => { setShowNotifications(false); if (onNavigate) onNavigate(page); };
 
   const toggleProperty = (id) => {
     setSelectedProperties(prev => {
@@ -81,56 +108,6 @@ const TopBar = ({ onCreateClick, onMenuToggle, onLogout, onSearchSelect }) => {
     : selectedProperties.length === realProps.length && realProps.length > 0
     ? 'All Properties'
     : selectedProperties.length + ' Properties Selected';
-
-  // Search results
-  const searchResults = React.useMemo(() => {
-    if (!searchQuery || searchQuery.length < 2) return [];
-    const q = searchQuery.toLowerCase();
-    const results = [];
-    // Search visitors
-    (data.visitors || []).forEach(v => {
-      if (v.name?.toLowerCase().includes(q) || v.flat?.toLowerCase().includes(q) || v.resident?.toLowerCase().includes(q) || v.permitRef?.toLowerCase().includes(q)) {
-        results.push({ type: 'Visitor', name: v.name, detail: v.flat + ' · ' + (v.status || ''), icon: 'user', page: 'visitors', sourceData: v });
-      }
-    });
-    // Search residents
-    (data.residents || []).forEach(r => {
-      if (r.name?.toLowerCase().includes(q) || r.flat?.toLowerCase().includes(q) || r.id?.toLowerCase().includes(q) || r.contact?.toLowerCase().includes(q)) {
-        results.push({ type: 'Resident', name: r.name, detail: r.flat + ' · ' + (r.status || ''), icon: 'user', page: 'properties', sourceData: r });
-      }
-    });
-    // Search service requests
-    (data.serviceRequests || []).forEach(r => {
-      if (r.id?.toLowerCase().includes(q) || r.type?.toLowerCase().includes(q) || r.flat?.toLowerCase().includes(q) || r.resident?.toLowerCase().includes(q)) {
-        results.push({ type: 'Service Request', name: r.id + ' — ' + r.type, detail: r.flat + ' · ' + r.resident, icon: 'service', page: 'service', sourceData: r });
-      }
-    });
-    // Search announcements
-    (data.announcements || []).forEach(a => {
-      if (a.title?.toLowerCase().includes(q) || a.body?.toLowerCase().includes(q)) {
-        results.push({ type: 'Announcement', name: a.title, detail: a.status + ' · ' + (a.audience || ''), icon: 'announcements', page: 'announcements', sourceData: a });
-      }
-    });
-    // Search guards
-    (data.guards || []).forEach(g => {
-      if (g.name?.toLowerCase().includes(q) || g.shift?.toLowerCase().includes(q)) {
-        results.push({ type: 'Guard', name: g.name, detail: g.shift + ' · ' + (g.status || ''), icon: 'guards', page: 'guards', sourceData: g });
-      }
-    });
-    // Search entry log
-    (data.entryLog || []).slice(0, 50).forEach(e => {
-      if (e.visitor?.toLowerCase().includes(q) || e.refId?.toLowerCase().includes(q) || e.flat?.toLowerCase().includes(q)) {
-        results.push({ type: 'Entry Log', name: e.visitor, detail: e.refId + ' · ' + (e.flat || ''), icon: 'visitors', page: 'visitors', sourceData: e });
-      }
-    });
-    // Search pending approvals
-    (data.pendingApprovals || []).forEach(p => {
-      if (p.name?.toLowerCase().includes(q) || p.flat?.toLowerCase().includes(q)) {
-        results.push({ type: 'Pending Approval', name: p.name, detail: p.flat + ' · ' + (p.type || ''), icon: 'visitors', page: 'visitors', sourceData: p });
-      }
-    });
-    return results.slice(0, 12);
-  }, [searchQuery, data]);
 
   return (
     <div className="topbar">
@@ -184,55 +161,97 @@ const TopBar = ({ onCreateClick, onMenuToggle, onLogout, onSearchSelect }) => {
         )}
       </div>
 
-      {/* Search Bar */}
-      <div style={{position:'relative',flex:1,maxWidth:480}}>
-        <div className="search-bar">
-          <span className="search-icon"><Icon name="search" size={14}/></span>
-          <input placeholder={t('top.search')} value={searchQuery}
-            onChange={e => setSearchQuery(e.target.value)}
-            onFocus={() => setSearchFocused(true)}
-            onBlur={() => setTimeout(() => setSearchFocused(false), 200)}/>
-          {searchQuery && (
-            <span onClick={() => setSearchQuery('')} style={{position:'absolute',right:10,top:'50%',transform:'translateY(-50%)',cursor:'pointer',color:'#a89a92',fontSize:16,lineHeight:1}}>×</span>
-          )}
-        </div>
-
-        {/* Search Results Dropdown */}
-        {searchFocused && searchQuery.length >= 2 && (
-          <div style={{position:'absolute',top:'100%',left:0,right:0,marginTop:4,background:'#fff',borderRadius:8,boxShadow:'0 8px 32px rgba(0,0,0,.15)',border:'1px solid #ebe7e3',zIndex:998,maxHeight:400,overflowY:'auto'}}>
-            {searchResults.length === 0 ? (
-              <div style={{padding:'20px 16px',textAlign:'center',color:'#a89a92',fontSize:13}}>
-                No results for "{searchQuery}"
-              </div>
-            ) : (
-              <>
-                <div style={{padding:'10px 16px',borderBottom:'1px solid #ebe7e3',fontSize:11,color:'#a89a92'}}>
-                  {searchResults.length} result{searchResults.length !== 1 ? 's' : ''} found
-                </div>
-                {searchResults.map((r, i) => (
-                  <div key={i} style={{display:'flex',alignItems:'center',gap:12,padding:'10px 16px',borderBottom: i < searchResults.length - 1 ? '1px solid #f5f5f5' : 'none',cursor:'pointer',transition:'background 0.15s'}}
-                    onMouseDown={e => e.preventDefault()}
-                    onClick={() => { if (onSearchSelect) onSearchSelect(r); setSearchQuery(''); setSearchFocused(false); }}
-                    onMouseEnter={e => e.currentTarget.style.background='#f9f9f9'}
-                    onMouseLeave={e => e.currentTarget.style.background='transparent'}>
-                    <div style={{width:32,height:32,borderRadius:'50%',background:'#e8e3de',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
-                      <Icon name={r.icon} size={14}/>
-                    </div>
-                    <div style={{flex:1,minWidth:0}}>
-                      <div style={{fontSize:13,fontWeight:500,color:'#1a1a1a',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{r.name}</div>
-                      <div style={{fontSize:11,color:'#a89a92',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{r.detail}</div>
-                    </div>
-                    <span style={{fontSize:10,color:'#a89a92',background:'#f2efec',padding:'2px 8px',borderRadius:3,flexShrink:0,letterSpacing:'0.02em'}}>{r.type}</span>
-                  </div>
-                ))}
-              </>
+      <div style={{flex:1}}/>
+      <div className="topbar-right">
+        <div style={{position:'relative'}}>
+          <div className="topbar-icon" onClick={() => setShowNotifications(!showNotifications)} style={{borderRadius:'50%',width:34,height:34,position:'relative',cursor:'pointer'}}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#7a6f66" strokeWidth="1.5"><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 01-3.46 0"/></svg>
+            {notifTotal > 0 && (
+              <span style={{position:'absolute',top:6,right:7,minWidth:14,height:14,padding:'0 4px',borderRadius:7,background:'#c62828',color:'#fff',fontSize:9,fontWeight:600,display:'flex',alignItems:'center',justifyContent:'center',border:'2px solid #faf8f6',lineHeight:1}}>
+                {notifTotal > 99 ? '99+' : notifTotal}
+              </span>
             )}
           </div>
-        )}
-      </div>
-      <div className="topbar-right">
-        <div className="topbar-icon" style={{borderRadius:'50%',width:34,height:34}}>
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#7a6f66" strokeWidth="1.5"><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 01-3.46 0"/></svg>
+          {showNotifications && (
+            <>
+              <div onClick={() => setShowNotifications(false)} style={{position:'fixed',inset:0,zIndex:997}}/>
+              <div onClick={e => e.stopPropagation()} style={{position:'absolute',top:44,right:-8,width:360,maxHeight:520,background:'#fff',borderRadius:12,boxShadow:'0 12px 40px rgba(0,0,0,0.15)',border:'1px solid #ebe7e3',zIndex:999,overflow:'hidden',display:'flex',flexDirection:'column'}}>
+                <div style={{padding:'14px 16px',borderBottom:'1px solid #ebe7e3',display:'flex',alignItems:'center',justifyContent:'space-between'}}>
+                  <div>
+                    <div style={{fontSize:14,fontWeight:600,color:'#1a1a1a'}}>Notifications</div>
+                    <div style={{fontSize:11,color:'#a89a92',marginTop:1}}>{notifTotal} item{notifTotal === 1 ? '' : 's'} need attention</div>
+                  </div>
+                </div>
+                <div style={{overflowY:'auto',flex:1}}>
+                  {notifTotal === 0 ? (
+                    <div style={{padding:'40px 20px',textAlign:'center',color:'#a89a92',fontSize:13}}>
+                      <div style={{fontSize:32,marginBottom:8,opacity:0.5}}>✓</div>
+                      All caught up. Nothing needs your attention right now.
+                    </div>
+                  ) : (
+                    <>
+                      {notifs.srs.length > 0 && (
+                        <div>
+                          <div style={{padding:'10px 16px 6px',fontSize:10,letterSpacing:'0.08em',textTransform:'uppercase',color:'#8a8078',fontWeight:600,background:'#faf8f6'}}>
+                            Service Requests · {notifs.srs.length}
+                          </div>
+                          {notifs.srs.slice(0, 5).map(s => (
+                            <div key={s.id} onClick={() => goTo('service')} style={{padding:'10px 16px',borderBottom:'1px solid #f5f3f0',cursor:'pointer',display:'flex',gap:10,alignItems:'flex-start'}}
+                              onMouseEnter={e => e.currentTarget.style.background='#faf8f6'}
+                              onMouseLeave={e => e.currentTarget.style.background='transparent'}>
+                              <div style={{width:6,height:6,borderRadius:3,background: s.priority === 'High' ? '#c62828' : s.priority === 'Normal' ? '#a07d3c' : '#c4b8b0',marginTop:6,flexShrink:0}}/>
+                              <div style={{flex:1,minWidth:0}}>
+                                <div style={{fontSize:13,color:'#1a1a1a',fontWeight:500}}>{s.category} · Unit {s.unit_number}</div>
+                                <div style={{fontSize:11,color:'#8a8078',marginTop:2,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{s.description}</div>
+                                <div style={{fontSize:10,color:'#a89a92',marginTop:3}}>{s.status} · {new Date(s.created_at).toLocaleDateString('en-GB',{day:'2-digit',month:'short'})}</div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      {notifs.invoices.length > 0 && (
+                        <div>
+                          <div style={{padding:'10px 16px 6px',fontSize:10,letterSpacing:'0.08em',textTransform:'uppercase',color:'#8a8078',fontWeight:600,background:'#faf8f6'}}>
+                            Overdue Invoices · {notifs.invoices.length}
+                          </div>
+                          {notifs.invoices.slice(0, 5).map(i => (
+                            <div key={i.id} onClick={() => goTo('payment')} style={{padding:'10px 16px',borderBottom:'1px solid #f5f3f0',cursor:'pointer',display:'flex',gap:10,alignItems:'flex-start'}}
+                              onMouseEnter={e => e.currentTarget.style.background='#faf8f6'}
+                              onMouseLeave={e => e.currentTarget.style.background='transparent'}>
+                              <div style={{width:6,height:6,borderRadius:3,background:'#8b4a42',marginTop:6,flexShrink:0}}/>
+                              <div style={{flex:1,minWidth:0}}>
+                                <div style={{fontSize:13,color:'#1a1a1a',fontWeight:500}}>{fmtAED(i.amount_aed)} · Unit {i.unit_number}</div>
+                                <div style={{fontSize:11,color:'#8a8078',marginTop:2,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{i.description}</div>
+                                <div style={{fontSize:10,color:'#a89a92',marginTop:3}}>Due {i.due_date || '—'}</div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      {notifs.visits.length > 0 && (
+                        <div>
+                          <div style={{padding:'10px 16px 6px',fontSize:10,letterSpacing:'0.08em',textTransform:'uppercase',color:'#8a8078',fontWeight:600,background:'#faf8f6'}}>
+                            Today's Visitors · {notifs.visits.length}
+                          </div>
+                          {notifs.visits.slice(0, 5).map(v => (
+                            <div key={v.id} onClick={() => goTo('visitors')} style={{padding:'10px 16px',borderBottom:'1px solid #f5f3f0',cursor:'pointer',display:'flex',gap:10,alignItems:'flex-start'}}
+                              onMouseEnter={e => e.currentTarget.style.background='#faf8f6'}
+                              onMouseLeave={e => e.currentTarget.style.background='transparent'}>
+                              <div style={{width:6,height:6,borderRadius:3,background:'#5a6b4f',marginTop:6,flexShrink:0}}/>
+                              <div style={{flex:1,minWidth:0}}>
+                                <div style={{fontSize:13,color:'#1a1a1a',fontWeight:500}}>{v.visitor_name} · Unit {v.unit_number}</div>
+                                <div style={{fontSize:11,color:'#8a8078',marginTop:2}}>{v.type || 'Visit'} · Pre-Approved</div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </>
+                  )}
+                </div>
+              </div>
+            </>
+          )}
         </div>
         <div style={{position:'relative'}}>
           <div className="avatar" onClick={()=>setShowPmProfile(!showPmProfile)} style={{width:34,height:34,borderRadius:'50%',background:'#e8e3de',cursor:'pointer'}}>
@@ -254,13 +273,11 @@ const TopBar = ({ onCreateClick, onMenuToggle, onLogout, onSearchSelect }) => {
                 <div style={{fontSize:11,color:'#c4b8b0'}}>The Pinnacle Residences</div>
               </div>
               <div style={{padding:'8px 12px'}}>
-                {[{label:t('pm.myProfile'),icon:'user',action:()=>{setShowPmProfile(false);setShowMyProfileModal(true);}},{label:t('pm.settings'),icon:'settings',action:()=>{setShowPmProfile(false);setShowSettingsModal(true);}}].map((item,i)=>(
-                  <div key={i} onClick={item.action} style={{display:'flex',alignItems:'center',gap:10,padding:'10px 4px',borderBottom:i<1?'1px solid #f0f0f0':'none',cursor:'pointer',fontSize:13,color:'#1a1a1a'}}>
-                    <div style={{width:30,height:30,borderRadius:'50%',background:'#f2efec',display:'flex',alignItems:'center',justifyContent:'center'}}><Icon name={item.icon} size={14}/></div>
-                    {item.label}
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#ccc" strokeWidth="2" style={{marginLeft:'auto'}}><polyline points="9 18 15 12 9 6"/></svg>
-                  </div>
-                ))}
+                <div onClick={()=>{setShowPmProfile(false);setShowMyProfileModal(true);}} style={{display:'flex',alignItems:'center',gap:10,padding:'10px 4px',cursor:'pointer',fontSize:13,color:'#1a1a1a'}}>
+                  <div style={{width:30,height:30,borderRadius:'50%',background:'#f2efec',display:'flex',alignItems:'center',justifyContent:'center'}}><Icon name="user" size={14}/></div>
+                  {t('pm.myProfile')}
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#ccc" strokeWidth="2" style={{marginLeft:'auto'}}><polyline points="9 18 15 12 9 6"/></svg>
+                </div>
               </div>
               <div style={{padding:'4px 12px 12px',borderTop:'1px solid #f0f0f0'}}>
                 <div onClick={()=>{setShowPmProfile(false);onLogout();}} style={{display:'flex',alignItems:'center',gap:10,padding:'10px 4px',cursor:'pointer',fontSize:13,color:'#8b4a42',fontWeight:500}}>
@@ -337,7 +354,7 @@ const TopBar = ({ onCreateClick, onMenuToggle, onLogout, onSearchSelect }) => {
                 </div>
               ))}
               <div style={{fontSize:10,letterSpacing:'0.1em',textTransform:'uppercase',color:'#8a8078',margin:'18px 0 10px',fontWeight:600}}>{t('pm.preferences')}</div>
-              <div style={{marginBottom:4}}>
+              <div style={{marginBottom:18}}>
                 <label style={{display:'block',fontSize:11,color:'#5a5550',marginBottom:5,fontWeight:500}}>{t('pm.language')}</label>
                 <select value={profileForm.language} onChange={e=>setProfileForm({...profileForm,language:e.target.value})} style={{width:'100%',padding:'10px 12px',fontSize:13,color:'#1a1a1a',background:'#fff',border:'1px solid #d5cfc8',borderRadius:8,outline:'none',fontFamily:'inherit',cursor:'pointer'}}>
                   <option>English</option>
@@ -347,46 +364,6 @@ const TopBar = ({ onCreateClick, onMenuToggle, onLogout, onSearchSelect }) => {
                   <option>Tagalog</option>
                 </select>
               </div>
-            </div>
-            {/* Footer */}
-            <div style={{padding:'16px 26px',borderTop:'1px solid #ebe7e3',display:'flex',gap:10,justifyContent:'flex-end',background:'#fff'}}>
-              <button onClick={()=>setShowMyProfileModal(false)} style={{padding:'10px 20px',fontSize:12,fontWeight:500,color:'#1a1a1a',background:'#fff',border:'1px solid #d5cfc8',borderRadius:8,cursor:'pointer',letterSpacing:'0.02em'}}>{t('pm.cancel')}</button>
-              <button onClick={()=>{
-                setData(prev=>({...prev,currentUser:{...prev.currentUser,name:profileForm.name,email:profileForm.email,phone:profileForm.phone}}));
-                setProfileSaved(true);
-                setTimeout(()=>{setProfileSaved(false);setShowMyProfileModal(false);},1400);
-              }} style={{padding:'10px 22px',fontSize:12,fontWeight:600,color:'#fff',background:'#928989',border:'none',borderRadius:8,cursor:'pointer',letterSpacing:'0.02em'}}>{t('pm.saveChanges')}</button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ===== Settings Modal — warm palette ===== */}
-      {showSettingsModal && (
-        <div onClick={()=>setShowSettingsModal(false)} style={{position:'fixed',inset:0,background:'rgba(26,26,26,0.45)',zIndex:9999,display:'flex',alignItems:'center',justifyContent:'center',padding:20,fontFamily:"'Helvetica Now Text','Inter',-apple-system,sans-serif",letterSpacing:'-0.01em'}}>
-          <div onClick={e=>e.stopPropagation()} style={{background:'#faf8f6',borderRadius:14,width:'100%',maxWidth:600,maxHeight:'90vh',overflow:'hidden',display:'flex',flexDirection:'column',boxShadow:'0 24px 80px rgba(0,0,0,0.25)',border:'1px solid #ebe7e3'}}>
-            {/* Header */}
-            <div style={{padding:'22px 26px 18px',borderBottom:'1px solid #ebe7e3',display:'flex',alignItems:'center',gap:14}}>
-              <svg width="38" height="38" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg" aria-label="VARS" style={{flexShrink:0}}>
-                <rect width="100" height="100" rx="4" fill="#928989"/>
-                <path d="M33.3 16.7 L50 16.7 L58.1 25.2 L66.7 33.3 L66.7 83.3 L50 83.3 L33.3 66.7 Z" fill="#ffffff"/>
-              </svg>
-              <div style={{flex:1}}>
-                <div style={{fontSize:17,fontWeight:600,color:'#1a1a1a',lineHeight:1.2}}>{t('pm.settingsTitle')}</div>
-                <div style={{fontSize:11,color:'#8a8078',marginTop:3,letterSpacing:'0.04em',textTransform:'uppercase'}}>{t('pm.settingsSubtitle')}</div>
-              </div>
-              <button onClick={()=>setShowSettingsModal(false)} style={{background:'transparent',border:'none',cursor:'pointer',padding:6,borderRadius:6,color:'#8a8078'}}>
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-              </button>
-            </div>
-            {/* Body */}
-            <div style={{padding:'22px 26px',overflowY:'auto'}}>
-              {settingsSaved && (
-                <div style={{background:'#eef5ec',border:'1px solid #cfe0c9',color:'#3d5c36',padding:'10px 14px',borderRadius:8,fontSize:12,marginBottom:18,display:'flex',alignItems:'center',gap:8}}>
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="20 6 9 17 4 12"/></svg>
-                  {t('pm.settingsSaved')}
-                </div>
-              )}
 
               {/* Appearance */}
               <div style={{fontSize:10,letterSpacing:'0.1em',textTransform:'uppercase',color:'#8a8078',marginBottom:10,fontWeight:600}}>{t('pm.appearance')}</div>
@@ -433,7 +410,7 @@ const TopBar = ({ onCreateClick, onMenuToggle, onLogout, onSearchSelect }) => {
 
               {/* Notifications */}
               <div style={{fontSize:10,letterSpacing:'0.1em',textTransform:'uppercase',color:'#8a8078',marginBottom:10,fontWeight:600}}>{t('pm.notifications')}</div>
-              <div style={{background:'#fff',border:'1px solid #ebe7e3',borderRadius:10,marginBottom:18}}>
+              <div style={{background:'#fff',border:'1px solid #ebe7e3',borderRadius:10,marginBottom:14}}>
                 {[
                   {key:'notifyEmail',label:t('pm.notifyEmail'),desc:'Approvals, alerts and daily digests'},
                   {key:'notifyPush',label:t('pm.notifyPush'),desc:'Real-time alerts on this device'},
@@ -486,15 +463,17 @@ const TopBar = ({ onCreateClick, onMenuToggle, onLogout, onSearchSelect }) => {
             </div>
             {/* Footer */}
             <div style={{padding:'16px 26px',borderTop:'1px solid #ebe7e3',display:'flex',gap:10,justifyContent:'flex-end',background:'#fff'}}>
-              <button onClick={()=>setShowSettingsModal(false)} style={{padding:'10px 20px',fontSize:12,fontWeight:500,color:'#1a1a1a',background:'#fff',border:'1px solid #d5cfc8',borderRadius:8,cursor:'pointer',letterSpacing:'0.02em'}}>{t('pm.cancel')}</button>
+              <button onClick={()=>setShowMyProfileModal(false)} style={{padding:'10px 20px',fontSize:12,fontWeight:500,color:'#1a1a1a',background:'#fff',border:'1px solid #d5cfc8',borderRadius:8,cursor:'pointer',letterSpacing:'0.02em'}}>{t('pm.cancel')}</button>
               <button onClick={()=>{
-                setSettingsSaved(true);
-                setTimeout(()=>{setSettingsSaved(false);setShowSettingsModal(false);},1400);
+                setData(prev=>({...prev,currentUser:{...prev.currentUser,name:profileForm.name,email:profileForm.email,phone:profileForm.phone}}));
+                setProfileSaved(true);
+                setTimeout(()=>{setProfileSaved(false);setShowMyProfileModal(false);},1400);
               }} style={{padding:'10px 22px',fontSize:12,fontWeight:600,color:'#fff',background:'#928989',border:'none',borderRadius:8,cursor:'pointer',letterSpacing:'0.02em'}}>{t('pm.saveChanges')}</button>
             </div>
           </div>
         </div>
       )}
+
     </div>
   );
 };

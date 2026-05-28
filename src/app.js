@@ -40,7 +40,6 @@ const App = () => {
   };
   const t = React.useMemo(() => makeT(language), [language]);
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [searchSelectedItem, setSearchSelectedItem] = useState(null);
   const [syncStatus, setSyncStatus] = useState(supabaseReady ? 'connecting' : 'local');
   const isWritingRef = React.useRef(false);  // true while we are saving to Supabase
   const writePendingRef = React.useRef(false); // true from data change until cloud write completes
@@ -282,8 +281,6 @@ const App = () => {
 
   // Default: Property Manager app
   const renderPage = () => {
-    const sel = searchSelectedItem;
-    const clearSel = () => setSearchSelectedItem(null);
     switch (page) {
       case 'overview': return <PMCOverviewPage setPage={setPage}/>;
       case 'profileCreation': return <ProfileCreationPage/>;
@@ -298,7 +295,6 @@ const App = () => {
       case 'vendors': return <PMCVendorsPage setPage={setPage}/>;
       // Escalations page removed — page no longer routed.
       case 'reports': return <PMCReportsPage/>;
-      case 'settings': return <SettingsPage/>;
       default: return <OverviewPage setPage={setPage}/>;
     }
   };
@@ -308,7 +304,7 @@ const App = () => {
       <div className="app-layout">
         <div className={`sidebar-overlay ${sidebarOpen ? 'show' : ''}`} onClick={() => setSidebarOpen(false)}/>
         <Sidebar page={page} setPage={setPage} isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} onLogout={handleLogout}/>
-        <TopBar onCreateClick={handleCreateClick} onMenuToggle={() => setSidebarOpen(!sidebarOpen)} onLogout={handleLogout} onSearchSelect={(r) => { setPage(r.page); setSearchSelectedItem(r); }}/>
+        <TopBar onCreateClick={handleCreateClick} onMenuToggle={() => setSidebarOpen(!sidebarOpen)} onLogout={handleLogout} onNavigate={setPage}/>
         <div className="main-content">{renderPage()}</div>
         <MobileBottomNav page={page} setPage={setPage}/>
       </div>

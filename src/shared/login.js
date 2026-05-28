@@ -142,7 +142,7 @@ const LoginPage = ({ onLogin, syncStatus }) => {
         </div>
 
         <div style={{marginTop:12,textAlign:'center'}}>
-          <p style={{fontSize:10,color:'#c4b8b0',letterSpacing:'0.04em'}}>Abu Dhabi · GST+4 · VARS v1.0 · {formatDateTime(new Date()) + ' GST'}</p>
+          <p style={{fontSize:10,color:'#c4b8b0',letterSpacing:'0.04em'}}>{formatDateTime(new Date())}</p>
         </div>
       </div>
     </div>

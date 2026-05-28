@@ -145,11 +145,6 @@ const PMCOverviewPage = ({ setPage }) => {
       <div className="page-header">
         <div>
           <h1>PM Dashboard — Overview</h1>
-          <div className="subtitle">
-            {selectedProperties.length > 0
-              ? 'Scoped to ' + selectedProperties.length + ' building' + (selectedProperties.length === 1 ? '' : 's') + ' (top-bar selector) · live from Supabase'
-              : 'All buildings · live from Supabase'}
-          </div>
         </div>
       </div>
 

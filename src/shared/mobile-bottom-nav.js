@@ -5,7 +5,6 @@ const MobileBottomNav = ({ page, setPage }) => {
     { id: 'visitors', label: 'Visitors', icon: 'visitors' },
     { id: 'service', label: 'Service', icon: 'service' },
     { id: 'announcements', label: 'Alerts', icon: 'announcements' },
-    { id: 'settings', label: 'Settings', icon: 'settings' },
   ];
   return (
     <div className="mobile-bottom-nav">
