@@ -2,11 +2,12 @@
 const Sidebar = ({ page, setPage, isOpen, onClose, onLogout }) => {
   const { t } = useApp();
 
-  // Two-group sidebar: Dashboard (analytical surfaces) and Operational
-  // (day-to-day workflow surfaces). Mirrors the supervisor app pattern.
+  // Three-group sidebar: Dashboard (analytical surfaces),
+  // Operational (day-to-day workflow), Settings (admin / setup).
+  // Mirrors the supervisor app sidebar pattern.
   const groups = [
     { label: 'Dashboard', items: [
-      { id: 'overview',    label: t('nav.overview'),   icon: 'overview' },
+      { id: 'overview',    label: 'Dashboard',         icon: 'overview' },
       { id: 'properties',  label: t('nav.properties'), icon: 'properties' },
       { id: 'payment',     label: t('nav.payment'),    icon: 'payment' },
       { id: 'reports',     label: t('nav.reports'),    icon: 'reports' },
@@ -17,6 +18,8 @@ const Sidebar = ({ page, setPage, isOpen, onClose, onLogout }) => {
       { id: 'visitors',        label: t('nav.visitors'),      icon: 'visitors' },
       { id: 'vendors',         label: t('nav.vendors'),       icon: 'vendors' },
       { id: 'guards',          label: t('nav.guards'),        icon: 'guards' },
+    ]},
+    { label: 'Settings', items: [
       { id: 'profileCreation', label: 'Profile Creation',     icon: 'reports' },
     ]},
   ];
@@ -38,7 +41,7 @@ const Sidebar = ({ page, setPage, isOpen, onClose, onLogout }) => {
       <nav className="sidebar-nav">
         {groups.map((group, gi) => (
           <div key={group.label} style={{marginTop: gi === 0 ? 0 : 16}}>
-            <div style={{padding:'8px 20px 6px',fontSize:10,letterSpacing:'0.1em',textTransform:'uppercase',color:'var(--text-muted)',fontWeight:600}}>
+            <div style={{padding:'8px 20px 6px',fontSize:10,letterSpacing:'0.1em',textTransform:'uppercase',color:'var(--text-muted)',fontWeight:600,textAlign:'center'}}>
               {group.label}
             </div>
             {group.items.map(item => (
