@@ -131,7 +131,8 @@ const ResidentDetailModal = ({ resident, onClose }) => {
             <th>Due</th>
             <th style={{textAlign:'right'}}>Amount</th>
             {!isPaid && <th>Status</th>}
-            <th style={{textAlign:'center',width:80}}>Docs</th>
+            <th style={{textAlign:'center',width:70}}>Invoice</th>
+            <th style={{textAlign:'center',width:90}}>Proof of payment</th>
           </tr>
         </thead>
         <tbody>
@@ -148,7 +149,8 @@ const ResidentDetailModal = ({ resident, onClose }) => {
                   </span>
                 </td>
               )}
-              <InvoiceDocsCell invoice={inv}/>
+              <InvoiceSlotCell invoice={inv} slot="invoice"/>
+              <InvoiceSlotCell invoice={inv} slot="payment_proof"/>
             </tr>
           ))}
         </tbody>

@@ -339,7 +339,7 @@ const PMCServiceChargesPage = () => {
           <div style={{padding:32,color:'var(--text-muted)',fontSize:13,textAlign:'center'}}>No invoices match these filters.</div>
         ) : (
           <table className="data-table">
-            <thead><tr><th style={{width:'10%'}}>Invoice #</th><th style={{width:'26%'}}>Description</th><th style={{width:'13%'}}>Resident</th><th style={{width:'15%'}}>Building / Unit</th><th style={{width:'10%',textAlign:'right'}}>Amount</th><th style={{width:'9%'}}>Due</th><th style={{width:'9%'}}>Status</th><th style={{width:'8%',textAlign:'center'}}>Docs</th></tr></thead>
+            <thead><tr><th style={{width:'9%'}}>Invoice #</th><th style={{width:'22%'}}>Description</th><th style={{width:'12%'}}>Resident</th><th style={{width:'14%'}}>Building / Unit</th><th style={{width:'10%',textAlign:'right'}}>Amount</th><th style={{width:'8%'}}>Due</th><th style={{width:'8%'}}>Status</th><th style={{width:'7%',textAlign:'center'}}>Invoice</th><th style={{width:'10%',textAlign:'center'}}>Proof of payment</th></tr></thead>
             <tbody>
               {filtered.slice(0, 200).map(i => (
                 <tr key={i.id}>
@@ -367,7 +367,8 @@ const PMCServiceChargesPage = () => {
                       );
                     })()}
                   </td>
-                  <InvoiceDocsCell invoice={i}/>
+                  <InvoiceSlotCell invoice={i} slot="invoice"/>
+                  <InvoiceSlotCell invoice={i} slot="payment_proof"/>
                 </tr>
               ))}
             </tbody>

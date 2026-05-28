@@ -129,7 +129,7 @@ const UnitDetailModal = ({ unit, building, assignment: passedAssignment, profile
   return (
     <>
     <div className="modal-overlay" onClick={onClose}>
-      <div className="modal" onClick={e => e.stopPropagation()} style={{maxWidth:880,maxHeight:'90vh',padding:0,display:'flex',flexDirection:'column',overflow:'hidden'}}>
+      <div className="modal" onClick={e => e.stopPropagation()} style={{maxWidth:1000,maxHeight:'90vh',padding:0,display:'flex',flexDirection:'column',overflow:'hidden'}}>
         <div className="modal-header" style={{position:'sticky',top:0,background:'#fff',padding:'24px 28px 18px 32px',margin:0,borderBottom:'1px solid var(--border-light)',zIndex:2}}>
           <div>
             <div style={{fontSize:11,letterSpacing:'0.08em',textTransform:'uppercase',color:'var(--text-muted)',marginBottom:4}}>Unit</div>
@@ -230,7 +230,8 @@ const UnitDetailModal = ({ unit, building, assignment: passedAssignment, profile
                         {i.effective_status}
                       </span>
                     </td>
-                    <InvoiceDocsCell invoice={i}/>
+                    <InvoiceSlotCell invoice={i} slot="invoice"/>
+                    <InvoiceSlotCell invoice={i} slot="payment_proof"/>
                     <td style={{textAlign:'right',color:accentColor,fontWeight:600,whiteSpace:'nowrap'}}>{fmt(i.amount_aed)}</td>
                   </tr>
                 );
@@ -238,13 +239,14 @@ const UnitDetailModal = ({ unit, building, assignment: passedAssignment, profile
               const InvoiceTableHeader = () => (
                 <thead>
                   <tr>
-                    <th style={{width:'12%'}}>Invoice</th>
-                    <th style={{width:'15%'}}>Description</th>
-                    <th style={{width:'15%'}}>Billed to</th>
-                    <th style={{width:'13%'}}>Due</th>
-                    <th style={{width:'13%'}}>Status</th>
-                    <th style={{width:'10%',textAlign:'center'}}>Docs</th>
-                    <th style={{width:'22%',textAlign:'right'}}>Amount</th>
+                    <th style={{width:'11%'}}>Invoice</th>
+                    <th style={{width:'14%'}}>Description</th>
+                    <th style={{width:'13%'}}>Billed to</th>
+                    <th style={{width:'12%'}}>Due</th>
+                    <th style={{width:'12%'}}>Status</th>
+                    <th style={{width:'9%',textAlign:'center'}}>Invoice</th>
+                    <th style={{width:'12%',textAlign:'center'}}>Proof of payment</th>
+                    <th style={{width:'17%',textAlign:'right'}}>Amount</th>
                   </tr>
                 </thead>
               );

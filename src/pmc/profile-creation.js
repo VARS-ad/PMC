@@ -2384,7 +2384,7 @@ const INVOICE_BULK_TARGETS = {
       mime_type:    file.type || null,
       size_bytes:   file.size || null,
     }),
-    replaceExisting: true,
+    replaceExisting: false,
     slotHints: ['invoice (or bill)', 'payment_proof (or payment, proof, receipt)'],
   },
   contractor: {
