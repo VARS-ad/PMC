@@ -16,6 +16,30 @@ const INVOICE_SLOT_META = {
   payment_proof: { label: 'Proof of payment', hint: 'Bank slip, receipt or cheque image' },
 };
 
+// Reusable in-app confirmation modal used after a payment-proof /
+// payment-receipt upload to offer to flip the parent's status to Paid.
+// Lives above the slot modal (z-index 1200) so it sits on top of
+// whatever invoked it.
+const MarkPaidConfirmModal = ({ title, subtitle, bodyText, confirmLabel, busy, onCancel, onConfirm }) => (
+  <div className="modal-overlay" onClick={onCancel} style={{zIndex:1200}}>
+    <div className="modal" onClick={e => e.stopPropagation()} style={{maxWidth:440,padding:0,display:'flex',flexDirection:'column',overflow:'hidden'}}>
+      <div className="modal-header" style={{padding:'22px 26px 14px 28px',margin:0,borderBottom:'1px solid var(--border-light)'}}>
+        <div>
+          <div style={{fontSize:10,letterSpacing:'0.08em',textTransform:'uppercase',color:'var(--text-muted)',marginBottom:4}}>{subtitle || ''}</div>
+          <h2 style={{margin:0}}>{title}</h2>
+        </div>
+      </div>
+      <div style={{padding:'20px 28px 8px'}}>
+        <div style={{fontSize:13,color:'var(--text-secondary)',lineHeight:1.5}}>{bodyText}</div>
+      </div>
+      <div style={{padding:'14px 22px 22px',display:'flex',gap:8,justifyContent:'flex-end'}}>
+        <button className="btn" onClick={onCancel} disabled={busy}>Cancel</button>
+        <button className="btn btn-primary" onClick={onConfirm} disabled={busy}>{busy ? 'Saving…' : (confirmLabel || 'Mark as Paid')}</button>
+      </div>
+    </div>
+  </div>
+);
+
 // Shared pill rendered in both the resident and vendor docs cells. Uses
 // an inline SVG paperclip so the icon size, baseline and stroke colour
 // match the "+" exactly — the emoji rendering shifted the pill height
@@ -150,6 +174,7 @@ const InvoiceSlotModal = ({ invoice, slot, docs, onClose, onChange }) => {
   const inputRef = useRef(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
+  const [askPaid, setAskPaid] = useState(false);
   const meta = INVOICE_SLOT_META[slot] || { label: slot };
 
   const doUpload = async (file) => {
@@ -172,28 +197,34 @@ const InvoiceSlotModal = ({ invoice, slot, docs, onClose, onChange }) => {
       });
       if (insErr) throw new Error('Metadata: ' + insErr.message);
       await onChange();
-      // If this was a payment proof and the invoice isn't already Paid,
-      // offer to mark it as Paid. We dispatch a window event so any open
-      // table can update its row in place without a full reload.
+      // Payment proof attached → offer to flip the invoice to Paid
+      // (only if it isn't already Paid / Cancelled). We surface this
+      // via the in-app confirm modal, not window.confirm.
       if (slot === 'payment_proof' && invoice.status !== 'Paid' && invoice.status !== 'Cancelled') {
-        if (window.confirm('Mark invoice ' + (invoice.invoice_number || '') + ' as Paid?')) {
-          const { error: stErr } = await supabaseClient.from('invoices')
-            .update({ status: 'Paid' })
-            .eq('id', invoice.id);
-          if (stErr) {
-            setError('Status update failed: ' + stErr.message);
-          } else {
-            invoice.status = 'Paid';
-            try {
-              window.dispatchEvent(new CustomEvent('vars:invoice-status-changed', {
-                detail: { invoice_id: invoice.id, new_status: 'Paid' },
-              }));
-            } catch (_) {}
-          }
-        }
+        setAskPaid(true);
       }
     } catch (e) {
       setError(e.message || String(e));
+    }
+    setBusy(false);
+  };
+
+  const confirmMarkPaid = async () => {
+    setBusy(true); setError(null);
+    try {
+      const { error: stErr } = await supabaseClient.from('invoices')
+        .update({ status: 'Paid' })
+        .eq('id', invoice.id);
+      if (stErr) throw new Error(stErr.message);
+      invoice.status = 'Paid';
+      try {
+        window.dispatchEvent(new CustomEvent('vars:invoice-status-changed', {
+          detail: { invoice_id: invoice.id, new_status: 'Paid' },
+        }));
+      } catch (_) {}
+      setAskPaid(false);
+    } catch (e) {
+      setError('Status update failed: ' + (e.message || String(e)));
     }
     setBusy(false);
   };
@@ -236,6 +267,17 @@ const InvoiceSlotModal = ({ invoice, slot, docs, onClose, onChange }) => {
           </button>
         </div>
       </div>
+      {askPaid && (
+        <MarkPaidConfirmModal
+          subtitle={'Invoice ' + (invoice.invoice_number || '')}
+          title="Mark as Paid?"
+          bodyText={'Proof of payment is attached. Flip this invoice to Paid? It will move out of Outstanding and the status badge will turn green.'}
+          confirmLabel="Yes, mark as Paid"
+          busy={busy}
+          onCancel={() => setAskPaid(false)}
+          onConfirm={confirmMarkPaid}
+        />
+      )}
     </div>
   );
 };

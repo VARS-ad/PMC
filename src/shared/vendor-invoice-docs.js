@@ -109,6 +109,7 @@ const VendorSlotModal = ({ payment, vendorId, slot, docs, onClose, onChange }) =
   const inputRef = useRef(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
+  const [askPaid, setAskPaid] = useState(false);
   const meta = VENDOR_SLOT_META[slot] || { label: slot };
 
   const doUpload = async (file) => {
@@ -133,24 +134,30 @@ const VendorSlotModal = ({ payment, vendorId, slot, docs, onClose, onChange }) =
       // Same Mark-as-Paid flow as the resident widget — but here the
       // status column is vendor_payments.payment_status.
       if (slot === 'payment_receipt' && payment.payment_status !== 'Paid' && payment.payment_status !== 'Cancelled') {
-        if (window.confirm('Mark vendor invoice ' + (payment.invoice_number || '') + ' as Paid?')) {
-          const { error: stErr } = await supabaseClient.from('vendor_payments')
-            .update({ payment_status: 'Paid', paid_date: new Date().toISOString().slice(0, 10) })
-            .eq('id', payment.id);
-          if (stErr) {
-            setError('Status update failed: ' + stErr.message);
-          } else {
-            payment.payment_status = 'Paid';
-            try {
-              window.dispatchEvent(new CustomEvent('vars:vendor-payment-status-changed', {
-                detail: { payment_id: payment.id, new_status: 'Paid' },
-              }));
-            } catch (_) {}
-          }
-        }
+        setAskPaid(true);
       }
     } catch (e) {
       setError(e.message || String(e));
+    }
+    setBusy(false);
+  };
+
+  const confirmMarkPaid = async () => {
+    setBusy(true); setError(null);
+    try {
+      const { error: stErr } = await supabaseClient.from('vendor_payments')
+        .update({ payment_status: 'Paid', paid_date: new Date().toISOString().slice(0, 10) })
+        .eq('id', payment.id);
+      if (stErr) throw new Error(stErr.message);
+      payment.payment_status = 'Paid';
+      try {
+        window.dispatchEvent(new CustomEvent('vars:vendor-payment-status-changed', {
+          detail: { payment_id: payment.id, new_status: 'Paid' },
+        }));
+      } catch (_) {}
+      setAskPaid(false);
+    } catch (e) {
+      setError('Status update failed: ' + (e.message || String(e)));
     }
     setBusy(false);
   };
@@ -193,6 +200,17 @@ const VendorSlotModal = ({ payment, vendorId, slot, docs, onClose, onChange }) =
           </button>
         </div>
       </div>
+      {askPaid && (
+        <MarkPaidConfirmModal
+          subtitle={'Vendor invoice ' + (payment.invoice_number || '')}
+          title="Mark as Paid?"
+          bodyText={'Payment receipt is attached. Flip this vendor invoice to Paid? It will be timestamped with today’s date.'}
+          confirmLabel="Yes, mark as Paid"
+          busy={busy}
+          onCancel={() => setAskPaid(false)}
+          onConfirm={confirmMarkPaid}
+        />
+      )}
     </div>
   );
 };

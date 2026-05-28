@@ -32,6 +32,21 @@ const BuildingDrillModal = ({ building, view, onClose, setPage }) => {
   const effectiveStatusOf = (i) => propertiesEffectiveStatus(i, now);
   const fmt = (n) => 'AED ' + Math.round(Number(n) || 0).toLocaleString();
 
+  // Keep a local copy of the invoices so the Mark-as-Paid event can
+  // re-bucket rows immediately without us having to lift state up to
+  // the parent page.
+  const [localInvoices, setLocalInvoices] = useState(building.invoices || []);
+  useEffect(() => { setLocalInvoices(building.invoices || []); }, [building.id]);
+  useEffect(() => {
+    const handler = (e) => {
+      const { invoice_id, new_status } = (e && e.detail) || {};
+      if (!invoice_id) return;
+      setLocalInvoices(prev => (prev || []).map(i => i.id === invoice_id ? { ...i, status: new_status } : i));
+    };
+    window.addEventListener('vars:invoice-status-changed', handler);
+    return () => window.removeEventListener('vars:invoice-status-changed', handler);
+  }, []);
+
   const VIEWS = {
     invoices:    { label: 'Total Billed',  page: 'payment', kind: 'invoices' },
     collected:   { label: 'Collected',     page: 'payment', kind: 'invoices' },
@@ -44,7 +59,7 @@ const BuildingDrillModal = ({ building, view, onClose, setPage }) => {
 
   let rows = [];
   if (v.kind === 'invoices') {
-    rows = (building.invoices || []).map(i => ({ ...i, effective_status: effectiveStatusOf(i) }));
+    rows = (localInvoices || []).map(i => ({ ...i, effective_status: effectiveStatusOf(i) }));
     if (view === 'collected')   rows = rows.filter(r => r.effective_status === 'Paid');
     if (view === 'outstanding') rows = rows.filter(r => r.effective_status === 'Pending' || r.effective_status === 'Overdue');
     if (view === 'upcoming')    rows = rows.filter(r => r.effective_status === 'Upcoming');
