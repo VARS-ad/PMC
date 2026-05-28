@@ -267,13 +267,21 @@ const PMCOverviewPage = ({ setPage }) => {
   };
 
   // Eyebrow style shared across the KPI sub-group headers
-  const groupEyebrow = { fontSize:11, letterSpacing:'0.08em', textTransform:'uppercase', color:'var(--text-secondary)', fontWeight:600, margin:'18px 0 10px' };
+  const groupEyebrow = { fontSize:11, letterSpacing:'0.1em', textTransform:'uppercase', color:'var(--text-secondary)', fontWeight:600, margin:'20px 0 12px' };
 
+  // KPI card — entire surface clickable. We dropped the redundant
+  // "View details →" link below the value; the hover lift now carries
+  // the "I'm interactive" signal instead.
   const KpiCard = ({ label, value, color, page }) => (
-    <div className="kpi-card" style={{cursor:'pointer'}} onClick={() => setPage && setPage(page)}>
+    <div
+      className="kpi-card"
+      style={{cursor:'pointer'}}
+      onClick={() => setPage && setPage(page)}
+      onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--border-medium)'; e.currentTarget.style.boxShadow = 'var(--shadow-md)'; }}
+      onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--border-light)'; e.currentTarget.style.boxShadow = 'var(--shadow-sm)'; }}
+    >
       <div className="label">{label}</div>
       <div className="value" style={color ? {color} : undefined}>{value}</div>
-      <div className="link">View details →</div>
     </div>
   );
 
@@ -323,85 +331,76 @@ const PMCOverviewPage = ({ setPage }) => {
         {/* ============ FINANCIAL SUMMARY ============ */}
         <div style={groupEyebrow}>Financial Summary</div>
         <div style={{display:'grid',gridTemplateColumns:'1fr',gap:18,marginBottom:8}}>
-          {/* Service Charge Collection — Collection / Pending / Outstanding for selected period */}
+          {/* Operating Income — Collected / Pending / Upcoming / Future for selected period */}
           <div className="card">
-            <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:14}}>
-              <div style={{fontSize:14,fontWeight:600,color:'var(--text-dark)'}}>Operating Income</div>
-              <span onClick={() => setPage && setPage('payment')} style={{fontSize:11,color:'var(--accent-warm-dark)',cursor:'pointer'}}>View all →</span>
+            <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:16}}>
+              <div style={{fontSize:15,fontWeight:600,color:'var(--text-dark)',letterSpacing:'-0.015em'}}>Operating Income</div>
+              <span onClick={() => setPage && setPage('payment')} style={{fontSize:11,color:'var(--accent-warm-dark)',cursor:'pointer',fontWeight:500}}>View all →</span>
             </div>
             <div style={{display:'grid',gridTemplateColumns:'repeat(4, minmax(0, 1fr))',gap:18}}>
               <div title="Paid invoices in the selected period">
-                <div style={{fontSize:10,letterSpacing:'0.08em',textTransform:'uppercase',color:'var(--text-secondary)',marginBottom:6,fontWeight:600}}>Collected</div>
-                <div style={{fontSize:24,fontWeight:600,color:'#5a6b4f',letterSpacing:'-0.03em'}}>{fmt(stats.monthCollected)}</div>
+                <div style={{fontSize:10,letterSpacing:'0.08em',textTransform:'uppercase',color:'var(--text-secondary)',marginBottom:7,fontWeight:600}}>Collected</div>
+                <div style={{fontSize:22,fontWeight:600,color:'#5a6b4f',letterSpacing:'-0.025em',lineHeight:1.1}}>{fmt(stats.monthCollected)}</div>
               </div>
               <div title="Past due — not yet paid">
-                <div style={{fontSize:10,letterSpacing:'0.08em',textTransform:'uppercase',color:'var(--text-secondary)',marginBottom:6,fontWeight:600}}>Pending</div>
-                <div style={{fontSize:24,fontWeight:600,color:'#8b4a42',letterSpacing:'-0.03em'}}>{fmt(stats.monthOverdue)}</div>
+                <div style={{fontSize:10,letterSpacing:'0.08em',textTransform:'uppercase',color:'var(--text-secondary)',marginBottom:7,fontWeight:600}}>Pending</div>
+                <div style={{fontSize:22,fontWeight:600,color:'#8b4a42',letterSpacing:'-0.025em',lineHeight:1.1}}>{fmt(stats.monthOverdue)}</div>
               </div>
               <div title="Due within the next 30 days">
-                <div style={{fontSize:10,letterSpacing:'0.08em',textTransform:'uppercase',color:'var(--text-secondary)',marginBottom:6,fontWeight:600}}>Upcoming</div>
-                <div style={{fontSize:24,fontWeight:600,color:'#a07d3c',letterSpacing:'-0.03em'}}>{fmt(stats.monthPending)}</div>
+                <div style={{fontSize:10,letterSpacing:'0.08em',textTransform:'uppercase',color:'var(--text-secondary)',marginBottom:7,fontWeight:600}}>Upcoming</div>
+                <div style={{fontSize:22,fontWeight:600,color:'#a07d3c',letterSpacing:'-0.025em',lineHeight:1.1}}>{fmt(stats.monthPending)}</div>
               </div>
               <div title="Scheduled cheques due more than 30 days out">
-                <div style={{fontSize:10,letterSpacing:'0.08em',textTransform:'uppercase',color:'var(--text-secondary)',marginBottom:6,fontWeight:600}}>Future</div>
-                <div style={{fontSize:24,fontWeight:600,color:'#61707D',letterSpacing:'-0.03em'}}>{fmt(stats.monthUpcoming)}</div>
+                <div style={{fontSize:10,letterSpacing:'0.08em',textTransform:'uppercase',color:'var(--text-secondary)',marginBottom:7,fontWeight:600}}>Future</div>
+                <div style={{fontSize:22,fontWeight:600,color:'#61707D',letterSpacing:'-0.025em',lineHeight:1.1}}>{fmt(stats.monthUpcoming)}</div>
               </div>
             </div>
           </div>
 
-          {/* Unit Payment Activity — Paid (this month) | Pending (all unpaid) */}
+          {/* Unit Payment Activity — Paid (this month) | Pending (all unpaid).
+              Rows lead with the unit number; building-letter avatar is
+              gone (it duplicated the line of building text below). */}
           <div className="card">
             <div style={{marginBottom:14}}>
-              <div style={{fontSize:14,fontWeight:600,color:'var(--text-dark)'}}>Unit Payment Activity</div>
-              <div style={{fontSize:11,color:'var(--text-muted)',marginTop:2}}>Top paying units this month · Top units with pending or overdue invoices</div>
+              <div style={{fontSize:15,fontWeight:600,color:'var(--text-dark)',letterSpacing:'-0.015em'}}>Unit Payment Activity</div>
+              <div style={{fontSize:11,color:'var(--text-muted)',marginTop:2}}>Top units by activity this period.</div>
             </div>
-            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:28}}>
-              <div>
-                <div style={{fontSize:10,letterSpacing:'0.08em',textTransform:'uppercase',color:'#5a6b4f',fontWeight:600,marginBottom:10}}>Paid</div>
-                {stats.paidList.length === 0 ? (
-                  <div style={{color:'var(--text-muted)',fontSize:12,padding:'14px 0'}}>No paid invoices this month yet.</div>
-                ) : stats.paidList.map((a, i) => (
-                  <div key={i}
-                       onClick={() => a.unit && a.building && setOpenedUnit({ unit: a.unit, building: a.building })}
-                       style={{display:'flex',alignItems:'center',gap:10,padding:'10px 6px',borderRadius:6,borderBottom: i < stats.paidList.length - 1 ? '1px solid var(--border-light)' : 'none',cursor: a.unit && a.building ? 'pointer' : 'default',transition:'background 0.15s'}}
-                       onMouseEnter={e => { if (a.unit && a.building) e.currentTarget.style.background = 'var(--bg-surface)'; }}
-                       onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
-                       title={a.unit && a.building ? 'Open unit detail' : ''}>
-                    <div style={{width:30,height:30,borderRadius:'50%',background:'var(--bg-surface)',border:'1px solid var(--border-light)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:12,fontWeight:600,color:'var(--text-secondary)'}}>{a.building_letter}</div>
-                    <div style={{flex:1,minWidth:0}}>
-                      <div style={{fontSize:13,fontWeight:500,color:'var(--text-dark)'}}>{a.unit_number}</div>
-                      <div style={{fontSize:11,color:'var(--text-muted)',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{a.building_name}{a.floor != null ? ' · Fl ' + a.floor : ''}</div>
-                    </div>
-                    <div style={{textAlign:'right'}}>
-                      <div style={{fontSize:13,fontWeight:600,color:'#5a6b4f'}}>{fmt(a.amount)}</div>
-                      <div style={{fontSize:10,color:'var(--text-muted)'}}>{a.count} invoice{a.count===1?'':'s'}</div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-              <div>
-                <div style={{fontSize:10,letterSpacing:'0.08em',textTransform:'uppercase',color:'#8b4a42',fontWeight:600,marginBottom:10}}>Pending</div>
-                {stats.pendingList.length === 0 ? (
-                  <div style={{color:'var(--text-muted)',fontSize:12,padding:'14px 0'}}>No pending or overdue invoices ✓</div>
-                ) : stats.pendingList.map((a, i) => (
-                  <div key={i}
-                       onClick={() => a.unit && a.building && setOpenedUnit({ unit: a.unit, building: a.building })}
-                       style={{display:'flex',alignItems:'center',gap:10,padding:'10px 6px',borderRadius:6,borderBottom: i < stats.pendingList.length - 1 ? '1px solid var(--border-light)' : 'none',cursor: a.unit && a.building ? 'pointer' : 'default',transition:'background 0.15s'}}
-                       onMouseEnter={e => { if (a.unit && a.building) e.currentTarget.style.background = 'var(--bg-surface)'; }}
-                       onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
-                       title={a.unit && a.building ? 'Open unit detail' : ''}>
-                    <div style={{width:30,height:30,borderRadius:'50%',background:'var(--bg-surface)',border:'1px solid var(--border-light)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:12,fontWeight:600,color:'var(--text-secondary)'}}>{a.building_letter}</div>
-                    <div style={{flex:1,minWidth:0}}>
-                      <div style={{fontSize:13,fontWeight:500,color:'var(--text-dark)'}}>{a.unit_number}</div>
-                      <div style={{fontSize:11,color:'var(--text-muted)',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{a.building_name}{a.floor != null ? ' · Fl ' + a.floor : ''}</div>
-                    </div>
-                    <div style={{textAlign:'right'}}>
-                      <div style={{fontSize:13,fontWeight:600,color:'#8b4a42'}}>{fmt(a.amount)}</div>
-                      <div style={{fontSize:10,color:'var(--text-muted)'}}>{a.oldest_due ? 'Due ' + daysOverdue(a.oldest_due) + 'd ago' : a.count + ' invoice' + (a.count===1?'':'s')}</div>
-                    </div>
-                  </div>
-                ))}
-              </div>
+            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:24}}>
+              {[
+                { key:'paid',    label:'Paid',    color:'#5a6b4f', list:stats.paidList,    empty:'No paid invoices this period yet.' },
+                { key:'pending', label:'Pending', color:'#8b4a42', list:stats.pendingList, empty:'No pending or overdue invoices ✓' },
+              ].map(col => (
+                <div key={col.key}>
+                  <div style={{fontSize:10,letterSpacing:'0.1em',textTransform:'uppercase',color:col.color,fontWeight:600,marginBottom:10}}>{col.label}</div>
+                  {col.list.length === 0 ? (
+                    <div style={{color:'var(--text-muted)',fontSize:12,padding:'12px 0'}}>{col.empty}</div>
+                  ) : col.list.map((a, i) => {
+                    const isLast = i === col.list.length - 1;
+                    const clickable = a.unit && a.building;
+                    return (
+                      <div key={i}
+                           onClick={() => clickable && setOpenedUnit({ unit: a.unit, building: a.building })}
+                           style={{display:'flex',alignItems:'center',gap:12,padding:'10px 8px',borderRadius:6,borderBottom: isLast ? 'none' : '1px solid var(--border-light)',cursor: clickable ? 'pointer' : 'default',transition:'background 0.15s'}}
+                           onMouseEnter={e => { if (clickable) e.currentTarget.style.background = 'var(--bg-page)'; }}
+                           onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
+                           title={clickable ? 'Open unit detail' : ''}>
+                        <div style={{flex:1,minWidth:0}}>
+                          <div style={{fontSize:13,fontWeight:500,color:'var(--text-dark)',letterSpacing:'-0.01em'}}>{a.unit_number}</div>
+                          <div style={{fontSize:11,color:'var(--text-muted)',marginTop:2,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{a.building_name}{a.floor != null ? ' · Floor ' + a.floor : ''}</div>
+                        </div>
+                        <div style={{textAlign:'right'}}>
+                          <div style={{fontSize:13,fontWeight:600,color:col.color,letterSpacing:'-0.015em'}}>{fmt(a.amount)}</div>
+                          <div style={{fontSize:10,color:'var(--text-muted)',marginTop:2}}>
+                            {col.key === 'paid'
+                              ? (a.count + ' invoice' + (a.count===1?'':'s'))
+                              : (a.oldest_due ? daysOverdue(a.oldest_due) + 'd overdue' : a.count + ' invoice' + (a.count===1?'':'s'))}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              ))}
             </div>
           </div>
         </div>
