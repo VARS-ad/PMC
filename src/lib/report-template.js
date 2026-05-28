@@ -7,18 +7,25 @@
 // new values automatically. Later this object can be loaded from the data
 // store / Settings page; for now it's a single source of truth in code.
 
+// Brand tokens — mirror the official VARS brand book ("Final Brand Colors",
+// April 2026 / Groto × VARS). Updating these flows to every export surface
+// (PDF, Excel, CSV metadata header).
 const REPORT_BRAND = {
   title:        'VARS',
-  subtitle:     'PROPERTY MANAGEMENT SOFTWARE',
+  subtitle:     'PROPERTY MANAGEMENT',
   appName:      'VARS Property Management',
-  appLabel:     'VARS v1.0 · Property Management',
+  appLabel:     'VARS · Property Management',
   footerText:   'VARS Property Management · Confidential · For authorised personnel only',
-  // Colours mirror the CSS palette so PDFs and the live UI feel like the same product.
-  primaryHex:   '#928989', primaryRgb: [146, 137, 137],
-  textDarkHex:  '#1a1a1a', textDarkRgb:[ 26,  26,  26],
-  textMuteHex:  '#8a8a8a', textMuteRgb:[138, 138, 138],
-  borderHex:    '#ebe7e3', borderRgb:  [235, 231, 227],
-  surfaceHex:   '#faf8f6', surfaceRgb: [250, 248, 246],
+  // Accent (slate-deep) — primary brand surface for headers / shield / row hover
+  primaryHex:   '#3E4C59', primaryRgb: [ 62,  76,  89],
+  // Slate ink — strongest text, table body
+  textDarkHex:  '#131F23', textDarkRgb:[ 19,  31,  35],
+  // Muted slate — labels, footnotes
+  textMuteHex:  '#61707D', textMuteRgb:[ 97, 112, 125],
+  // Light slate border
+  borderHex:    '#E6EAE9', borderRgb:  [230, 234, 233],
+  // Off-white neutral surface (the cream from the brand-book neutrals row)
+  surfaceHex:   '#F2F6F5', surfaceRgb: [242, 246, 245],
 };
 
 // ---------- shared helpers ----------
@@ -88,15 +95,23 @@ const exportReportPDF = async ({ title, subtitle, columns, rows, metadata, filen
   let y = 28;
 
   // === Brand header ===
-  // V-shield: solid rounded square + bold white "V" wordmark inside
+  // Dark slate square with the official VARS glyph (asymmetric door shape)
+  // in white inside it. Coordinates lifted from the brand book SVG (100x100
+  // viewBox), scaled to fit a 32×32 shield.
   doc.setFillColor(...REPORT_BRAND.primaryRgb);
   doc.roundedRect(marginX, y, 32, 32, 3, 3, 'F');
-  doc.setTextColor(255, 255, 255);
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(22);
-  // Anchored at the centre of the 32x32 shield; y-offset puts the baseline
-  // slightly below centre so the optical centre of "V" lands in the middle.
-  doc.text('V', marginX + 16, y + 23, { align: 'center' });
+  const SHIELD = 32, SX = SHIELD / 100;
+  // Path: M33.3,16.7 L50,16.7 L58.1,25.2 L66.7,33.3 L66.7,83.3 L50,83.3 L33.3,66.7 Z
+  const glyphDeltas = [
+    [16.7 * SX, 0],
+    [ 8.1 * SX, 8.5 * SX],
+    [ 8.6 * SX, 8.1 * SX],
+    [ 0,       50.0 * SX],
+    [-16.7 * SX, 0],
+    [-16.7 * SX,-16.6 * SX],
+  ];
+  doc.setFillColor(255, 255, 255);
+  doc.lines(glyphDeltas, marginX + 33.3 * SX, y + 16.7 * SX, [1, 1], 'F', true);
 
   // VARS wordmark + subtitle (left-aligned)
   doc.setTextColor(...REPORT_BRAND.textDarkRgb);
@@ -238,10 +253,18 @@ const exportTenantStatementPDF = async ({ tenant, contract, payments, filename }
   // --- Brand header (compact: small shield + wordmark + subtitle) ---
   doc.setFillColor(...REPORT_BRAND.primaryRgb);
   doc.roundedRect(marginX, y, 28, 28, 3, 3, 'F');
-  doc.setTextColor(255, 255, 255);
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(18);
-  doc.text('V', marginX + 14, y + 21, { align: 'center' });
+  // Official VARS glyph (28×28 shield → scale 0.28)
+  const TS_SX = 28 / 100;
+  const tsGlyphDeltas = [
+    [16.7 * TS_SX, 0],
+    [ 8.1 * TS_SX, 8.5 * TS_SX],
+    [ 8.6 * TS_SX, 8.1 * TS_SX],
+    [ 0,         50.0 * TS_SX],
+    [-16.7 * TS_SX, 0],
+    [-16.7 * TS_SX,-16.6 * TS_SX],
+  ];
+  doc.setFillColor(255, 255, 255);
+  doc.lines(tsGlyphDeltas, marginX + 33.3 * TS_SX, y + 16.7 * TS_SX, [1, 1], 'F', true);
 
   doc.setTextColor(...REPORT_BRAND.textDarkRgb);
   doc.setFontSize(18);
