@@ -9,7 +9,7 @@ const PMCReportsPage = () => {
   const [error, setError] = useState(null);
   const [stats, setStats] = useState(null);
   const [section, setSection] = useState('finance');
-  const [showExport, setShowExport] = useState(false);
+  const [showDownload, setShowDownload] = useState(false);
   const [timeRange, setTimeRange] = useState('12m'); // '3m' | '6m' | '12m' | 'ytd' | '24m'
 
   // Time-range cutoff for filtering
@@ -202,206 +202,173 @@ const PMCReportsPage = () => {
     { id: 'compliance', label: 'Compliance' },
   ];
 
-  const downloadBlob = (filename, content, mime) => {
-    const blob = new Blob([content], { type: mime });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url; a.download = filename;
-    document.body.appendChild(a); a.click(); document.body.removeChild(a);
-    setTimeout(() => URL.revokeObjectURL(url), 1000);
-  };
-
-  const handleExport = async (format) => {
-    setShowExport(false);
-    if (!stats) { alert('Data is still loading — try again in a moment.'); return; }
-    const today = new Date().toISOString().slice(0, 10);
-    const filename = 'vars-pm-report-' + today;
+  // Build the Download Data dataTypes array. Each report section is one
+  // selectable dataset in the shared ExportPrintModal, so the user gets the
+  // same PDF/Excel/CSV/Word pipeline (and brand template) as every other
+  // PMC export — no bespoke export code in this file anymore.
+  const reportDatasets = (() => {
+    if (!stats) return [];
     const scope = selectedProperties.length > 0 ? selectedProperties.length + ' building(s) — top-bar scope' : 'All buildings';
+    const baseMeta = { 'Scope': scope, 'Time Range': timeRange === 'all' ? 'All time' : ({ '3m':'Last 3 months','6m':'Last 6 months','12m':'Last 12 months','24m':'Last 24 months','ytd':'Year to date' })[timeRange] };
+    const fmtA = (n) => Math.round(Number(n) || 0);
 
-    const fmtA = (n) => 'AED ' + Math.round(n).toLocaleString();
-
-    // Section definitions: [title, headerRow, dataRows]
-    const sections = [
-      ['Portfolio Health Summary', ['Metric','Value'], [
-        ['Occupancy Rate', stats.occupancyRate + '%'],
-        ['Occupied Units', stats.occupiedUnits + ' / ' + stats.totalUnits],
-        ['Owners', stats.owners], ['Tenants', stats.tenants],
-        ['Monthly Run-Rate', fmtA(stats.monthlyRevenue)],
-        ['Open Maintenance', stats.openSRs],
-        ['Outstanding Receivables', fmtA(stats.pending + stats.overdue)],
-        ['Estimated Net Operating Income', fmtA(stats.noi)],
-      ]],
-      ['Rent Collection Status', ['Bucket','Amount (AED)','% of Total'], [
-        ['Paid',    fmtA(stats.collected), (stats.totalInvoiced > 0 ? Math.round(stats.collected/stats.totalInvoiced*100) : 0) + '%'],
-        ['Pending', fmtA(stats.pending),   (stats.totalInvoiced > 0 ? Math.round(stats.pending/stats.totalInvoiced*100)   : 0) + '%'],
-        ['Overdue', fmtA(stats.overdue),   (stats.totalInvoiced > 0 ? Math.round(stats.overdue/stats.totalInvoiced*100)   : 0) + '%'],
-        ['Total Invoiced', fmtA(stats.totalInvoiced), '100%'],
-        ['Collection Rate', stats.collectionRate + '%', ''],
-      ]],
-      ['Service Charges by Source', ['Source','Amount (AED)'],
-        Object.entries(stats.chargeByCategory || {}).map(([k, v]) => [k, fmtA(v)])
-      ],
-      ['Lease Pipeline', ['Bucket','Count'], [
-        ['Expiring next 90 days', stats.leasesExpSoon],
-        ['Already expired (holdover)', stats.leasesExpired],
-      ]],
-      ['Maintenance — Tickets by Status', ['Status','Count'],
-        Object.entries(stats.srByStatus || {}).map(([k, v]) => [k, v])
-      ],
-      ['Maintenance — Tickets by Category', ['Category','Count'],
-        Object.entries(stats.srByCategory || {}).map(([k, v]) => [k, v])
-      ],
-      ['Visitor Analytics — by Status', ['Status','Count'],
-        Object.entries(stats.visitsByStatus || {}).map(([k, v]) => [k, v])
-      ],
-      ['Visitor Analytics — by Type', ['Type','Count'],
-        Object.entries(stats.visitsByType || {}).map(([k, v]) => [k, v])
-      ],
-      ['Amenity Usage', ['Amenity','Bookings'],
-        Object.entries(stats.bookingsByAmenity || {}).map(([k, v]) => [k, v])
-      ],
-      ['PMC Performance Scorecard', ['Metric','Value'], [
-        ['Maintenance resolution rate', (stats.totalSRs > 0 ? Math.round(stats.closedSRs/stats.totalSRs*100) : 0) + '%'],
-        ['Collection efficiency', stats.collectionRate + '%'],
-        ['Open ticket ratio', (stats.totalSRs > 0 ? Math.round(stats.openSRs/stats.totalSRs*100) : 0) + '%'],
-        ['Receivables ratio (outstanding / total)', (stats.totalInvoiced > 0 ? Math.round((stats.pending+stats.overdue)/stats.totalInvoiced*100) : 0) + '%'],
-      ]],
+    return [
+      {
+        id:           'portfolio_health',
+        label:        'Portfolio Health Summary',
+        title:        'Portfolio Health Summary',
+        sheetName:    'Portfolio Health',
+        filenameBase: 'portfolio-health-summary',
+        rows: [
+          { metric: 'Occupancy Rate',                value: stats.occupancyRate + '%' },
+          { metric: 'Occupied Units',                value: stats.occupiedUnits + ' / ' + stats.totalUnits },
+          { metric: 'Owners',                        value: String(stats.owners) },
+          { metric: 'Tenants',                       value: String(stats.tenants) },
+          { metric: 'Monthly Run-Rate',              value: 'AED ' + fmtA(stats.monthlyRevenue).toLocaleString() },
+          { metric: 'Open Maintenance',              value: String(stats.openSRs) },
+          { metric: 'Outstanding Receivables',       value: 'AED ' + fmtA(stats.pending + stats.overdue).toLocaleString() },
+          { metric: 'Estimated Net Operating Income',value: 'AED ' + fmtA(stats.noi).toLocaleString() },
+        ],
+        columns: [
+          { key: 'metric', header: 'Metric', width: 30 },
+          { key: 'value',  header: 'Value',  width: 22 },
+        ],
+        extraMetadata: baseMeta,
+      },
+      {
+        id:           'rent_collection',
+        label:        'Rent Collection Status',
+        title:        'Rent Collection Status',
+        sheetName:    'Rent Collection',
+        filenameBase: 'rent-collection-status',
+        rows: [
+          { bucket: 'Paid',           amount: fmtA(stats.collected), pct: (stats.totalInvoiced > 0 ? Math.round(stats.collected / stats.totalInvoiced * 100) : 0) + '%' },
+          { bucket: 'Pending',        amount: fmtA(stats.pending),   pct: (stats.totalInvoiced > 0 ? Math.round(stats.pending   / stats.totalInvoiced * 100) : 0) + '%' },
+          { bucket: 'Overdue',        amount: fmtA(stats.overdue),   pct: (stats.totalInvoiced > 0 ? Math.round(stats.overdue   / stats.totalInvoiced * 100) : 0) + '%' },
+          { bucket: 'Total Invoiced', amount: fmtA(stats.totalInvoiced), pct: '100%' },
+          { bucket: 'Collection Rate',amount: '',                    pct: stats.collectionRate + '%' },
+        ],
+        columns: [
+          { key: 'bucket', header: 'Bucket',       width: 22 },
+          { key: 'amount', header: 'Amount (AED)', width: 18, halign: 'right', numeric: true },
+          { key: 'pct',    header: '% of Total',   width: 14, halign: 'right' },
+        ],
+        extraMetadata: baseMeta,
+      },
+      {
+        id:           'charges_by_source',
+        label:        'Service Charges by Source',
+        title:        'Service Charges by Source',
+        sheetName:    'Charges by Source',
+        filenameBase: 'service-charges-by-source',
+        rows: Object.entries(stats.chargeByCategory || {}).map(([k, v]) => ({ source: k, amount: fmtA(v) })),
+        columns: [
+          { key: 'source', header: 'Source',       width: 26 },
+          { key: 'amount', header: 'Amount (AED)', width: 18, halign: 'right', numeric: true },
+        ],
+        extraMetadata: baseMeta,
+      },
+      {
+        id:           'lease_pipeline',
+        label:        'Lease Pipeline',
+        title:        'Lease Pipeline',
+        sheetName:    'Lease Pipeline',
+        filenameBase: 'lease-pipeline',
+        rows: [
+          { bucket: 'Expiring next 90 days',      count: stats.leasesExpSoon },
+          { bucket: 'Already expired (holdover)', count: stats.leasesExpired },
+        ],
+        columns: [
+          { key: 'bucket', header: 'Bucket', width: 28 },
+          { key: 'count',  header: 'Count',  width: 12, halign: 'right', numeric: true },
+        ],
+        extraMetadata: baseMeta,
+      },
+      {
+        id:           'maintenance_by_status',
+        label:        'Maintenance — Tickets by Status',
+        title:        'Maintenance — Tickets by Status',
+        sheetName:    'Tickets by Status',
+        filenameBase: 'maintenance-tickets-by-status',
+        rows: Object.entries(stats.srByStatus || {}).map(([k, v]) => ({ status: k, count: v })),
+        columns: [
+          { key: 'status', header: 'Status', width: 22 },
+          { key: 'count',  header: 'Count',  width: 12, halign: 'right', numeric: true },
+        ],
+        extraMetadata: baseMeta,
+      },
+      {
+        id:           'maintenance_by_category',
+        label:        'Maintenance — Tickets by Category',
+        title:        'Maintenance — Tickets by Category',
+        sheetName:    'Tickets by Category',
+        filenameBase: 'maintenance-tickets-by-category',
+        rows: Object.entries(stats.srByCategory || {}).map(([k, v]) => ({ category: k, count: v })),
+        columns: [
+          { key: 'category', header: 'Category', width: 22 },
+          { key: 'count',    header: 'Count',    width: 12, halign: 'right', numeric: true },
+        ],
+        extraMetadata: baseMeta,
+      },
+      {
+        id:           'visitors_by_status',
+        label:        'Visitor Analytics — by Status',
+        title:        'Visitor Analytics — by Status',
+        sheetName:    'Visitors by Status',
+        filenameBase: 'visitors-by-status',
+        rows: Object.entries(stats.visitsByStatus || {}).map(([k, v]) => ({ status: k, count: v })),
+        columns: [
+          { key: 'status', header: 'Status', width: 22 },
+          { key: 'count',  header: 'Count',  width: 12, halign: 'right', numeric: true },
+        ],
+        extraMetadata: baseMeta,
+      },
+      {
+        id:           'visitors_by_type',
+        label:        'Visitor Analytics — by Type',
+        title:        'Visitor Analytics — by Type',
+        sheetName:    'Visitors by Type',
+        filenameBase: 'visitors-by-type',
+        rows: Object.entries(stats.visitsByType || {}).map(([k, v]) => ({ type: k, count: v })),
+        columns: [
+          { key: 'type',  header: 'Type',  width: 22 },
+          { key: 'count', header: 'Count', width: 12, halign: 'right', numeric: true },
+        ],
+        extraMetadata: baseMeta,
+      },
+      {
+        id:           'amenity_usage',
+        label:        'Amenity Usage',
+        title:        'Amenity Usage',
+        sheetName:    'Amenity Usage',
+        filenameBase: 'amenity-usage',
+        rows: Object.entries(stats.bookingsByAmenity || {}).map(([k, v]) => ({ amenity: k, bookings: v })),
+        columns: [
+          { key: 'amenity',  header: 'Amenity',  width: 26 },
+          { key: 'bookings', header: 'Bookings', width: 12, halign: 'right', numeric: true },
+        ],
+        extraMetadata: baseMeta,
+      },
+      {
+        id:           'pmc_scorecard',
+        label:        'PMC Performance Scorecard',
+        title:        'PMC Performance Scorecard',
+        sheetName:    'Scorecard',
+        filenameBase: 'pmc-performance-scorecard',
+        rows: [
+          { metric: 'Maintenance resolution rate', value: (stats.totalSRs > 0 ? Math.round(stats.closedSRs / stats.totalSRs * 100) : 0) + '%' },
+          { metric: 'Collection efficiency',       value: stats.collectionRate + '%' },
+          { metric: 'Open ticket ratio',           value: (stats.totalSRs > 0 ? Math.round(stats.openSRs   / stats.totalSRs * 100) : 0) + '%' },
+          { metric: 'Receivables ratio (outstanding / total)', value: (stats.totalInvoiced > 0 ? Math.round((stats.pending + stats.overdue) / stats.totalInvoiced * 100) : 0) + '%' },
+        ],
+        columns: [
+          { key: 'metric', header: 'Metric', width: 30 },
+          { key: 'value',  header: 'Value',  width: 14, halign: 'right' },
+        ],
+        extraMetadata: baseMeta,
+      },
     ];
-
-    if (format === 'CSV') {
-      const escape = (c) => { const s = String(c == null ? '' : c); return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
-      let csv = 'VARS — PM Report\nGenerated,' + today + '\nScope,' + scope + '\n\n';
-      sections.forEach(([title, head, rows]) => {
-        csv += title + '\n';
-        csv += [head, ...rows].map(r => r.map(escape).join(',')).join('\n');
-        csv += '\n\n';
-      });
-      downloadBlob(filename + '.csv', csv, 'text/csv;charset=utf-8');
-      return;
-    }
-
-    if (format === 'Excel') {
-      const wb = window.XLSX.utils.book_new();
-      // Summary sheet — everything in one tab
-      const summary = [
-        ['VARS — Property Manager Report'],
-        ['Generated', today], ['Scope', scope], [],
-      ];
-      sections.forEach(([title, head, rows]) => {
-        summary.push([title]);
-        summary.push(head);
-        rows.forEach(r => summary.push(r));
-        summary.push([]);
-      });
-      window.XLSX.utils.book_append_sheet(wb, window.XLSX.utils.aoa_to_sheet(summary), 'Summary');
-      // One sheet per section for analysts who want to pivot
-      sections.forEach(([title, head, rows]) => {
-        const safe = title.replace(/[^A-Za-z0-9 ]/g, '').slice(0, 28) || 'Section';
-        window.XLSX.utils.book_append_sheet(wb, window.XLSX.utils.aoa_to_sheet([head, ...rows]), safe);
-      });
-      window.XLSX.writeFile(wb, filename + '.xlsx');
-      return;
-    }
-
-    if (format === 'PDF') {
-      await ensurePdf();
-      const jsPDFCtor = (window.jspdf && window.jspdf.jsPDF) || window.jsPDF;
-      if (!jsPDFCtor) { alert('PDF library failed to load.'); return; }
-      const doc = new jsPDFCtor({ orientation: 'portrait', unit: 'pt', format: 'a4' });
-      const pageW = doc.internal.pageSize.getWidth();
-      const pageH = doc.internal.pageSize.getHeight();
-      const marginX = 36;
-      let y = 28;
-
-      // --- Brand header (shield + wordmark + subtitle), matches the rest of the suite ---
-      doc.setFillColor(...REPORT_BRAND.primaryRgb);
-      doc.roundedRect(marginX, y, 32, 32, 3, 3, 'F');
-      const SX = 32 / 100;
-      const glyphDeltas = [
-        [16.7 * SX, 0],
-        [ 8.1 * SX, 8.5 * SX],
-        [ 8.6 * SX, 8.1 * SX],
-        [ 0,       50.0 * SX],
-        [-16.7 * SX, 0],
-        [-16.7 * SX,-16.6 * SX],
-      ];
-      doc.setFillColor(255, 255, 255);
-      doc.lines(glyphDeltas, marginX + 33.3 * SX, y + 16.7 * SX, [1, 1], 'F', true);
-
-      doc.setTextColor(...REPORT_BRAND.textDarkRgb);
-      doc.setFont('helvetica', 'normal');
-      doc.setFontSize(22);
-      doc.text(REPORT_BRAND.title, marginX + 42, y + 20);
-      doc.setFont('helvetica', 'bold');
-      doc.setFontSize(8);
-      doc.setTextColor(90, 90, 90);
-      doc.text('PROPERTY MANAGER REPORT', marginX + 42, y + 32);
-
-      doc.setFont('helvetica', 'normal');
-      doc.setFontSize(8);
-      doc.setTextColor(...REPORT_BRAND.textMuteRgb);
-      doc.text('Generated ' + today, pageW - marginX, y + 20, { align: 'right' });
-      doc.text('Scope · ' + scope, pageW - marginX, y + 32, { align: 'right' });
-
-      y += 44;
-      doc.setDrawColor(...REPORT_BRAND.primaryRgb);
-      doc.setLineWidth(1.2);
-      doc.line(marginX, y, pageW - marginX, y);
-      y += 14;
-
-      // --- Sections ---
-      sections.forEach(([title, head, rows]) => {
-        if (y > pageH - 100) { doc.addPage(); y = 36; }
-        doc.setFont('helvetica', 'bold');
-        doc.setFontSize(7);
-        doc.setTextColor(...REPORT_BRAND.textMuteRgb);
-        doc.text(title.toUpperCase(), marginX, y);
-        doc.autoTable({
-          startY:    y + 6,
-          head:      [head],
-          body:      rows.length ? rows : [['—','—']],
-          theme:     'grid',
-          styles:    { font: 'helvetica', fontSize: 9, lineColor: REPORT_BRAND.borderRgb, lineWidth: 0.5 },
-          headStyles:{ fillColor: REPORT_BRAND.primaryRgb, textColor: 255, fontSize: 9, fontStyle: 'bold' },
-          bodyStyles:{ fontSize: 9, textColor: REPORT_BRAND.textDarkRgb },
-          alternateRowStyles: { fillColor: REPORT_BRAND.surfaceRgb },
-          margin:    { left: marginX, right: marginX },
-        });
-        y = (doc.lastAutoTable.finalY || y) + 16;
-      });
-
-      // --- Footer on each page ---
-      const pageCount = doc.getNumberOfPages();
-      for (let p = 1; p <= pageCount; p++) {
-        doc.setPage(p);
-        doc.setFont('helvetica', 'normal');
-        doc.setFontSize(7);
-        doc.setTextColor(...REPORT_BRAND.textMuteRgb);
-        doc.text(REPORT_BRAND.footerText, marginX, pageH - 18);
-        doc.text('Page ' + p + ' of ' + pageCount, pageW - marginX, pageH - 18, { align: 'right' });
-      }
-
-      doc.save(filename + '.pdf');
-      return;
-    }
-
-    if (format === 'Word') {
-      let html = '<!DOCTYPE html><html><head><meta charset="utf-8"><title>VARS PM Report</title>';
-      html += '<style>body{font-family:"Segoe UI",Arial,sans-serif;color:#131F23;padding:24pt;}h1{font-size:20pt;margin:0 0 8pt;}h2{font-size:13pt;margin:18pt 0 6pt;color:#6b5d52;border-bottom:1px solid #D0D6D5;padding-bottom:4pt;}table{border-collapse:collapse;width:100%;margin:6pt 0 12pt;}th,td{border:1px solid #D0D6D5;padding:6pt 10pt;text-align:left;font-size:10pt;}th{background:#3E4C59;color:#fff;}</style>';
-      html += '</head><body>';
-      html += '<h1>VARS — Property Manager Report</h1>';
-      html += '<p style="color:#6b5d52;font-size:10pt;">Generated ' + today + ' · Scope: ' + scope + '</p>';
-      sections.forEach(([title, head, rows]) => {
-        html += '<h2>' + title + '</h2><table>';
-        html += '<thead><tr>' + head.map(c => '<th>' + (c == null ? '' : c) + '</th>').join('') + '</tr></thead>';
-        html += '<tbody>' + (rows.length ? rows : [['—','—']]).map(r => '<tr>' + r.map(c => '<td>' + (c == null ? '' : c) + '</td>').join('') + '</tr>').join('') + '</tbody>';
-        html += '</table>';
-      });
-      html += '</body></html>';
-      downloadBlob(filename + '.doc', html, 'application/msword');
-      return;
-    }
-  };
+  })();
 
   if (error) return <div className="page-header"><h1>Reports</h1><div style={{color:'#8b4a42',fontSize:13,marginTop:14}}>{error}</div></div>;
 
@@ -420,23 +387,15 @@ const PMCReportsPage = () => {
             <option value="ytd">Year to date</option>
             <option value="all">All time</option>
           </select>
-        <div style={{position:'relative'}}>
-          <button className="btn btn-primary" onClick={() => setShowExport(!showExport)}>Export ▾</button>
-          {showExport && (
-            <>
-              <div onClick={() => setShowExport(false)} style={{position:'fixed',top:0,left:0,right:0,bottom:0,zIndex:899}}/>
-              <div style={{position:'absolute',right:0,top:'100%',marginTop:6,minWidth:220,background:'#fff',border:'1px solid var(--border-light)',borderRadius:8,boxShadow:'0 8px 24px rgba(0,0,0,0.1)',zIndex:900,overflow:'hidden'}}>
-                {['PDF','Word','CSV','Excel'].map(f => (
-                  <div key={f} onClick={() => handleExport(f)} style={{padding:'12px 16px',cursor:'pointer',fontSize:13,borderBottom:'1px solid var(--border-light)'}} onMouseEnter={e=>e.currentTarget.style.background='var(--bg-page)'} onMouseLeave={e=>e.currentTarget.style.background='#fff'}>
-                    Export as {f}
-                  </div>
-                ))}
-              </div>
-            </>
-          )}
-        </div>
+          <button className="btn" onClick={() => setShowDownload(true)} disabled={!stats}>Download Data</button>
         </div>
       </div>
+
+      <ExportPrintModal
+        isOpen={showDownload}
+        onClose={() => setShowDownload(false)}
+        dataTypes={reportDatasets}
+      />
 
       <div style={{display:'flex',gap:8,marginBottom:24,borderBottom:'1px solid var(--border-light)'}}>
         {sections.map(s => (
