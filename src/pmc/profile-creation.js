@@ -82,8 +82,9 @@ const PC_TEMPLATES = {
       'After the metadata upload completes, an optional "Bulk attach documents" section appears where you can drag-drop multiple files at once.',
     ],
   },
-  contracts:   { label: 'Contracts',   singlePane: true },
-  amenities:   { label: 'Amenities',   readOnly: true },
+  contracts:        { label: 'Contracts',      singlePane: true },
+  reminderSettings: { label: 'Reminder Email', singlePane: true },
+  amenities:        { label: 'Amenities',      readOnly: true },
   maintenance: { label: 'Maintenance', readOnly: true },
   payments:    { label: 'Payments',    readOnly: true },
 };
@@ -232,7 +233,8 @@ const ProfileCreationPage = () => {
         </div>
       )}
 
-      {isSinglePane && section === 'contracts' && <ContractsSection/>}
+      {isSinglePane && section === 'contracts'        && <ContractsSection/>}
+      {isSinglePane && section === 'reminderSettings' && <ReminderSettingsSection/>}
       {!isSinglePane && effectiveInner === 'summary' && <PCSummary section={section}/>}
       {!isSinglePane && effectiveInner === 'bulk'    && <PCBulkUpload section={section}/>}
       {!isSinglePane && effectiveInner === 'manual'  && <PCManualUpload section={section}/>}
@@ -2060,6 +2062,146 @@ const ContractDetailModal = ({ contract, onClose }) => {
             ))}
           </div>
         )}
+      </div>
+    </div>
+  );
+};
+
+// ==================== REMINDER SETTINGS SECTION ====================
+// Single-row config (reminder_settings.id = 1) drives the daily digest sent
+// by the reminders-digest Edge Function (cron 5am UTC = 9am Dubai).
+const ReminderSettingsSection = () => {
+  const [settings, setSettings] = useState(null);
+  const [draftEmail, setDraftEmail] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [testStatus, setTestStatus] = useState(null); // { ok, message }
+  const [error, setError] = useState(null);
+
+  const load = async () => {
+    setError(null);
+    if (!supabaseClient) return;
+    const { data, error: e } = await supabaseClient.from('reminder_settings').select('*').eq('id', 1).maybeSingle();
+    if (e) setError(e.message);
+    setSettings(data || { id: 1, email_enabled: false, email_recipients: [] });
+  };
+  useEffect(() => { load(); }, []);
+
+  const save = async (next) => {
+    setSaving(true); setError(null);
+    const { error: e } = await supabaseClient.from('reminder_settings').update({
+      email_enabled:    next.email_enabled,
+      email_recipients: next.email_recipients,
+      updated_at:       new Date().toISOString(),
+    }).eq('id', 1);
+    if (e) setError(e.message);
+    setSaving(false);
+    await load();
+  };
+
+  const toggleEnabled = () => save({ ...settings, email_enabled: !settings.email_enabled });
+  const addRecipient  = async () => {
+    const e = (draftEmail || '').trim();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e)) { setError('Enter a valid email address.'); return; }
+    if ((settings.email_recipients || []).includes(e)) { setError('That email is already on the list.'); return; }
+    setDraftEmail('');
+    await save({ ...settings, email_recipients: [...(settings.email_recipients || []), e] });
+  };
+  const removeRecipient = async (e) => {
+    await save({ ...settings, email_recipients: (settings.email_recipients || []).filter(x => x !== e) });
+  };
+
+  const sendTest = async () => {
+    setTestStatus({ ok: null, message: 'Sending…' });
+    try {
+      const { data, error: e } = await supabaseClient.functions.invoke('reminders-digest', {
+        body: { recipients: settings.email_recipients, force: true },
+      });
+      if (e) { setTestStatus({ ok: false, message: e.message || String(e) }); return; }
+      if (data && data.ok === false) {
+        setTestStatus({ ok: false, message: data.error || ('Resend rejected: ' + JSON.stringify(data.body || data)) });
+        return;
+      }
+      setTestStatus({ ok: true, message: 'Sent to ' + (data?.sent_to || []).join(', ') + ' · ' + (data?.count ?? 0) + ' reminder' + ((data?.count ?? 0) === 1 ? '' : 's') });
+    } catch (err) {
+      setTestStatus({ ok: false, message: err.message || String(err) });
+    }
+  };
+
+  if (!settings) {
+    return <div className="card"><div style={{padding:24,color:'var(--text-muted)',fontSize:13}}>Loading…</div></div>;
+  }
+
+  const labelStyle = { fontSize: 10, letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--text-secondary)', marginBottom: 6, display: 'block', fontWeight: 500 };
+
+  return (
+    <div className="card">
+      <div style={{marginBottom:18}}>
+        <div style={{fontSize:14,fontWeight:600,color:'var(--text-dark)'}}>Daily reminder email</div>
+        <div style={{fontSize:12,color:'var(--text-muted)',marginTop:4}}>
+          A morning digest summarising every open contract reminder is sent at 09:00 Dubai time. Toggle off any time.
+        </div>
+      </div>
+
+      {error && <div style={{padding:10,background:'#fdf2f1',color:'#8b4a42',borderRadius:6,fontSize:12,marginBottom:14}}>{error}</div>}
+
+      <div style={{display:'flex',alignItems:'center',gap:12,padding:'12px 14px',background: settings.email_enabled ? '#e6efe1' : 'var(--bg-surface)',border:'1px solid ' + (settings.email_enabled ? '#c8d6c0' : 'var(--border-light)'),borderRadius:6,marginBottom:18,cursor:'pointer'}}
+           onClick={() => !saving && toggleEnabled()}>
+        <input type="checkbox" checked={!!settings.email_enabled} readOnly style={{width:16,height:16,accentColor:'#5a6b4f'}}/>
+        <div style={{flex:1}}>
+          <div style={{fontSize:13,fontWeight:500,color: settings.email_enabled ? '#3f4f37' : 'var(--text-dark)'}}>
+            {settings.email_enabled ? 'Email digest is ON' : 'Email digest is OFF'}
+          </div>
+          <div style={{fontSize:11,color:'var(--text-muted)',marginTop:2}}>
+            {settings.email_enabled
+              ? 'Next digest fires at the next 09:00 Dubai window.'
+              : 'No emails will be sent. In-app reminders keep working.'}
+          </div>
+        </div>
+      </div>
+
+      <div style={{marginBottom:18}}>
+        <label style={labelStyle}>Recipients</label>
+        {(settings.email_recipients || []).length === 0 ? (
+          <div style={{fontSize:13,color:'var(--text-muted)',padding:'8px 0'}}>No recipients yet. Add at least one to receive the digest.</div>
+        ) : (
+          <div style={{display:'flex',flexWrap:'wrap',gap:8,marginBottom:10}}>
+            {(settings.email_recipients || []).map(addr => (
+              <span key={addr} style={{display:'inline-flex',alignItems:'center',gap:8,padding:'5px 10px',background:'var(--bg-surface)',border:'1px solid var(--border-light)',borderRadius:14,fontSize:12,color:'var(--text-dark)'}}>
+                {addr}
+                <span onClick={() => removeRecipient(addr)} title="Remove" style={{cursor:'pointer',color:'#8b4a42',fontWeight:600,fontSize:14,lineHeight:1}}>×</span>
+              </span>
+            ))}
+          </div>
+        )}
+        <div style={{display:'flex',gap:8}}>
+          <input
+            type="email"
+            className="form-input"
+            placeholder="name@company.com"
+            value={draftEmail}
+            onChange={e => setDraftEmail(e.target.value)}
+            onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addRecipient(); } }}
+            style={{flex:1}}
+          />
+          <button className="btn" onClick={addRecipient} disabled={saving}>Add</button>
+        </div>
+      </div>
+
+      <div style={{paddingTop:14,borderTop:'1px solid var(--border-light)'}}>
+        <label style={labelStyle}>Test the digest</label>
+        <div style={{fontSize:12,color:'var(--text-muted)',marginBottom:10}}>
+          Sends a digest right now to the recipient list above, regardless of whether the toggle is on. Useful to confirm delivery before the first 09:00 run.
+        </div>
+        <div style={{display:'flex',alignItems:'center',gap:12}}>
+          <button className="btn btn-primary" onClick={sendTest} disabled={saving || (settings.email_recipients || []).length === 0}>
+            Send test now
+          </button>
+          {testStatus && (
+            <span style={{fontSize:12,color: testStatus.ok === false ? '#8b4a42' : testStatus.ok === true ? '#5a6b4f' : 'var(--text-muted)'}}>
+              {testStatus.message}
+            </span>
+          )}
+        </div>
       </div>
     </div>
   );
