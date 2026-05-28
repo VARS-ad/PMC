@@ -2068,13 +2068,19 @@ const ContractDetailModal = ({ contract, onClose }) => {
 };
 
 // ==================== REMINDER SETTINGS SECTION ====================
-// Single-row config (reminder_settings.id = 1) drives the daily digest sent
-// by the reminders-digest Edge Function (cron 5am UTC = 9am Dubai).
+// Single-row config (reminder_settings.id = 1) drives the digest email sent
+// by the reminders-digest Edge Function. The cron job runs every 30 minutes;
+// the function gates on the user's configured cadence / days / time so the
+// digest only fires inside the configured window (and at most once per day).
+const DOW_LIST = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
 const ReminderSettingsSection = () => {
   const [settings, setSettings] = useState(null);
   const [draftEmail, setDraftEmail] = useState('');
   const [saving, setSaving] = useState(false);
-  const [testStatus, setTestStatus] = useState(null); // { ok, message }
+  const [testStatus, setTestStatus] = useState(null);
+  const [previewBusy, setPreviewBusy] = useState(false);
+  const [previewSrc, setPreviewSrc] = useState(null);   // object URL for the PDF
+  const [previewError, setPreviewError] = useState(null);
   const [error, setError] = useState(null);
 
   const load = async () => {
@@ -2082,33 +2088,58 @@ const ReminderSettingsSection = () => {
     if (!supabaseClient) return;
     const { data, error: e } = await supabaseClient.from('reminder_settings').select('*').eq('id', 1).maybeSingle();
     if (e) setError(e.message);
-    setSettings(data || { id: 1, email_enabled: false, email_recipients: [] });
+    setSettings(data || {
+      id: 1, email_enabled: false, email_recipients: [],
+      digest_cadence: 'daily', digest_days_of_week: [...DOW_LIST],
+      digest_time_local: '09:00', digest_timezone: 'Asia/Dubai',
+    });
   };
   useEffect(() => { load(); }, []);
+  useEffect(() => () => { if (previewSrc) URL.revokeObjectURL(previewSrc); }, [previewSrc]);
 
-  const save = async (next) => {
+  // Persist a partial update; merge with current settings and write to DB.
+  const patch = async (partial) => {
     setSaving(true); setError(null);
+    const next = { ...settings, ...partial };
     const { error: e } = await supabaseClient.from('reminder_settings').update({
-      email_enabled:    next.email_enabled,
-      email_recipients: next.email_recipients,
-      updated_at:       new Date().toISOString(),
+      email_enabled:       next.email_enabled,
+      email_recipients:    next.email_recipients,
+      digest_cadence:      next.digest_cadence,
+      digest_days_of_week: next.digest_days_of_week,
+      digest_time_local:   next.digest_time_local,
+      digest_timezone:     next.digest_timezone,
+      updated_at:          new Date().toISOString(),
     }).eq('id', 1);
     if (e) setError(e.message);
     setSaving(false);
     await load();
   };
 
-  const toggleEnabled = () => save({ ...settings, email_enabled: !settings.email_enabled });
+  const toggleEnabled = () => patch({ email_enabled: !settings.email_enabled });
   const addRecipient  = async () => {
     const e = (draftEmail || '').trim();
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e)) { setError('Enter a valid email address.'); return; }
     if ((settings.email_recipients || []).includes(e)) { setError('That email is already on the list.'); return; }
     setDraftEmail('');
-    await save({ ...settings, email_recipients: [...(settings.email_recipients || []), e] });
+    await patch({ email_recipients: [...(settings.email_recipients || []), e] });
   };
-  const removeRecipient = async (e) => {
-    await save({ ...settings, email_recipients: (settings.email_recipients || []).filter(x => x !== e) });
+  const removeRecipient = async (e) => patch({ email_recipients: (settings.email_recipients || []).filter(x => x !== e) });
+
+  const setCadence = async (cadence) => {
+    let days = settings.digest_days_of_week || DOW_LIST;
+    if (cadence === 'daily')    days = [...DOW_LIST];
+    if (cadence === 'weekdays') days = ['Mon','Tue','Wed','Thu','Fri'];
+    if (cadence === 'weekly')   days = ['Mon'];
+    await patch({ digest_cadence: cadence, digest_days_of_week: days });
   };
+  const toggleDay = async (day) => {
+    const current = settings.digest_days_of_week || [];
+    const next = current.includes(day) ? current.filter(d => d !== day) : [...current, day];
+    // Sort by canonical order
+    const sorted = DOW_LIST.filter(d => next.includes(d));
+    await patch({ digest_cadence: 'custom', digest_days_of_week: sorted });
+  };
+  const setTime = (val) => patch({ digest_time_local: val });
 
   const sendTest = async () => {
     setTestStatus({ ok: null, message: 'Sending…' });
@@ -2127,23 +2158,56 @@ const ReminderSettingsSection = () => {
     }
   };
 
+  const showPreview = async () => {
+    setPreviewError(null);
+    setPreviewBusy(true);
+    if (previewSrc) { URL.revokeObjectURL(previewSrc); setPreviewSrc(null); }
+    try {
+      const { data, error: e } = await supabaseClient.functions.invoke('reminders-digest', {
+        body: { preview: true },
+      });
+      if (e || !data || data.ok === false) {
+        setPreviewError((e && e.message) || (data && data.error) || 'Preview failed.');
+        return;
+      }
+      // data.pdf_base64 → blob URL
+      const bin = atob(data.pdf_base64);
+      const bytes = new Uint8Array(bin.length);
+      for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+      const blob = new Blob([bytes], { type: 'application/pdf' });
+      setPreviewSrc(URL.createObjectURL(blob));
+    } catch (err) {
+      setPreviewError(err.message || String(err));
+    } finally {
+      setPreviewBusy(false);
+    }
+  };
+
   if (!settings) {
     return <div className="card"><div style={{padding:24,color:'var(--text-muted)',fontSize:13}}>Loading…</div></div>;
   }
 
   const labelStyle = { fontSize: 10, letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--text-secondary)', marginBottom: 6, display: 'block', fontWeight: 500 };
+  const daysSummary = (() => {
+    const d = settings.digest_days_of_week || [];
+    if (d.length === 7)                          return 'Every day';
+    if (d.length === 5 && !d.includes('Sat') && !d.includes('Sun')) return 'Weekdays only';
+    if (d.length === 0)                          return 'No days selected';
+    return d.join(' · ');
+  })();
 
   return (
     <div className="card">
       <div style={{marginBottom:18}}>
-        <div style={{fontSize:14,fontWeight:600,color:'var(--text-dark)'}}>Daily reminder email</div>
+        <div style={{fontSize:14,fontWeight:600,color:'var(--text-dark)'}}>Reminder email</div>
         <div style={{fontSize:12,color:'var(--text-muted)',marginTop:4}}>
-          A morning digest summarising every open contract reminder is sent at 09:00 Dubai time. Toggle off any time.
+          A short email is sent with a branded PDF attachment summarising every open contract reminder. Pick the days, the time, the recipients.
         </div>
       </div>
 
       {error && <div style={{padding:10,background:'#fdf2f1',color:'#8b4a42',borderRadius:6,fontSize:12,marginBottom:14}}>{error}</div>}
 
+      {/* ---- Enable toggle ---- */}
       <div style={{display:'flex',alignItems:'center',gap:12,padding:'12px 14px',background: settings.email_enabled ? '#e6efe1' : 'var(--bg-surface)',border:'1px solid ' + (settings.email_enabled ? '#c8d6c0' : 'var(--border-light)'),borderRadius:6,marginBottom:18,cursor:'pointer'}}
            onClick={() => !saving && toggleEnabled()}>
         <input type="checkbox" checked={!!settings.email_enabled} readOnly style={{width:16,height:16,accentColor:'#5a6b4f'}}/>
@@ -2153,13 +2217,57 @@ const ReminderSettingsSection = () => {
           </div>
           <div style={{fontSize:11,color:'var(--text-muted)',marginTop:2}}>
             {settings.email_enabled
-              ? 'Next digest fires at the next 09:00 Dubai window.'
+              ? 'Next digest fires at ' + (settings.digest_time_local || '09:00') + ' Dubai · ' + daysSummary
               : 'No emails will be sent. In-app reminders keep working.'}
           </div>
         </div>
       </div>
 
+      {/* ---- Schedule ---- */}
       <div style={{marginBottom:18}}>
+        <label style={labelStyle}>Cadence</label>
+        <div style={{display:'flex',gap:8,marginBottom:12,flexWrap:'wrap'}}>
+          {[
+            { id: 'daily',    label: 'Every day' },
+            { id: 'weekdays', label: 'Weekdays (Mon–Fri)' },
+            { id: 'weekly',   label: 'Weekly (Mon)' },
+            { id: 'custom',   label: 'Custom days' },
+          ].map(opt => (
+            <button key={opt.id} className={'btn btn-sm' + (settings.digest_cadence === opt.id ? ' btn-primary' : '')}
+                    onClick={() => setCadence(opt.id)} disabled={saving}>
+              {opt.label}
+            </button>
+          ))}
+        </div>
+
+        <label style={labelStyle}>Days of the week</label>
+        <div style={{display:'flex',gap:6,flexWrap:'wrap',marginBottom:14}}>
+          {DOW_LIST.map(d => {
+            const on = (settings.digest_days_of_week || []).includes(d);
+            return (
+              <button key={d}
+                onClick={() => toggleDay(d)}
+                disabled={saving}
+                style={{padding:'6px 12px',borderRadius:14,border:'1px solid ' + (on ? '#3E4C59' : 'var(--border-light)'),background: on ? '#3E4C59' : '#fff',color: on ? '#fff' : 'var(--text-dark)',fontSize:12,fontWeight:500,cursor:'pointer',minWidth:54}}>
+                {d}
+              </button>
+            );
+          })}
+        </div>
+
+        <div style={{display:'flex',gap:14,alignItems:'flex-end'}}>
+          <div style={{flex:'0 0 160px'}}>
+            <label style={labelStyle}>Time (Dubai)</label>
+            <input type="time" className="form-input" value={settings.digest_time_local || '09:00'} onChange={e => setTime(e.target.value)} step="60"/>
+          </div>
+          <div style={{flex:1,fontSize:11,color:'var(--text-muted)',paddingBottom:9}}>
+            The digest fires at this local time on each selected day. The cron job runs every 30 minutes and only sends once per scheduled window.
+          </div>
+        </div>
+      </div>
+
+      {/* ---- Recipients ---- */}
+      <div style={{marginBottom:18,paddingTop:14,borderTop:'1px solid var(--border-light)'}}>
         <label style={labelStyle}>Recipients</label>
         {(settings.email_recipients || []).length === 0 ? (
           <div style={{fontSize:13,color:'var(--text-muted)',padding:'8px 0'}}>No recipients yet. Add at least one to receive the digest.</div>
@@ -2187,10 +2295,28 @@ const ReminderSettingsSection = () => {
         </div>
       </div>
 
+      {/* ---- Preview ---- */}
+      <div style={{marginBottom:18,paddingTop:14,borderTop:'1px solid var(--border-light)'}}>
+        <label style={labelStyle}>Preview the PDF attachment</label>
+        <div style={{fontSize:12,color:'var(--text-muted)',marginBottom:10}}>
+          This is exactly what's attached to the email — built right now from your current portfolio.
+        </div>
+        <div style={{display:'flex',gap:10,alignItems:'center',marginBottom:12}}>
+          <button className="btn" onClick={showPreview} disabled={previewBusy}>
+            {previewBusy ? 'Generating…' : (previewSrc ? 'Refresh preview' : 'Show preview')}
+          </button>
+          {previewError && <span style={{fontSize:12,color:'#8b4a42'}}>{previewError}</span>}
+        </div>
+        {previewSrc && (
+          <iframe src={previewSrc} title="Reminder digest PDF preview" style={{width:'100%',height:520,border:'1px solid var(--border-light)',borderRadius:6,background:'#fff'}}/>
+        )}
+      </div>
+
+      {/* ---- Test send ---- */}
       <div style={{paddingTop:14,borderTop:'1px solid var(--border-light)'}}>
         <label style={labelStyle}>Test the digest</label>
         <div style={{fontSize:12,color:'var(--text-muted)',marginBottom:10}}>
-          Sends a digest right now to the recipient list above, regardless of whether the toggle is on. Useful to confirm delivery before the first 09:00 run.
+          Sends a real email right now to the recipient list above, regardless of the toggle. Useful to confirm delivery and check the PDF in your inbox.
         </div>
         <div style={{display:'flex',alignItems:'center',gap:12}}>
           <button className="btn btn-primary" onClick={sendTest} disabled={saving || (settings.email_recipients || []).length === 0}>
