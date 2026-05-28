@@ -122,10 +122,21 @@ const TopBar = ({ onCreateClick, onMenuToggle, onLogout, onNavigate }) => {
     return () => { mounted = false; };
   }, [selectedProperties.join(',')]);
   const notifTotal = notifs.srs.length + notifs.invoices.length + notifs.visits.length + notifs.reminders.length;
-  // "Unread" = at least one item created after the last mark-as-read timestamp.
-  // Reminders use end_date as the signal (every reminder is implicitly unread until acted on).
-  const hasUnread = !notifReadAt || notifs.reminders.length > 0 || [...notifs.srs, ...notifs.invoices, ...notifs.visits]
-    .some(item => (item.created_at || '') > notifReadAt);
+  // "Unread" = at least one item became actionable after the last mark-as-read
+  // timestamp. For SR / invoice / visit we compare to `created_at`. For a
+  // reminder, the "fire moment" is end_date − lead_days (the day today
+  // crossed the threshold for its current bucket). So once a reminder has
+  // already fired and the user marks all read, the dot clears; it only
+  // re-lights when a *new* threshold crossing happens (new reminder
+  // appears OR an existing reminder rolls into a tighter bucket).
+  const reminderFiredAt = (r) => {
+    const d = new Date(r.end_date);
+    d.setDate(d.getDate() - (r.lead_days || 0));
+    return d.toISOString();
+  };
+  const hasUnread = !notifReadAt
+    || [...notifs.srs, ...notifs.invoices, ...notifs.visits].some(item => (item.created_at || '') > notifReadAt)
+    || notifs.reminders.some(r => reminderFiredAt(r) > notifReadAt);
   const showDot = notifTotal > 0 && hasUnread;
   const fmtAED = (n) => 'AED ' + Math.round(Number(n) || 0).toLocaleString();
   const goTo = (page) => { setShowNotifications(false); if (onNavigate) onNavigate(page); };
