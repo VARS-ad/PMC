@@ -212,11 +212,14 @@ const ProfileCreationPage = () => {
         </div>
       </div>
 
-      <div style={{display:'flex',gap:8,marginBottom:20,borderBottom:'1px solid var(--border-light)'}}>
+      <div style={{display:'flex',gap:4,marginBottom:22,borderBottom:'1px solid var(--border-light)',overflowX:'auto'}}>
         {Object.entries(PC_TEMPLATES).map(([id, cfg]) => (
           <div key={id}
             onClick={() => { setSection(id); setInner(id === 'vendors' ? 'bulk' : 'summary'); }}
-            style={{padding:'10px 18px',cursor:'pointer',fontSize:13,fontWeight:section===id?500:400,color:section===id?'var(--text-dark)':'var(--text-secondary)',borderBottom: section===id ? '2px solid var(--bg-warm-dark)' : '2px solid transparent',marginBottom:-1,letterSpacing:'-0.01em'}}>
+            style={{padding:'12px 20px',cursor:'pointer',fontSize:14,fontWeight:section===id?500:400,color:section===id?'var(--text-dark)':'var(--text-secondary)',borderBottom: section===id ? '2px solid var(--bg-warm-dark)' : '2px solid transparent',marginBottom:-1,letterSpacing:'-0.01em',whiteSpace:'nowrap',transition:'color 0.15s'}}
+            onMouseEnter={e => { if (section !== id) e.currentTarget.style.color = 'var(--text-dark)'; }}
+            onMouseLeave={e => { if (section !== id) e.currentTarget.style.color = 'var(--text-secondary)'; }}
+          >
             {cfg.label}
           </div>
         ))}
@@ -227,7 +230,7 @@ const ProfileCreationPage = () => {
           {innerTabs.map(id => (
             <div key={id}
               onClick={() => setInner(id)}
-              style={{padding:'7px 14px',cursor:'pointer',fontSize:12,fontWeight:inner===id?500:400,color:inner===id?'var(--text-dark)':'var(--text-secondary)',border: inner===id ? '1.5px solid var(--bg-warm-dark)' : '1px solid var(--border-light)',borderRadius:8,background:inner===id?'var(--bg-surface)':'#fff',letterSpacing:'-0.01em'}}>
+              style={{padding:'8px 16px',cursor:'pointer',fontSize:13,fontWeight:inner===id?500:400,color:inner===id?'var(--text-dark)':'var(--text-secondary)',border: inner===id ? '1.5px solid var(--bg-warm-dark)' : '1px solid var(--border-light)',borderRadius:8,background:inner===id?'var(--bg-surface)':'#fff',letterSpacing:'-0.01em',transition:'color 0.15s,border-color 0.15s'}}>
               {id === 'bulk' ? 'Bulk upload' : id === 'manual' ? 'Manual upload' : 'Summary'}
             </div>
           ))}
@@ -427,7 +430,7 @@ const PCSummary = ({ section }) => {
       <>
         <div className="card">
           <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:12}}>
-            <div style={{fontSize:12,color:'var(--text-secondary)'}}>{rows.length} building{rows.length===1?'':'s'} · click a row to see floors & units</div>
+            <div style={{fontSize:13,color:'var(--text-muted)'}}>{rows.length} building{rows.length===1?'':'s'} · click a row to see floors & units</div>
             <button className="btn btn-sm" onClick={reload}>Refresh</button>
           </div>
           <div className="data-table-scroll">
@@ -471,7 +474,7 @@ const PCSummary = ({ section }) => {
       <>
       <div className="card">
         <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:12}}>
-          <div style={{fontSize:12,color:'var(--text-secondary)'}}>{rows.length} resident{rows.length===1?'':'s'}</div>
+          <div style={{fontSize:13,color:'var(--text-muted)'}}>{rows.length} resident{rows.length===1?'':'s'}</div>
           <button className="btn btn-sm" onClick={reload}>Refresh</button>
         </div>
         <div className="data-table-scroll">
@@ -516,7 +519,7 @@ const PCSummary = ({ section }) => {
     return (
       <div className="card">
         <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:12}}>
-          <div style={{fontSize:12,color:'var(--text-secondary)'}}>{rows.length} booking{rows.length===1?'':'s'} · read-only</div>
+          <div style={{fontSize:13,color:'var(--text-muted)'}}>{rows.length} booking{rows.length===1?'':'s'} · read-only</div>
           <button className="btn btn-sm" onClick={reload}>Refresh</button>
         </div>
         <div className="data-table-scroll">
@@ -545,7 +548,7 @@ const PCSummary = ({ section }) => {
     return (
       <div className="card">
         <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:12}}>
-          <div style={{fontSize:12,color:'var(--text-secondary)'}}>{rows.length} request{rows.length===1?'':'s'} · read-only</div>
+          <div style={{fontSize:13,color:'var(--text-muted)'}}>{rows.length} request{rows.length===1?'':'s'} · read-only</div>
           <button className="btn btn-sm" onClick={reload}>Refresh</button>
         </div>
         <div className="data-table-scroll">
@@ -575,7 +578,7 @@ const PCSummary = ({ section }) => {
     return (
       <div className="card">
         <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:12}}>
-          <div style={{fontSize:12,color:'var(--text-secondary)'}}>{rows.length} invoice{rows.length===1?'':'s'} · read-only</div>
+          <div style={{fontSize:13,color:'var(--text-muted)'}}>{rows.length} invoice{rows.length===1?'':'s'} · read-only</div>
           <button className="btn btn-sm" onClick={reload}>Refresh</button>
         </div>
         <div className="data-table-scroll">
@@ -605,7 +608,7 @@ const PCSummary = ({ section }) => {
     <>
     <div className="card">
       <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:12}}>
-        <div style={{fontSize:12,color:'var(--text-secondary)'}}>{rows.length} guard{rows.length===1?'':'s'}</div>
+        <div style={{fontSize:13,color:'var(--text-muted)'}}>{rows.length} guard{rows.length===1?'':'s'}</div>
         <button className="btn btn-sm" onClick={reload}>Refresh</button>
       </div>
       <div className="data-table-scroll">
@@ -803,31 +806,31 @@ const PCBulkUpload = ({ section }) => {
   return (
     <div>
       <div className="card" style={{background:'var(--accent-warm-light)',border:'1px solid var(--border-medium)'}}>
-        <div style={{fontSize:13,fontWeight:600,marginBottom:8}}>How bulk onboarding works</div>
-        <ol style={{fontSize:12,color:'var(--text-secondary)',paddingLeft:18,lineHeight:1.8,margin:0}}>
+        <div style={{fontSize:15,fontWeight:600,color:'var(--text-dark)',marginBottom:10,letterSpacing:'-0.015em'}}>How bulk onboarding works</div>
+        <ol style={{fontSize:13,color:'var(--text-secondary)',paddingLeft:20,lineHeight:1.7,margin:0}}>
           <li>Download the template (.xlsx or .csv).</li>
-          <li>Open it in Excel, Google Sheets, or any spreadsheet tool. Replace the example rows with your real data.</li>
-          <li>Save and upload it back. We'll preview the rows, flag duplicates and errors, then create the records in batch.</li>
+          <li>Open it in Excel or Google Sheets and replace the example rows with your real data.</li>
+          <li>Upload it back. We'll preview, flag any errors, then create the records in batch.</li>
         </ol>
       </div>
 
       <div className="card">
-        <div style={{fontSize:11,letterSpacing:'0.06em',textTransform:'uppercase',color:'var(--text-secondary)',marginBottom:12}}>1. Example data</div>
-        <div style={{fontSize:12,color:'var(--text-secondary)',marginBottom:12}}>The template is pre-populated with rows that look like this. Replace them with your real data before uploading.</div>
+        <div style={{fontSize:12,letterSpacing:'0.1em',textTransform:'uppercase',color:'var(--text-secondary)',marginBottom:8,fontWeight:600}}>1 · Example data</div>
+        <div style={{fontSize:13,color:'var(--text-muted)',marginBottom:14}}>Pre-populated rows you'll replace with your real data.</div>
         <div className="data-table-scroll">
           <table className="data-table" style={{fontSize:12}}>
             <thead><tr>{cfg.headers.map(h => <th key={h}>{h}</th>)}</tr></thead>
             <tbody>{cfg.examples.map((row,i) => (<tr key={i}>{row.map((v,j) => <td key={j}>{v == null || v === '' ? '—' : v}</td>)}</tr>))}</tbody>
           </table>
         </div>
-        <ul style={{fontSize:12,color:'var(--text-secondary)',paddingLeft:20,marginTop:14,marginBottom:0,lineHeight:1.8}}>
+        <ul style={{fontSize:13,color:'var(--text-secondary)',paddingLeft:22,marginTop:16,marginBottom:0,lineHeight:1.75}}>
           {cfg.rules.map((r,i) => <li key={i}>{r}</li>)}
         </ul>
       </div>
 
       <div className="card">
-        <div style={{fontSize:11,letterSpacing:'0.06em',textTransform:'uppercase',color:'var(--text-secondary)',marginBottom:6}}>2. Download template</div>
-        <div style={{fontSize:12,color:'var(--text-secondary)',marginBottom:14}}>Same example rows as above, in the format you prefer.</div>
+        <div style={{fontSize:12,letterSpacing:'0.1em',textTransform:'uppercase',color:'var(--text-secondary)',marginBottom:8,fontWeight:600}}>2 · Download template</div>
+        <div style={{fontSize:13,color:'var(--text-muted)',marginBottom:16}}>Same rows as above, in your preferred format.</div>
         <div style={{display:'flex',gap:10}}>
           <button className="btn btn-primary" onClick={() => downloadAsXlsx(cfg.filename, cfg.headers, cfg.examples)}>Download .xlsx</button>
           <button className="btn" onClick={() => downloadAsCsv(cfg.filename, cfg.headers, cfg.examples)}>Download .csv</button>
@@ -835,7 +838,7 @@ const PCBulkUpload = ({ section }) => {
       </div>
 
       <div className="card">
-        <div style={{fontSize:11,letterSpacing:'0.06em',textTransform:'uppercase',color:'var(--text-secondary)',marginBottom:12}}>3. Upload completed file</div>
+        <div style={{fontSize:12,letterSpacing:'0.1em',textTransform:'uppercase',color:'var(--text-secondary)',marginBottom:14,fontWeight:600}}>3 · Upload completed file</div>
         {section !== 'buildings' && (
           <div style={{marginBottom:14,padding:'12px 14px',background:'var(--bg-page)',borderRadius:8,border:'1px solid var(--border-light)'}}>
             <div style={{fontSize:11,letterSpacing:'0.04em',textTransform:'uppercase',color:'var(--text-secondary)',marginBottom:10,fontWeight:500}}>When an email already exists</div>
@@ -1865,7 +1868,7 @@ const ContractsSection = () => {
     <>
       <div className="card">
         <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:12}}>
-          <div style={{fontSize:12,color:'var(--text-secondary)'}}>{rows.length} contract{rows.length===1?'':'s'} · sorted by expiry</div>
+          <div style={{fontSize:13,color:'var(--text-muted)'}}>{rows.length} contract{rows.length===1?'':'s'} · sorted by expiry</div>
           <div style={{display:'flex',gap:8}}>
             <button className="btn btn-sm" onClick={reload}>Refresh</button>
             <button className="btn btn-sm btn-primary" onClick={() => setShowAdd(true)}>+ Add contract</button>
