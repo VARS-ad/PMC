@@ -332,7 +332,7 @@ const PMCReportsPage = () => {
 
     if (format === 'Word') {
       let html = '<!DOCTYPE html><html><head><meta charset="utf-8"><title>VARS PM Report</title>';
-      html += '<style>body{font-family:"Segoe UI",Arial,sans-serif;color:#1a1a1a;padding:24pt;}h1{font-size:20pt;margin:0 0 8pt;}h2{font-size:13pt;margin:18pt 0 6pt;color:#6b5d52;border-bottom:1px solid #d5cfc8;padding-bottom:4pt;}table{border-collapse:collapse;width:100%;margin:6pt 0 12pt;}th,td{border:1px solid #d5cfc8;padding:6pt 10pt;text-align:left;font-size:10pt;}th{background:#928989;color:#fff;}</style>';
+      html += '<style>body{font-family:"Segoe UI",Arial,sans-serif;color:#131F23;padding:24pt;}h1{font-size:20pt;margin:0 0 8pt;}h2{font-size:13pt;margin:18pt 0 6pt;color:#6b5d52;border-bottom:1px solid #D0D6D5;padding-bottom:4pt;}table{border-collapse:collapse;width:100%;margin:6pt 0 12pt;}th,td{border:1px solid #D0D6D5;padding:6pt 10pt;text-align:left;font-size:10pt;}th{background:#3E4C59;color:#fff;}</style>';
       html += '</head><body>';
       html += '<h1>VARS — Property Manager Report</h1>';
       html += '<p style="color:#6b5d52;font-size:10pt;">Generated ' + today + ' · Scope: ' + scope + '</p>';
@@ -437,7 +437,7 @@ const FinanceReports = ({ stats, fmt, fmtShort }) => {
           <div title={'Paid: ' + fmt(stats.collected)} style={{flex: Math.max(stats.collected, 1), background:'#5a6b4f',display:'flex',alignItems:'center',justifyContent:'center',color:'#fff',fontSize:11,fontWeight:500}}>
             {collectionPctOf('collected') > 8 ? collectionPctOf('collected') + '%' : ''}
           </div>
-          <div title={'Pending: ' + fmt(stats.pending)} style={{flex: Math.max(stats.pending, 1), background:'#c4b8b0',display:'flex',alignItems:'center',justifyContent:'center',color:'#4a4540',fontSize:11,fontWeight:500}}>
+          <div title={'Pending: ' + fmt(stats.pending)} style={{flex: Math.max(stats.pending, 1), background:'#D0D6D5',display:'flex',alignItems:'center',justifyContent:'center',color:'#4a4540',fontSize:11,fontWeight:500}}>
             {collectionPctOf('pending') > 8 ? collectionPctOf('pending') + '%' : ''}
           </div>
           <div title={'Overdue: ' + fmt(stats.overdue)} style={{flex: Math.max(stats.overdue, 1), background:'#8b4a42',display:'flex',alignItems:'center',justifyContent:'center',color:'#fff',fontSize:11,fontWeight:500}}>
@@ -446,7 +446,7 @@ const FinanceReports = ({ stats, fmt, fmtShort }) => {
         </div>
         <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit, minmax(160px, 1fr))',gap:12,fontSize:12}}>
           <div><span style={{display:'inline-block',width:10,height:10,borderRadius:2,background:'#5a6b4f',marginRight:6}}/>Paid <strong>{fmt(stats.collected)}</strong></div>
-          <div><span style={{display:'inline-block',width:10,height:10,borderRadius:2,background:'#c4b8b0',marginRight:6}}/>Pending <strong>{fmt(stats.pending)}</strong></div>
+          <div><span style={{display:'inline-block',width:10,height:10,borderRadius:2,background:'#D0D6D5',marginRight:6}}/>Pending <strong>{fmt(stats.pending)}</strong></div>
           <div><span style={{display:'inline-block',width:10,height:10,borderRadius:2,background:'#8b4a42',marginRight:6}}/>Overdue <strong>{fmt(stats.overdue)}</strong></div>
           <div><span style={{color:'var(--text-secondary)'}}>Total invoiced</span> <strong>{fmt(stats.totalInvoiced)}</strong></div>
         </div>
@@ -492,7 +492,7 @@ const FinanceReports = ({ stats, fmt, fmtShort }) => {
             labels: stats.monthLabels,
             datasets: [
               { label: 'Paid',    data: stats.invSeries.paid,    backgroundColor: '#5a6b4f' },
-              { label: 'Pending', data: stats.invSeries.pending, backgroundColor: '#c4b8b0' },
+              { label: 'Pending', data: stats.invSeries.pending, backgroundColor: '#D0D6D5' },
               { label: 'Overdue', data: stats.invSeries.overdue, backgroundColor: '#8b4a42' },
             ],
           },
@@ -526,7 +526,7 @@ const FinanceReports = ({ stats, fmt, fmtShort }) => {
           data: {
             labels: stats.monthLabels,
             datasets: [
-              { label: 'Cumulative Invoiced', data: stats.cumInvoiced, borderColor: '#928989', backgroundColor: 'rgba(146,137,137,0.12)', tension: 0.3, fill: true, pointRadius: 3 },
+              { label: 'Cumulative Invoiced', data: stats.cumInvoiced, borderColor: '#3E4C59', backgroundColor: 'rgba(146,137,137,0.12)', tension: 0.3, fill: true, pointRadius: 3 },
               { label: 'Cumulative Collected', data: stats.cumCollected, borderColor: '#5a6b4f', backgroundColor: 'rgba(90,107,79,0.15)', tension: 0.3, fill: true, pointRadius: 3 },
             ],
           },
@@ -584,7 +584,7 @@ const OccupancyReports = ({ stats, fmt }) => {
               labels: ['Occupied', 'Vacant'],
               datasets: [{
                 data: [stats.occupiedUnits, stats.vacant],
-                backgroundColor: ['#928989', '#e8e3de'],
+                backgroundColor: ['#3E4C59', '#E6EAE9'],
                 borderWidth: 0,
               }],
             },
@@ -630,7 +630,7 @@ const OccupancyReports = ({ stats, fmt }) => {
           </div>
           <div style={{padding:14,background:'var(--bg-surface)',borderRadius:8}}>
             <div style={{fontSize:10,letterSpacing:'0.06em',textTransform:'uppercase',color:'var(--text-secondary)',marginBottom:4}}>Vacant</div>
-            <div style={{fontSize:22,fontWeight:600,color:'#a89a92'}}>{stats.vacant}</div>
+            <div style={{fontSize:22,fontWeight:600,color:'#61707D'}}>{stats.vacant}</div>
           </div>
           <div style={{padding:14,background:'var(--bg-surface)',borderRadius:8}}>
             <div style={{fontSize:10,letterSpacing:'0.06em',textTransform:'uppercase',color:'var(--text-secondary)',marginBottom:4}}>Occupancy</div>
@@ -638,7 +638,7 @@ const OccupancyReports = ({ stats, fmt }) => {
           </div>
         </div>
         <div style={{height:18,background:'var(--bg-surface)',borderRadius:9,overflow:'hidden',border:'1px solid var(--border-light)'}}>
-          <div style={{height:'100%',width:occPct+'%',background:'linear-gradient(90deg, #928989 0%, var(--bg-warm-dark) 100%)'}}/>
+          <div style={{height:'100%',width:occPct+'%',background:'linear-gradient(90deg, #3E4C59 0%, var(--bg-warm-dark) 100%)'}}/>
         </div>
         <div style={{display:'flex',justifyContent:'space-between',fontSize:11,color:'var(--text-muted)',marginTop:6}}>
           <span>0%</span><span>50%</span><span>100%</span>
@@ -704,7 +704,7 @@ const OperationsReports = ({ stats }) => {
           data: {
             labels: stats.monthLabels,
             datasets: [
-              { label: 'New / Acknowledged', data: stats.srSeries.newAck,     backgroundColor: '#928989' },
+              { label: 'New / Acknowledged', data: stats.srSeries.newAck,     backgroundColor: '#3E4C59' },
               { label: 'In Progress',        data: stats.srSeries.inProgress, backgroundColor: '#a07d3c' },
               { label: 'Done / Closed',      data: stats.srSeries.done,       backgroundColor: '#5a6b4f' },
             ],
@@ -730,7 +730,7 @@ const OperationsReports = ({ stats }) => {
           data: {
             labels: stats.monthLabels,
             datasets: [
-              { label: 'Visits', data: stats.visitsSeries, borderColor: '#928989', backgroundColor: 'rgba(146,137,137,0.15)', tension: 0.3, fill: true, pointRadius: 4 },
+              { label: 'Visits', data: stats.visitsSeries, borderColor: '#3E4C59', backgroundColor: 'rgba(146,137,137,0.15)', tension: 0.3, fill: true, pointRadius: 4 },
               { label: 'Amenity Bookings', data: stats.bookingsSeries, borderColor: '#a07d3c', backgroundColor: 'rgba(160,125,60,0.15)', tension: 0.3, fill: true, pointRadius: 4 },
             ],
           },
@@ -747,7 +747,7 @@ const OperationsReports = ({ stats }) => {
         <div style={{fontSize:13,fontWeight:600,marginBottom:14}}>Maintenance Ticket Funnel</div>
         <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit, minmax(120px, 1fr))',gap:10}}>
           {['New','Acknowledged','In Progress','Done','Closed','Rejected'].map((status, i) => {
-            const colors = ['#928989', '#a89a92', '#a07d3c', '#5a6b4f', '#7a6e60', '#8b4a42'];
+            const colors = ['#3E4C59', '#61707D', '#a07d3c', '#5a6b4f', '#61707D', '#8b4a42'];
             return <Pill key={status} label={status} count={stats.srByStatus[status] || 0} total={stats.totalSRs} color={colors[i]}/>;
           })}
         </div>
@@ -778,9 +778,9 @@ const OperationsReports = ({ stats }) => {
         <div style={{fontSize:13,fontWeight:600,marginBottom:14}}>Visitor Analytics</div>
         <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit, minmax(140px, 1fr))',gap:10,marginBottom:18}}>
           <Pill label="Total Visits" count={stats.totalVisits} total={stats.totalVisits} color="var(--text-dark)"/>
-          <Pill label="Pre-Approved" count={stats.visitsByStatus['Pre-Approved']||0} total={stats.totalVisits} color="#a89a92"/>
-          <Pill label="On-Premise" count={stats.visitsByStatus['On-Premise']||0} total={stats.totalVisits} color="#928989"/>
-          <Pill label="Checked-Out" count={stats.visitsByStatus['Checked-Out']||0} total={stats.totalVisits} color="#7a6e60"/>
+          <Pill label="Pre-Approved" count={stats.visitsByStatus['Pre-Approved']||0} total={stats.totalVisits} color="#61707D"/>
+          <Pill label="On-Premise" count={stats.visitsByStatus['On-Premise']||0} total={stats.totalVisits} color="#3E4C59"/>
+          <Pill label="Checked-Out" count={stats.visitsByStatus['Checked-Out']||0} total={stats.totalVisits} color="#61707D"/>
         </div>
         <div style={{fontSize:12,fontWeight:600,marginBottom:10}}>By visitor type</div>
         {Object.entries(stats.visitsByType).sort((a,b)=>b[1]-a[1]).map(([type, n]) => (
@@ -804,7 +804,7 @@ const OperationsReports = ({ stats }) => {
                 <span style={{color:'var(--text-secondary)'}}>{n} bookings · {pct}%</span>
               </div>
               <div style={{height:6,background:'var(--bg-surface)',borderRadius:3,overflow:'hidden'}}>
-                <div style={{height:'100%',width:pct+'%',background:'#928989'}}/>
+                <div style={{height:'100%',width:pct+'%',background:'#3E4C59'}}/>
               </div>
             </div>
           );

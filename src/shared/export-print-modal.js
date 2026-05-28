@@ -163,7 +163,7 @@ const ExportPrintModal = ({ isOpen, onClose, title, columns, rows, dateField, sh
           </div>
         )}
 
-        <div style={{marginTop: 12, fontSize: 12, color: '#8a8a8a'}}>
+        <div style={{marginTop: 12, fontSize: 12, color: '#61707D'}}>
           {filteredRows.length} of {rows ? rows.length : 0} records will be included.
         </div>
 

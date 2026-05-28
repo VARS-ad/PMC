@@ -116,21 +116,21 @@ const TopBar = ({ onCreateClick, onMenuToggle, onLogout, onNavigate }) => {
       {/* Property Multi-Select */}
       <div style={{position:'relative'}}>
         <div className="property-select" onClick={() => setShowPropertyDropdown(!showPropertyDropdown)} style={{cursor:'pointer'}}>
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#8a8a8a" strokeWidth="1.5"><path d="M3 21h18M5 21V7l7-4 7 4v14M9 21v-6h6v6"/></svg>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#61707D" strokeWidth="1.5"><path d="M3 21h18M5 21V7l7-4 7 4v14M9 21v-6h6v6"/></svg>
           <span>{propertyLabel}</span>
           {selectedProperties.length > 1 && selectedProperties.length < realProps.length && (
-            <span style={{background:'#928989',color:'#fff',fontSize:10,padding:'1px 6px',borderRadius:10,fontWeight:600}}>{selectedProperties.length}</span>
+            <span style={{background:'#3E4C59',color:'#fff',fontSize:10,padding:'1px 6px',borderRadius:10,fontWeight:600}}>{selectedProperties.length}</span>
           )}
-          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#8a8a8a" strokeWidth="2" style={{transform: showPropertyDropdown ? 'rotate(180deg)' : 'rotate(0deg)',transition:'transform 0.2s'}}><polyline points="6 9 12 15 18 9"/></svg>
+          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#61707D" strokeWidth="2" style={{transform: showPropertyDropdown ? 'rotate(180deg)' : 'rotate(0deg)',transition:'transform 0.2s'}}><polyline points="6 9 12 15 18 9"/></svg>
         </div>
 
         {showPropertyDropdown && (
           <>
             <div onClick={() => setShowPropertyDropdown(false)} style={{position:'fixed',top:0,left:0,right:0,bottom:0,zIndex:997}}/>
-            <div style={{position:'absolute',top:'100%',left:0,marginTop:6,width:320,maxWidth:'90vw',background:'#fff',borderRadius:8,boxShadow:'0 8px 32px rgba(0,0,0,.15)',border:'1px solid #ebe7e3',zIndex:998,overflow:'hidden'}}>
-              <div style={{padding:'12px 16px',borderBottom:'1px solid #ebe7e3',display:'flex',justifyContent:'space-between',alignItems:'center'}}>
-                <span style={{fontSize:12,fontWeight:600,color:'#1a1a1a',letterSpacing:'0.04em'}}>{t('pm.selectProperties')}</span>
-                <span style={{fontSize:11,color:'#a89a92',cursor:'pointer'}} onClick={() => {
+            <div style={{position:'absolute',top:'100%',left:0,marginTop:6,width:320,maxWidth:'90vw',background:'#fff',borderRadius:8,boxShadow:'0 8px 32px rgba(0,0,0,.15)',border:'1px solid #E6EAE9',zIndex:998,overflow:'hidden'}}>
+              <div style={{padding:'12px 16px',borderBottom:'1px solid #E6EAE9',display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+                <span style={{fontSize:12,fontWeight:600,color:'#131F23',letterSpacing:'0.04em'}}>{t('pm.selectProperties')}</span>
+                <span style={{fontSize:11,color:'#61707D',cursor:'pointer'}} onClick={() => {
                   setSelectedProperties(selectedProperties.length === realProps.length ? (realProps[0] ? [realProps[0].id] : []) : realProps.map(p => p.id));
                 }}>{selectedProperties.length === realProps.length && realProps.length > 0 ? t('pm.deselectAll') : t('pm.selectAll')}</span>
               </div>
@@ -141,19 +141,19 @@ const TopBar = ({ onCreateClick, onMenuToggle, onLogout, onNavigate }) => {
                   return (
                     <div key={p.id} onClick={() => !isComingSoon && toggleProperty(p.id)}
                       style={{display:'flex',alignItems:'center',gap:12,padding:'10px 16px',cursor: isComingSoon ? 'default' : 'pointer',background: isSelected ? '#f8f8f8' : 'transparent',transition:'background 0.15s',opacity: isComingSoon ? 0.5 : 1}}>
-                      <div style={{width:18,height:18,borderRadius:4,border: isSelected ? 'none' : '1.5px solid #d0d0d0',background: isSelected ? '#1a1a1a' : '#fff',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,visibility: isComingSoon ? 'hidden' : 'visible'}}>
+                      <div style={{width:18,height:18,borderRadius:4,border: isSelected ? 'none' : '1.5px solid #d0d0d0',background: isSelected ? '#131F23' : '#fff',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,visibility: isComingSoon ? 'hidden' : 'visible'}}>
                         {isSelected && <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3"><path d="M20 6L9 17l-5-5"/></svg>}
                       </div>
                       <div style={{flex:1}}>
-                        <div style={{fontSize:13,fontWeight: isSelected ? 600 : 400,color: isComingSoon ? '#c0c0c0' : '#1a1a1a'}}>{p.name}</div>
-                        <div style={{fontSize:11,color: isComingSoon ? '#d0d0d0' : '#a89a92'}}>{p.location} · {p.towers} towers · {p.units} units</div>
+                        <div style={{fontSize:13,fontWeight: isSelected ? 600 : 400,color: isComingSoon ? '#c0c0c0' : '#131F23'}}>{p.name}</div>
+                        <div style={{fontSize:11,color: isComingSoon ? '#d0d0d0' : '#61707D'}}>{p.location} · {p.towers} towers · {p.units} units</div>
                       </div>
                       {isComingSoon && <span style={{fontSize:10,fontWeight:600,color:'#fff',background:'#c0c0c0',padding:'3px 10px',borderRadius:12,whiteSpace:'nowrap'}}>{t('pm.comingSoon')}</span>}
                     </div>
                   );
                 })}
               </div>
-              <div style={{padding:'10px 16px',borderTop:'1px solid #f0f0f0',fontSize:11,color:'#a89a92'}}>
+              <div style={{padding:'10px 16px',borderTop:'1px solid #f0f0f0',fontSize:11,color:'#61707D'}}>
                 {selectedProperties.length} of {realProps.length} properties selected
               </div>
             </div>
@@ -165,9 +165,9 @@ const TopBar = ({ onCreateClick, onMenuToggle, onLogout, onNavigate }) => {
       <div className="topbar-right">
         <div style={{position:'relative'}}>
           <div className="topbar-icon" onClick={() => setShowNotifications(!showNotifications)} style={{borderRadius:'50%',width:34,height:34,position:'relative',cursor:'pointer'}}>
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#7a6f66" strokeWidth="1.5"><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 01-3.46 0"/></svg>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#61707D" strokeWidth="1.5"><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 01-3.46 0"/></svg>
             {notifTotal > 0 && (
-              <span style={{position:'absolute',top:6,right:7,minWidth:14,height:14,padding:'0 4px',borderRadius:7,background:'#c62828',color:'#fff',fontSize:9,fontWeight:600,display:'flex',alignItems:'center',justifyContent:'center',border:'2px solid #faf8f6',lineHeight:1}}>
+              <span style={{position:'absolute',top:6,right:7,minWidth:14,height:14,padding:'0 4px',borderRadius:7,background:'#c62828',color:'#fff',fontSize:9,fontWeight:600,display:'flex',alignItems:'center',justifyContent:'center',border:'2px solid #F4EEE4',lineHeight:1}}>
                 {notifTotal > 99 ? '99+' : notifTotal}
               </span>
             )}
@@ -175,16 +175,16 @@ const TopBar = ({ onCreateClick, onMenuToggle, onLogout, onNavigate }) => {
           {showNotifications && (
             <>
               <div onClick={() => setShowNotifications(false)} style={{position:'fixed',inset:0,zIndex:997}}/>
-              <div onClick={e => e.stopPropagation()} style={{position:'absolute',top:44,right:-8,width:360,maxHeight:520,background:'#fff',borderRadius:12,boxShadow:'0 12px 40px rgba(0,0,0,0.15)',border:'1px solid #ebe7e3',zIndex:999,overflow:'hidden',display:'flex',flexDirection:'column'}}>
-                <div style={{padding:'14px 16px',borderBottom:'1px solid #ebe7e3',display:'flex',alignItems:'center',justifyContent:'space-between'}}>
+              <div onClick={e => e.stopPropagation()} style={{position:'absolute',top:44,right:-8,width:360,maxHeight:520,background:'#fff',borderRadius:12,boxShadow:'0 12px 40px rgba(0,0,0,0.15)',border:'1px solid #E6EAE9',zIndex:999,overflow:'hidden',display:'flex',flexDirection:'column'}}>
+                <div style={{padding:'14px 16px',borderBottom:'1px solid #E6EAE9',display:'flex',alignItems:'center',justifyContent:'space-between'}}>
                   <div>
-                    <div style={{fontSize:14,fontWeight:600,color:'#1a1a1a'}}>Notifications</div>
-                    <div style={{fontSize:11,color:'#a89a92',marginTop:1}}>{notifTotal} item{notifTotal === 1 ? '' : 's'} need attention</div>
+                    <div style={{fontSize:14,fontWeight:600,color:'#131F23'}}>Notifications</div>
+                    <div style={{fontSize:11,color:'#61707D',marginTop:1}}>{notifTotal} item{notifTotal === 1 ? '' : 's'} need attention</div>
                   </div>
                 </div>
                 <div style={{overflowY:'auto',flex:1}}>
                   {notifTotal === 0 ? (
-                    <div style={{padding:'40px 20px',textAlign:'center',color:'#a89a92',fontSize:13}}>
+                    <div style={{padding:'40px 20px',textAlign:'center',color:'#61707D',fontSize:13}}>
                       <div style={{fontSize:32,marginBottom:8,opacity:0.5}}>✓</div>
                       All caught up. Nothing needs your attention right now.
                     </div>
@@ -192,18 +192,18 @@ const TopBar = ({ onCreateClick, onMenuToggle, onLogout, onNavigate }) => {
                     <>
                       {notifs.srs.length > 0 && (
                         <div>
-                          <div style={{padding:'10px 16px 6px',fontSize:10,letterSpacing:'0.08em',textTransform:'uppercase',color:'#8a8078',fontWeight:600,background:'#faf8f6'}}>
+                          <div style={{padding:'10px 16px 6px',fontSize:10,letterSpacing:'0.08em',textTransform:'uppercase',color:'#61707D',fontWeight:600,background:'#F4EEE4'}}>
                             Service Requests · {notifs.srs.length}
                           </div>
                           {notifs.srs.slice(0, 5).map(s => (
-                            <div key={s.id} onClick={() => goTo('service')} style={{padding:'10px 16px',borderBottom:'1px solid #f5f3f0',cursor:'pointer',display:'flex',gap:10,alignItems:'flex-start'}}
-                              onMouseEnter={e => e.currentTarget.style.background='#faf8f6'}
+                            <div key={s.id} onClick={() => goTo('service')} style={{padding:'10px 16px',borderBottom:'1px solid #E6EAE9',cursor:'pointer',display:'flex',gap:10,alignItems:'flex-start'}}
+                              onMouseEnter={e => e.currentTarget.style.background='#F4EEE4'}
                               onMouseLeave={e => e.currentTarget.style.background='transparent'}>
-                              <div style={{width:6,height:6,borderRadius:3,background: s.priority === 'High' ? '#c62828' : s.priority === 'Normal' ? '#a07d3c' : '#c4b8b0',marginTop:6,flexShrink:0}}/>
+                              <div style={{width:6,height:6,borderRadius:3,background: s.priority === 'High' ? '#c62828' : s.priority === 'Normal' ? '#a07d3c' : '#D0D6D5',marginTop:6,flexShrink:0}}/>
                               <div style={{flex:1,minWidth:0}}>
-                                <div style={{fontSize:13,color:'#1a1a1a',fontWeight:500}}>{s.category} · Unit {s.unit_number}</div>
-                                <div style={{fontSize:11,color:'#8a8078',marginTop:2,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{s.description}</div>
-                                <div style={{fontSize:10,color:'#a89a92',marginTop:3}}>{s.status} · {new Date(s.created_at).toLocaleDateString('en-GB',{day:'2-digit',month:'short'})}</div>
+                                <div style={{fontSize:13,color:'#131F23',fontWeight:500}}>{s.category} · Unit {s.unit_number}</div>
+                                <div style={{fontSize:11,color:'#61707D',marginTop:2,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{s.description}</div>
+                                <div style={{fontSize:10,color:'#61707D',marginTop:3}}>{s.status} · {new Date(s.created_at).toLocaleDateString('en-GB',{day:'2-digit',month:'short'})}</div>
                               </div>
                             </div>
                           ))}
@@ -211,18 +211,18 @@ const TopBar = ({ onCreateClick, onMenuToggle, onLogout, onNavigate }) => {
                       )}
                       {notifs.invoices.length > 0 && (
                         <div>
-                          <div style={{padding:'10px 16px 6px',fontSize:10,letterSpacing:'0.08em',textTransform:'uppercase',color:'#8a8078',fontWeight:600,background:'#faf8f6'}}>
+                          <div style={{padding:'10px 16px 6px',fontSize:10,letterSpacing:'0.08em',textTransform:'uppercase',color:'#61707D',fontWeight:600,background:'#F4EEE4'}}>
                             Overdue Invoices · {notifs.invoices.length}
                           </div>
                           {notifs.invoices.slice(0, 5).map(i => (
-                            <div key={i.id} onClick={() => goTo('payment')} style={{padding:'10px 16px',borderBottom:'1px solid #f5f3f0',cursor:'pointer',display:'flex',gap:10,alignItems:'flex-start'}}
-                              onMouseEnter={e => e.currentTarget.style.background='#faf8f6'}
+                            <div key={i.id} onClick={() => goTo('payment')} style={{padding:'10px 16px',borderBottom:'1px solid #E6EAE9',cursor:'pointer',display:'flex',gap:10,alignItems:'flex-start'}}
+                              onMouseEnter={e => e.currentTarget.style.background='#F4EEE4'}
                               onMouseLeave={e => e.currentTarget.style.background='transparent'}>
                               <div style={{width:6,height:6,borderRadius:3,background:'#8b4a42',marginTop:6,flexShrink:0}}/>
                               <div style={{flex:1,minWidth:0}}>
-                                <div style={{fontSize:13,color:'#1a1a1a',fontWeight:500}}>{fmtAED(i.amount_aed)} · Unit {i.unit_number}</div>
-                                <div style={{fontSize:11,color:'#8a8078',marginTop:2,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{i.description}</div>
-                                <div style={{fontSize:10,color:'#a89a92',marginTop:3}}>Due {i.due_date || '—'}</div>
+                                <div style={{fontSize:13,color:'#131F23',fontWeight:500}}>{fmtAED(i.amount_aed)} · Unit {i.unit_number}</div>
+                                <div style={{fontSize:11,color:'#61707D',marginTop:2,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{i.description}</div>
+                                <div style={{fontSize:10,color:'#61707D',marginTop:3}}>Due {i.due_date || '—'}</div>
                               </div>
                             </div>
                           ))}
@@ -230,17 +230,17 @@ const TopBar = ({ onCreateClick, onMenuToggle, onLogout, onNavigate }) => {
                       )}
                       {notifs.visits.length > 0 && (
                         <div>
-                          <div style={{padding:'10px 16px 6px',fontSize:10,letterSpacing:'0.08em',textTransform:'uppercase',color:'#8a8078',fontWeight:600,background:'#faf8f6'}}>
+                          <div style={{padding:'10px 16px 6px',fontSize:10,letterSpacing:'0.08em',textTransform:'uppercase',color:'#61707D',fontWeight:600,background:'#F4EEE4'}}>
                             Today's Visitors · {notifs.visits.length}
                           </div>
                           {notifs.visits.slice(0, 5).map(v => (
-                            <div key={v.id} onClick={() => goTo('visitors')} style={{padding:'10px 16px',borderBottom:'1px solid #f5f3f0',cursor:'pointer',display:'flex',gap:10,alignItems:'flex-start'}}
-                              onMouseEnter={e => e.currentTarget.style.background='#faf8f6'}
+                            <div key={v.id} onClick={() => goTo('visitors')} style={{padding:'10px 16px',borderBottom:'1px solid #E6EAE9',cursor:'pointer',display:'flex',gap:10,alignItems:'flex-start'}}
+                              onMouseEnter={e => e.currentTarget.style.background='#F4EEE4'}
                               onMouseLeave={e => e.currentTarget.style.background='transparent'}>
                               <div style={{width:6,height:6,borderRadius:3,background:'#5a6b4f',marginTop:6,flexShrink:0}}/>
                               <div style={{flex:1,minWidth:0}}>
-                                <div style={{fontSize:13,color:'#1a1a1a',fontWeight:500}}>{v.visitor_name} · Unit {v.unit_number}</div>
-                                <div style={{fontSize:11,color:'#8a8078',marginTop:2}}>{v.type || 'Visit'} · Pre-Approved</div>
+                                <div style={{fontSize:13,color:'#131F23',fontWeight:500}}>{v.visitor_name} · Unit {v.unit_number}</div>
+                                <div style={{fontSize:11,color:'#61707D',marginTop:2}}>{v.type || 'Visit'} · Pre-Approved</div>
                               </div>
                             </div>
                           ))}
@@ -254,27 +254,27 @@ const TopBar = ({ onCreateClick, onMenuToggle, onLogout, onNavigate }) => {
           )}
         </div>
         <div style={{position:'relative'}}>
-          <div className="avatar" onClick={()=>setShowPmProfile(!showPmProfile)} style={{width:34,height:34,borderRadius:'50%',background:'#e8e3de',cursor:'pointer'}}>
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#a89a92" strokeWidth="1.5"><circle cx="12" cy="8" r="4"/><path d="M6 21v-2a4 4 0 014-4h4a4 4 0 014 4v2"/></svg>
+          <div className="avatar" onClick={()=>setShowPmProfile(!showPmProfile)} style={{width:34,height:34,borderRadius:'50%',background:'#E6EAE9',cursor:'pointer'}}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#61707D" strokeWidth="1.5"><circle cx="12" cy="8" r="4"/><path d="M6 21v-2a4 4 0 014-4h4a4 4 0 014 4v2"/></svg>
           </div>
           <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#aaa" strokeWidth="2" style={{position:'absolute',right:-14,top:'50%',transform:'translateY(-50%)',cursor:'pointer'}} onClick={()=>setShowPmProfile(!showPmProfile)}><polyline points="6 9 12 15 18 9"/></svg>
           {showPmProfile && (
-            <div onClick={e=>e.stopPropagation()} style={{position:'absolute',top:44,right:-14,width:260,background:'#fff',borderRadius:10,boxShadow:'0 8px 32px rgba(0,0,0,.15)',border:'1px solid #ebe7e3',zIndex:999,overflow:'hidden'}}>
-              <div style={{padding:'20px 16px',textAlign:'center',borderBottom:'1px solid #ebe7e3'}}>
+            <div onClick={e=>e.stopPropagation()} style={{position:'absolute',top:44,right:-14,width:260,background:'#fff',borderRadius:10,boxShadow:'0 8px 32px rgba(0,0,0,.15)',border:'1px solid #E6EAE9',zIndex:999,overflow:'hidden'}}>
+              <div style={{padding:'20px 16px',textAlign:'center',borderBottom:'1px solid #E6EAE9'}}>
                 <div style={{display:'inline-flex',alignItems:'center',gap:10,margin:'0 auto 10px'}}>
                   <svg width="38" height="38" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg" aria-label="VARS">
-                    <rect width="100" height="100" rx="4" fill="#928989"/>
+                    <rect width="100" height="100" rx="4" fill="#3E4C59"/>
                     <path d="M33.3 16.7 L50 16.7 L58.1 25.2 L66.7 33.3 L66.7 83.3 L50 83.3 L33.3 66.7 Z" fill="#ffffff"/>
                   </svg>
-                  <span style={{fontSize:22,fontWeight:500,letterSpacing:'-0.01em',color:'#1a1a1a',lineHeight:1}}>VARS</span>
+                  <span style={{fontSize:22,fontWeight:500,letterSpacing:'-0.01em',color:'#131F23',lineHeight:1}}>VARS</span>
                 </div>
-                <div style={{fontSize:15,fontWeight:600,color:'#1a1a1a'}}>Hassan Al-PM</div>
-                <div style={{fontSize:12,color:'#a89a92'}}>Property Manager</div>
-                <div style={{fontSize:11,color:'#c4b8b0'}}>The Pinnacle Residences</div>
+                <div style={{fontSize:15,fontWeight:600,color:'#131F23'}}>Hassan Al-PM</div>
+                <div style={{fontSize:12,color:'#61707D'}}>Property Manager</div>
+                <div style={{fontSize:11,color:'#D0D6D5'}}>The Pinnacle Residences</div>
               </div>
               <div style={{padding:'8px 12px'}}>
-                <div onClick={()=>{setShowPmProfile(false);setShowMyProfileModal(true);}} style={{display:'flex',alignItems:'center',gap:10,padding:'10px 4px',cursor:'pointer',fontSize:13,color:'#1a1a1a'}}>
-                  <div style={{width:30,height:30,borderRadius:'50%',background:'#f2efec',display:'flex',alignItems:'center',justifyContent:'center'}}><Icon name="user" size={14}/></div>
+                <div onClick={()=>{setShowPmProfile(false);setShowMyProfileModal(true);}} style={{display:'flex',alignItems:'center',gap:10,padding:'10px 4px',cursor:'pointer',fontSize:13,color:'#131F23'}}>
+                  <div style={{width:30,height:30,borderRadius:'50%',background:'#E6EAE9',display:'flex',alignItems:'center',justifyContent:'center'}}><Icon name="user" size={14}/></div>
                   {t('pm.myProfile')}
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#ccc" strokeWidth="2" style={{marginLeft:'auto'}}><polyline points="9 18 15 12 9 6"/></svg>
                 </div>

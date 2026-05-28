@@ -443,8 +443,8 @@ const GuardsPage = ({ searchSelectedItem, clearSearchSelection }) => {
               <tbody>
                 {paginatedGuards.map(g => (
                   <tr key={g.id}>
-                    <td><div style={{ display: 'flex', alignItems: 'center', gap: 6 }}><div className="avatar-sm" style={{ width: 24, height: 24, flexShrink: 0 }}><Icon name="user" size={10} /></div><div><div style={{fontWeight:500,fontSize:12}}>{g.name}</div><div style={{fontSize:10,color:'#a89a92'}}>{g.id}</div></div></div></td>
-                    <td><div style={{fontSize:12}}>{g.shift}</div><div style={{fontSize:10,color:'#a89a92'}}>{g.shiftTime}</div></td>
+                    <td><div style={{ display: 'flex', alignItems: 'center', gap: 6 }}><div className="avatar-sm" style={{ width: 24, height: 24, flexShrink: 0 }}><Icon name="user" size={10} /></div><div><div style={{fontWeight:500,fontSize:12}}>{g.name}</div><div style={{fontSize:10,color:'#61707D'}}>{g.id}</div></div></div></td>
+                    <td><div style={{fontSize:12}}>{g.shift}</div><div style={{fontSize:10,color:'#61707D'}}>{g.shiftTime}</div></td>
                     <td style={{fontSize:12}}>{g.gate}</td>
                     <td style={{fontSize:12}}>{g.company}</td>
                     <td style={{fontSize:11}}>{g.contact}</td>
@@ -583,7 +583,7 @@ const GuardsPage = ({ searchSelectedItem, clearSearchSelection }) => {
                         ))}
                       </div>
                     ) : (
-                      <div onClick={() => profileUploadRef.current && profileUploadRef.current.click()} style={{ background: '#f9f9f9', borderRadius: 8, padding: 24, textAlign: 'center', color: '#999', fontSize: 12, cursor: 'pointer', border: '2px dashed #e0e0e0' }}>No documents uploaded<br /><span style={{ color: '#1a1a1a', fontWeight: 600 }}>Click to upload files</span></div>
+                      <div onClick={() => profileUploadRef.current && profileUploadRef.current.click()} style={{ background: '#f9f9f9', borderRadius: 8, padding: 24, textAlign: 'center', color: '#999', fontSize: 12, cursor: 'pointer', border: '2px dashed #e0e0e0' }}>No documents uploaded<br /><span style={{ color: '#131F23', fontWeight: 600 }}>Click to upload files</span></div>
                     )}
                   </div>
                 )}
@@ -605,7 +605,7 @@ const GuardsPage = ({ searchSelectedItem, clearSearchSelection }) => {
                   {guardMessages.length > 0 ? (
                     guardMessages.map(msg => (
                       <div key={msg.id} style={{ marginBottom: 12, display: 'flex', justifyContent: msg.from === 'PMC' ? 'flex-end' : 'flex-start' }}>
-                        <div style={{ maxWidth: '75%', background: msg.from === 'PMC' ? '#1a1a1a' : '#e8e8e8', color: msg.from === 'PMC' ? '#fff' : '#1a1a1a', padding: '8px 12px', borderRadius: 6, fontSize: 12 }}>
+                        <div style={{ maxWidth: '75%', background: msg.from === 'PMC' ? '#131F23' : '#e8e8e8', color: msg.from === 'PMC' ? '#fff' : '#131F23', padding: '8px 12px', borderRadius: 6, fontSize: 12 }}>
                           {msg.text}
                           <div style={{ fontSize: 10, marginTop: 4, opacity: 0.7 }}>{formatTime24(new Date(msg.timestamp))}</div>
                         </div>
@@ -678,7 +678,7 @@ const GuardsPage = ({ searchSelectedItem, clearSearchSelection }) => {
                 <input type="file" ref={fileInputRef} multiple accept=".pdf,.doc,.docx,.jpg,.jpeg,.png" style={{ display: 'none' }}
                   onChange={(e) => { if (e.target.files.length > 0) handleFileSelect(e.target.files); e.target.value = ''; }} />
                 <div ref={dropZoneRef}
-                  onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); e.currentTarget.style.borderColor = '#1a1a1a'; e.currentTarget.style.background = '#f0f0f0'; }}
+                  onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); e.currentTarget.style.borderColor = '#131F23'; e.currentTarget.style.background = '#f0f0f0'; }}
                   onDragLeave={(e) => { e.preventDefault(); e.stopPropagation(); e.currentTarget.style.borderColor = '#d0d0d0'; e.currentTarget.style.background = '#f9f9f9'; }}
                   onDrop={(e) => { e.preventDefault(); e.stopPropagation(); e.currentTarget.style.borderColor = '#d0d0d0'; e.currentTarget.style.background = '#f9f9f9'; if (e.dataTransfer.files.length > 0) handleFileSelect(e.dataTransfer.files); }}
                   onClick={() => fileInputRef.current && fileInputRef.current.click()}
@@ -686,7 +686,7 @@ const GuardsPage = ({ searchSelectedItem, clearSearchSelection }) => {
                   <div style={{ marginBottom: 8 }}><Icon name="upload" size={24} /></div>
                   <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 4 }}>Drag & drop files here</div>
                   <div style={{ fontSize: 11, color: '#888', marginBottom: 10 }}>National ID, Guard licence, Work permit</div>
-                  <div style={{ fontSize: 11, color: '#888' }}>or <span style={{ color: '#1a1a1a', fontWeight: 600, textDecoration: 'underline' }}>Browse Files</span></div>
+                  <div style={{ fontSize: 11, color: '#888' }}>or <span style={{ color: '#131F23', fontWeight: 600, textDecoration: 'underline' }}>Browse Files</span></div>
                   <div style={{ fontSize: 10, color: '#aaa', marginTop: 6 }}>PDF, DOC, JPG, PNG — up to 10 MB each</div>
                 </div>
                 {addGuardForm.documents.length > 0 && (

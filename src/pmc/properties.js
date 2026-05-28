@@ -174,15 +174,15 @@ const PropertiesPage = ({ searchSelectedItem, clearSearchSelection }) => {
           {data.towers.map(t => (
             <div key={t.name} style={{border:'1px solid #e5e5e5',borderRadius:10,padding:16}}>
               <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:8}}>
-                <div style={{width:32,height:32,background:'#e8e3de',borderRadius:6,display:'flex',alignItems:'center',justifyContent:'center'}}><svg width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='#a89a92' stroke-width='1.5'><rect x='4' y='2' width='16' height='20' rx='2'/><path d='M9 22V18h6v4M9 6h.01M15 6h.01M9 10h.01M15 10h.01M9 14h.01M15 14h.01'/></svg></div>
+                <div style={{width:32,height:32,background:'#E6EAE9',borderRadius:6,display:'flex',alignItems:'center',justifyContent:'center'}}><svg width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='#61707D' stroke-width='1.5'><rect x='4' y='2' width='16' height='20' rx='2'/><path d='M9 22V18h6v4M9 6h.01M15 6h.01M9 10h.01M15 10h.01M9 14h.01M15 14h.01'/></svg></div>
                 <span style={{cursor:'pointer'}}>⋯</span>
               </div>
               <h3 style={{fontSize:14,marginBottom:2}}>{t.name}</h3>
-              {t.location && <div style={{fontSize:11,color:'#a89a92',marginBottom:8}}>{t.location}</div>}
+              {t.location && <div style={{fontSize:11,color:'#61707D',marginBottom:8}}>{t.location}</div>}
               <div style={{display:'flex',justifyContent:'space-between',fontSize:13}}><span>{t('pm.totalUnits')}</span><strong>{t.totalFlats.toLocaleString()}</strong></div>
               <div style={{display:'flex',justifyContent:'space-between',fontSize:13}}><span>{t('pm.occupied')}</span><strong>{t.occupied.toLocaleString()}</strong></div>
               <div className="progress-bar" style={{marginTop:8}}><div className="fill" style={{width:`${Math.round(t.occupied/t.totalFlats*100)}%`}}/></div>
-              <div style={{fontSize:11,color:'#a89a92',marginTop:4}}>{Math.round(t.occupied/t.totalFlats*100)}% {t('pm.occupancy')}</div>
+              <div style={{fontSize:11,color:'#61707D',marginTop:4}}>{Math.round(t.occupied/t.totalFlats*100)}% {t('pm.occupancy')}</div>
             </div>
           ))}
         </div>
@@ -220,19 +220,19 @@ const PropertiesPage = ({ searchSelectedItem, clearSearchSelection }) => {
               <button className="modal-close" onClick={()=>setSelectedResident(null)}>×</button>
             </div>
             <div style={{display:'flex',alignItems:'center',gap:16,marginBottom:20}}>
-              <div style={{width:48,height:48,background:'#e8e3de',borderRadius:'50%',display:'flex',alignItems:'center',justifyContent:'center'}}><Icon name="user" size={20}/></div>
-              <div><div style={{fontWeight:600,fontSize:16}}>{selectedResident.name}</div><div style={{fontSize:12,color:'#a89a92'}}>{selectedResident.flat} · {selectedResident.id}</div></div>
+              <div style={{width:48,height:48,background:'#E6EAE9',borderRadius:'50%',display:'flex',alignItems:'center',justifyContent:'center'}}><Icon name="user" size={20}/></div>
+              <div><div style={{fontWeight:600,fontSize:16}}>{selectedResident.name}</div><div style={{fontSize:12,color:'#61707D'}}>{selectedResident.flat} · {selectedResident.id}</div></div>
             </div>
             <div className="grid-2" style={{marginBottom:16}}>
-              <div><div style={{fontSize:11,color:'#a89a92'}}>{t('pm.contactLabel')}</div><div style={{fontWeight:600}}>{selectedResident.contact}</div></div>
-              <div><div style={{fontSize:11,color:'#a89a92'}}>{t('pm.verificationLabel')}</div><div style={{fontWeight:600}}>{selectedResident.status}</div></div>
-              <div><div style={{fontSize:11,color:'#a89a92'}}>{t('pm.accessPolicyLabel')}</div><div style={{fontWeight:600}}>{selectedResident.policy}</div></div>
-              <div><div style={{fontSize:11,color:'#a89a92'}}>{t('pm.scheduledAbsenceLabel')}</div><div style={{fontWeight:600}}>{selectedResident.absence}</div></div>
+              <div><div style={{fontSize:11,color:'#61707D'}}>{t('pm.contactLabel')}</div><div style={{fontWeight:600}}>{selectedResident.contact}</div></div>
+              <div><div style={{fontSize:11,color:'#61707D'}}>{t('pm.verificationLabel')}</div><div style={{fontWeight:600}}>{selectedResident.status}</div></div>
+              <div><div style={{fontSize:11,color:'#61707D'}}>{t('pm.accessPolicyLabel')}</div><div style={{fontWeight:600}}>{selectedResident.policy}</div></div>
+              <div><div style={{fontSize:11,color:'#61707D'}}>{t('pm.scheduledAbsenceLabel')}</div><div style={{fontWeight:600}}>{selectedResident.absence}</div></div>
             </div>
             <div style={{fontWeight:600,marginBottom:8}}>{t('pm.preferencesLabel')}</div>
-            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'8px 0',borderBottom:'1px solid #ebe7e3'}}><span>{t('pm.packageAutoAccept')}</span><Toggle value={selectedResident.packageAutoAccept !== false} onChange={(v)=>{const updated={...selectedResident,packageAutoAccept:v};setSelectedResident(updated);setData(prev=>({...prev,residents:prev.residents.map(r=>r.id===selectedResident.id?{...r,packageAutoAccept:v}:r)}));showToast(t('pm.preferencesLabel') + ' ' + t('pm.settingsSaved'), t('pm.packageAutoAccept') + ' ' + (v ? t('pm.prefEnabled') : t('pm.prefDisabled')))}}/></div>
-            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'8px 0',borderBottom:'1px solid #ebe7e3'}}><span>Visitor pre-approval required</span><Toggle value={selectedResident.visitorPreApproval !== false} onChange={(v)=>{const updated={...selectedResident,visitorPreApproval:v};setSelectedResident(updated);setData(prev=>({...prev,residents:prev.residents.map(r=>r.id===selectedResident.id?{...r,visitorPreApproval:v}:r)}));showToast('Preference updated','Visitor pre-approval '+(v?'enabled':'disabled'))}}/></div>
-            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'8px 0',borderBottom:'1px solid #ebe7e3'}}><span>Email notifications</span><Toggle value={selectedResident.emailNotifications === true} onChange={(v)=>{const updated={...selectedResident,emailNotifications:v};setSelectedResident(updated);setData(prev=>({...prev,residents:prev.residents.map(r=>r.id===selectedResident.id?{...r,emailNotifications:v}:r)}));showToast('Preference updated','Email notifications '+(v?'enabled':'disabled'))}}/></div>
+            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'8px 0',borderBottom:'1px solid #E6EAE9'}}><span>{t('pm.packageAutoAccept')}</span><Toggle value={selectedResident.packageAutoAccept !== false} onChange={(v)=>{const updated={...selectedResident,packageAutoAccept:v};setSelectedResident(updated);setData(prev=>({...prev,residents:prev.residents.map(r=>r.id===selectedResident.id?{...r,packageAutoAccept:v}:r)}));showToast(t('pm.preferencesLabel') + ' ' + t('pm.settingsSaved'), t('pm.packageAutoAccept') + ' ' + (v ? t('pm.prefEnabled') : t('pm.prefDisabled')))}}/></div>
+            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'8px 0',borderBottom:'1px solid #E6EAE9'}}><span>Visitor pre-approval required</span><Toggle value={selectedResident.visitorPreApproval !== false} onChange={(v)=>{const updated={...selectedResident,visitorPreApproval:v};setSelectedResident(updated);setData(prev=>({...prev,residents:prev.residents.map(r=>r.id===selectedResident.id?{...r,visitorPreApproval:v}:r)}));showToast('Preference updated','Visitor pre-approval '+(v?'enabled':'disabled'))}}/></div>
+            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'8px 0',borderBottom:'1px solid #E6EAE9'}}><span>Email notifications</span><Toggle value={selectedResident.emailNotifications === true} onChange={(v)=>{const updated={...selectedResident,emailNotifications:v};setSelectedResident(updated);setData(prev=>({...prev,residents:prev.residents.map(r=>r.id===selectedResident.id?{...r,emailNotifications:v}:r)}));showToast('Preference updated','Email notifications '+(v?'enabled':'disabled'))}}/></div>
             <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'8px 0',marginBottom:16}}><span>Push notifications</span><Toggle value={selectedResident.pushNotifications !== false} onChange={(v)=>{const updated={...selectedResident,pushNotifications:v};setSelectedResident(updated);setData(prev=>({...prev,residents:prev.residents.map(r=>r.id===selectedResident.id?{...r,pushNotifications:v}:r)}));showToast('Preference updated','Push notifications '+(v?'enabled':'disabled'))}}/></div>
             <div className="grid-2" style={{marginTop:16}}>
               <button className="btn btn-primary" onClick={()=>setEditingResident({...selectedResident})}>Edit Profile</button>
@@ -310,22 +310,22 @@ const PropertiesPage = ({ searchSelectedItem, clearSearchSelection }) => {
 
             {showImport === 'pick' && (
               <div>
-                <p style={{fontSize:13,color:'#8a7f76',marginBottom:16}}>Choose the format of your data source.</p>
+                <p style={{fontSize:13,color:'#61707D',marginBottom:16}}>Choose the format of your data source.</p>
                 {[
                   {key:'csv', label:'CSV File', sub:'Comma-separated values (.csv)', icon:'\u2013'},
                   {key:'excel', label:'Excel Spreadsheet', sub:'Microsoft Excel (.xlsx, .xls)', icon:'\u2013'},
                   {key:'sql', label:'SQL Database', sub:'SQL insert statements (.sql)', icon:'\u2013'}
                 ].map(opt => (
                   <div key={opt.key} onClick={()=>setShowImport(opt.key)}
-                    style={{display:'flex',alignItems:'center',gap:14,padding:'14px 16px',border:'1px solid #ebe7e3',borderRadius:8,marginBottom:8,cursor:'pointer',transition:'all 0.15s'}}
-                    onMouseEnter={e=>e.currentTarget.style.borderColor='#1a1a1a'}
+                    style={{display:'flex',alignItems:'center',gap:14,padding:'14px 16px',border:'1px solid #E6EAE9',borderRadius:8,marginBottom:8,cursor:'pointer',transition:'all 0.15s'}}
+                    onMouseEnter={e=>e.currentTarget.style.borderColor='#131F23'}
                     onMouseLeave={e=>e.currentTarget.style.borderColor='#e0e0e0'}>
                     <span style={{fontSize:24}}>{opt.icon}</span>
                     <div style={{flex:1}}>
                       <div style={{fontSize:13,fontWeight:600}}>{opt.label}</div>
-                      <div style={{fontSize:11,color:'#a89a92'}}>{opt.sub}</div>
+                      <div style={{fontSize:11,color:'#61707D'}}>{opt.sub}</div>
                     </div>
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#a89a92" strokeWidth="2"><polyline points="9 18 15 12 9 6"/></svg>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#61707D" strokeWidth="2"><polyline points="9 18 15 12 9 6"/></svg>
                   </div>
                 ))}
               </div>
@@ -334,9 +334,9 @@ const PropertiesPage = ({ searchSelectedItem, clearSearchSelection }) => {
             {(showImport === 'csv' || showImport === 'excel' || showImport === 'sql') && (
               <div>
                 {/* Step 1: Template */}
-                <div style={{background:'#f2efec',borderRadius:8,padding:16,marginBottom:16}}>
+                <div style={{background:'#E6EAE9',borderRadius:8,padding:16,marginBottom:16}}>
                   <div style={{fontSize:12,fontWeight:600,marginBottom:8}}>1. Download Template</div>
-                  <p style={{fontSize:11,color:'#8a7f76',marginBottom:10}}>Use this template to prepare your data. It contains the required columns and a sample row.</p>
+                  <p style={{fontSize:11,color:'#61707D',marginBottom:10}}>Use this template to prepare your data. It contains the required columns and a sample row.</p>
                   <div style={{display:'flex',gap:6,flexWrap:'wrap',marginBottom:10}}>
                     {RESIDENT_COLUMNS.map(c => <span key={c.key} style={{background:'#e8e8e8',padding:'2px 8px',borderRadius:4,fontSize:10,fontWeight:600}}>{c.header}</span>)}
                   </div>
@@ -350,20 +350,20 @@ const PropertiesPage = ({ searchSelectedItem, clearSearchSelection }) => {
                     accept={showImport === 'csv' ? '.csv' : showImport === 'excel' ? '.xlsx,.xls' : '.sql'}
                     onChange={e => { if(e.target.files[0]) setImportFile(e.target.files[0]); }} />
                   <div onClick={()=>importFileRef.current && importFileRef.current.click()}
-                    onDragOver={e=>{e.preventDefault();e.currentTarget.style.borderColor='#1a1a1a'}}
+                    onDragOver={e=>{e.preventDefault();e.currentTarget.style.borderColor='#131F23'}}
                     onDragLeave={e=>{e.preventDefault();e.currentTarget.style.borderColor='#d0d0d0'}}
                     onDrop={e=>{e.preventDefault();e.currentTarget.style.borderColor='#d0d0d0';if(e.dataTransfer.files[0]) setImportFile(e.dataTransfer.files[0])}}
                     style={{padding:24,border:'2px dashed #d0d0d0',borderRadius:8,textAlign:'center',cursor:'pointer',background:'#f5f2ef',transition:'all 0.2s'}}>
                     {importFile ? (
                       <div>
                         <div style={{fontWeight:600,fontSize:13}}>{importFile.name}</div>
-                        <div style={{fontSize:11,color:'#a89a92',marginTop:4}}>{(importFile.size/1024).toFixed(1)} KB · Click to change</div>
+                        <div style={{fontSize:11,color:'#61707D',marginTop:4}}>{(importFile.size/1024).toFixed(1)} KB · Click to change</div>
                       </div>
                     ) : (
                       <div>
                         <Icon name="upload" size={20}/>
                         <div style={{fontSize:12,marginTop:6}}>Drag & drop or <span style={{fontWeight:600,textDecoration:'underline'}}>Browse Files</span></div>
-                        <div style={{fontSize:10,color:'#a89a92',marginTop:4}}>{showImport === 'csv' ? '.csv files' : showImport === 'excel' ? '.xlsx, .xls files' : '.sql files'}</div>
+                        <div style={{fontSize:10,color:'#61707D',marginTop:4}}>{showImport === 'csv' ? '.csv files' : showImport === 'excel' ? '.xlsx, .xls files' : '.sql files'}</div>
                       </div>
                     )}
                   </div>
@@ -387,20 +387,20 @@ const PropertiesPage = ({ searchSelectedItem, clearSearchSelection }) => {
               <div><div className="modal-sub">modal/export · Resident Data Export</div><h2 style={{fontSize:16}}>Export Residents</h2></div>
               <button className="modal-close" onClick={()=>setShowExport(false)}>×</button>
             </div>
-            <p style={{fontSize:13,color:'#8a7f76',marginBottom:16}}>Export {filteredResidents.length} resident{filteredResidents.length !== 1 ? 's' : ''} in your preferred format.</p>
+            <p style={{fontSize:13,color:'#61707D',marginBottom:16}}>Export {filteredResidents.length} resident{filteredResidents.length !== 1 ? 's' : ''} in your preferred format.</p>
             {[
               {key:'csv', label:'CSV File', sub:'Universal format, works everywhere', icon:'\u2013'},
               {key:'excel', label:'Excel Spreadsheet', sub:'Formatted .xlsx with auto-width columns', icon:'\u2013'},
               {key:'sql', label:'SQL Statements', sub:'INSERT statements for database import', icon:'\u2013'}
             ].map(opt => (
               <div key={opt.key} onClick={()=>handleExportResidents(opt.key)}
-                style={{display:'flex',alignItems:'center',gap:14,padding:'14px 16px',border:'1px solid #ebe7e3',borderRadius:8,marginBottom:8,cursor:'pointer',transition:'all 0.15s'}}
-                onMouseEnter={e=>e.currentTarget.style.borderColor='#1a1a1a'}
+                style={{display:'flex',alignItems:'center',gap:14,padding:'14px 16px',border:'1px solid #E6EAE9',borderRadius:8,marginBottom:8,cursor:'pointer',transition:'all 0.15s'}}
+                onMouseEnter={e=>e.currentTarget.style.borderColor='#131F23'}
                 onMouseLeave={e=>e.currentTarget.style.borderColor='#e0e0e0'}>
                 <span style={{fontSize:24}}>{opt.icon}</span>
                 <div style={{flex:1}}>
                   <div style={{fontSize:13,fontWeight:600}}>{opt.label}</div>
-                  <div style={{fontSize:11,color:'#a89a92'}}>{opt.sub}</div>
+                  <div style={{fontSize:11,color:'#61707D'}}>{opt.sub}</div>
                 </div>
                 <Icon name="download" size={14}/>
               </div>

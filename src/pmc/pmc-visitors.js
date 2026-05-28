@@ -73,13 +73,13 @@ const PMCVisitorsPage = () => {
 
   const statusBadge = (s) => {
     const c = ({
-      'Pre-Approved': { bg: '#e8e3de', fg: '#4a4540' },
-      'On-Premise':   { bg: '#928989', fg: '#fff' },
+      'Pre-Approved': { bg: '#E6EAE9', fg: '#4a4540' },
+      'On-Premise':   { bg: '#3E4C59', fg: '#fff' },
       'Checked-Out':  { bg: '#ccc8c1', fg: '#4a4540' },
-      'No-Show':      { bg: '#f5f3f0', fg: '#a89a92' },
+      'No-Show':      { bg: '#E6EAE9', fg: '#61707D' },
       'Rejected':     { bg: '#8b4a42', fg: '#fff' },
-      'Cancelled':    { bg: '#f5f3f0', fg: '#a89a92' },
-    })[s] || { bg: '#f5f3f0', fg: '#888' };
+      'Cancelled':    { bg: '#E6EAE9', fg: '#61707D' },
+    })[s] || { bg: '#E6EAE9', fg: '#888' };
     return <span style={{padding:'3px 10px',borderRadius:4,fontSize:11,fontWeight:500,background:c.bg,color:c.fg}}>{s}</span>;
   };
 
@@ -129,9 +129,9 @@ const PMCVisitorsPage = () => {
       <div className="kpi-row">
         <div className="kpi-card"><div className="label">Total</div><div className="value">{counts.total}</div></div>
         <div className="kpi-card"><div className="label">Today</div><div className="value">{counts.today}</div></div>
-        <div className="kpi-card"><div className="label">On-Premise</div><div className="value" style={{color:'#928989'}}>{counts.onPremise}</div></div>
+        <div className="kpi-card"><div className="label">On-Premise</div><div className="value" style={{color:'#3E4C59'}}>{counts.onPremise}</div></div>
         <div className="kpi-card"><div className="label">Upcoming</div><div className="value">{counts.upcoming}</div></div>
-        <div className="kpi-card"><div className="label">Checked-Out</div><div className="value" style={{color:'#a89a92'}}>{counts.checkedOut}</div></div>
+        <div className="kpi-card"><div className="label">Checked-Out</div><div className="value" style={{color:'#61707D'}}>{counts.checkedOut}</div></div>
       </div>
 
       <div className="card">

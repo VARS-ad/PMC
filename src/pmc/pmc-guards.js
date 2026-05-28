@@ -104,7 +104,7 @@ const PMCGuardsPage = () => {
       <div className="kpi-row">
         <div className="kpi-card"><div className="label">Total Guards</div><div className="value">{filtered.length}</div></div>
         <div className="kpi-card"><div className="label">On Duty Now</div><div className="value" style={{color:'#5a6b4f'}}>{onDutyCount}</div></div>
-        <div className="kpi-card"><div className="label">Off Duty</div><div className="value" style={{color:'#a89a92'}}>{offDutyCount}</div></div>
+        <div className="kpi-card"><div className="label">Off Duty</div><div className="value" style={{color:'#61707D'}}>{offDutyCount}</div></div>
         <div className="kpi-card"><div className="label">Buildings Covered</div><div className="value">{new Set(filtered.map(g => g.building_id).filter(Boolean)).size}</div></div>
       </div>
 
@@ -153,7 +153,7 @@ const PMCGuardsPage = () => {
                   <tr key={g.id} style={{transition:'background 0.12s'}} onMouseEnter={e=>e.currentTarget.style.background='var(--bg-surface)'} onMouseLeave={e=>e.currentTarget.style.background='transparent'}>
                     <td style={{padding:'14px 12px'}}>
                       <div style={{display:'flex',alignItems:'center',gap:12}}>
-                        <div style={{width:38,height:38,borderRadius:'50%',background: onDuty ? 'linear-gradient(135deg, #d4c8c0 0%, #a89a92 100%)' : 'var(--bg-surface)',border: onDuty ? 'none' : '1px solid var(--border-light)',display:'flex',alignItems:'center',justifyContent:'center',color: onDuty ? '#fff' : 'var(--text-secondary)',fontSize:12,fontWeight:600,flexShrink:0,letterSpacing:'0.04em'}}>{initials}</div>
+                        <div style={{width:38,height:38,borderRadius:'50%',background: onDuty ? 'linear-gradient(135deg, #d4c8c0 0%, #61707D 100%)' : 'var(--bg-surface)',border: onDuty ? 'none' : '1px solid var(--border-light)',display:'flex',alignItems:'center',justifyContent:'center',color: onDuty ? '#fff' : 'var(--text-secondary)',fontSize:12,fontWeight:600,flexShrink:0,letterSpacing:'0.04em'}}>{initials}</div>
                         <div style={{minWidth:0}}>
                           <div style={{fontSize:13,fontWeight:500,color:'var(--text-dark)'}}>{g.full_name}</div>
                           <div style={{fontSize:11,color:'var(--text-muted)',marginTop:1}}>{g.id.slice(0,8).toUpperCase()}</div>
@@ -164,11 +164,11 @@ const PMCGuardsPage = () => {
                     <td>
                       <span style={{fontSize:12,padding:'4px 10px',background:'var(--bg-surface)',borderRadius:4,border:'1px solid var(--border-light)'}}>{g.building_name}</span>
                     </td>
-                    <td><span style={{fontSize:12,fontWeight:500,padding:'3px 10px',background: g.shift === '24h' ? '#1a1a1a' : g.shift === 'Night' ? '#5a4a40' : '#e8e3de',color: g.shift === 'Day' ? '#5a4a40' : '#fff',borderRadius:3}}>{g.shift || '—'}</span></td>
+                    <td><span style={{fontSize:12,fontWeight:500,padding:'3px 10px',background: g.shift === '24h' ? '#131F23' : g.shift === 'Night' ? '#5a4a40' : '#E6EAE9',color: g.shift === 'Day' ? '#5a4a40' : '#fff',borderRadius:3}}>{g.shift || '—'}</span></td>
                     <td>
-                      <span style={{display:'inline-flex',alignItems:'center',gap:8,fontSize:12,padding:'4px 10px',background: onDuty ? '#eef2e8' : 'var(--bg-surface)',color: onDuty ? '#4a5a3f' : '#a89a92',borderRadius:4,fontWeight:500}}>
+                      <span style={{display:'inline-flex',alignItems:'center',gap:8,fontSize:12,padding:'4px 10px',background: onDuty ? '#eef2e8' : 'var(--bg-surface)',color: onDuty ? '#4a5a3f' : '#61707D',borderRadius:4,fontWeight:500}}>
                         <span style={{position:'relative',width:8,height:8}}>
-                          <span style={{position:'absolute',inset:0,borderRadius:4,background: onDuty ? '#5a6b4f' : '#c4b8b0'}}/>
+                          <span style={{position:'absolute',inset:0,borderRadius:4,background: onDuty ? '#5a6b4f' : '#D0D6D5'}}/>
                           {onDuty && <span style={{position:'absolute',inset:-3,borderRadius:7,background:'#5a6b4f',opacity:0.25,animation:'pulse 2s ease-in-out infinite'}}/>}
                         </span>
                         {onDuty ? 'On duty' : 'Off duty'}
@@ -177,7 +177,7 @@ const PMCGuardsPage = () => {
                     <td style={{fontSize:12,color:'var(--text-secondary)',fontVariantNumeric:'tabular-nums'}}>{g.created_at ? new Date(g.created_at).toLocaleDateString() : '—'}</td>
                     <td style={{textAlign:'right',whiteSpace:'nowrap'}}>
                       <button onClick={() => alert('Direct chat with ' + g.full_name + ' coming soon')} style={{padding:'6px 14px',fontSize:11,background:'#fff',border:'1px solid var(--border-medium)',borderRadius:4,color:'var(--text-dark)',cursor:'pointer',marginRight:6,fontWeight:500}}>Chat</button>
-                      <button onClick={() => alert('Report concern to FM company about ' + g.full_name + ' — coming soon')} style={{padding:'6px 14px',fontSize:11,background:'#fff',border:'1px solid #d5cfc8',borderRadius:4,color:'#8b4a42',cursor:'pointer',fontWeight:500}}>Report</button>
+                      <button onClick={() => alert('Report concern to FM company about ' + g.full_name + ' — coming soon')} style={{padding:'6px 14px',fontSize:11,background:'#fff',border:'1px solid #D0D6D5',borderRadius:4,color:'#8b4a42',cursor:'pointer',fontWeight:500}}>Report</button>
                     </td>
                   </tr>
                 );

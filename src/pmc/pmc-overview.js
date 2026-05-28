@@ -124,13 +124,13 @@ const PMCOverviewPage = ({ setPage }) => {
 
   const statusBadge = (s) => {
     const c = ({
-      'New':         { bg: '#f5f3f0', fg: '#7a6e60' },
-      'Acknowledged':{ bg: '#e8e3de', fg: '#4a4540' },
+      'New':         { bg: '#E6EAE9', fg: '#61707D' },
+      'Acknowledged':{ bg: '#E6EAE9', fg: '#4a4540' },
       'In Progress': { bg: '#a07d3c', fg: '#fff' },
       'Done':        { bg: '#e6efe1', fg: '#5a6b4f' },
       'Closed':      { bg: '#ccc8c1', fg: '#4a4540' },
       'Rejected':    { bg: '#fdf2f1', fg: '#8b4a42' },
-    })[s] || { bg: '#f5f3f0', fg: '#888' };
+    })[s] || { bg: '#E6EAE9', fg: '#888' };
     return <span style={{padding:'3px 10px',borderRadius:4,fontSize:11,fontWeight:500,background:c.bg,color:c.fg}}>{s}</span>;
   };
 
@@ -187,15 +187,15 @@ const PMCOverviewPage = ({ setPage }) => {
                 const total = Math.max(c.open + c.inProgress + c.scheduled + c.completed, 1);
                 return (<>
                   <div style={{display:'flex',height:14,borderRadius:7,overflow:'hidden',marginTop:14,marginBottom:10,background:'var(--bg-surface)'}}>
-                    <div style={{flex: c.open, background:'#e8e3de'}} title={'Open: ' + c.open}/>
-                    <div style={{flex: c.inProgress, background:'#928989'}} title={'In Progress: ' + c.inProgress}/>
-                    <div style={{flex: c.scheduled, background:'#c4b8b0'}} title={'Scheduled: ' + c.scheduled}/>
+                    <div style={{flex: c.open, background:'#E6EAE9'}} title={'Open: ' + c.open}/>
+                    <div style={{flex: c.inProgress, background:'#3E4C59'}} title={'In Progress: ' + c.inProgress}/>
+                    <div style={{flex: c.scheduled, background:'#D0D6D5'}} title={'Scheduled: ' + c.scheduled}/>
                     <div style={{flex: c.completed, background:'#ccc8c1'}} title={'Completed: ' + c.completed}/>
                   </div>
                   <div style={{display:'flex',gap:16,fontSize:11,color:'var(--text-secondary)',flexWrap:'wrap'}}>
-                    <div><span style={{display:'inline-block',width:8,height:8,borderRadius:4,background:'#e8e3de',marginRight:6,verticalAlign:'middle'}}/>Open ({c.open})</div>
-                    <div><span style={{display:'inline-block',width:8,height:8,borderRadius:4,background:'#928989',marginRight:6,verticalAlign:'middle'}}/>In Progress ({c.inProgress})</div>
-                    <div><span style={{display:'inline-block',width:8,height:8,borderRadius:4,background:'#c4b8b0',marginRight:6,verticalAlign:'middle'}}/>Scheduled ({c.scheduled})</div>
+                    <div><span style={{display:'inline-block',width:8,height:8,borderRadius:4,background:'#E6EAE9',marginRight:6,verticalAlign:'middle'}}/>Open ({c.open})</div>
+                    <div><span style={{display:'inline-block',width:8,height:8,borderRadius:4,background:'#3E4C59',marginRight:6,verticalAlign:'middle'}}/>In Progress ({c.inProgress})</div>
+                    <div><span style={{display:'inline-block',width:8,height:8,borderRadius:4,background:'#D0D6D5',marginRight:6,verticalAlign:'middle'}}/>Scheduled ({c.scheduled})</div>
                     <div><span style={{display:'inline-block',width:8,height:8,borderRadius:4,background:'#ccc8c1',marginRight:6,verticalAlign:'middle'}}/>Completed ({c.completed})</div>
                   </div>
                 </>);

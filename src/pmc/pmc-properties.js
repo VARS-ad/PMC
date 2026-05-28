@@ -191,7 +191,7 @@ const PMCPropertiesPage = ({ setPage }) => {
             <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit, minmax(320px, 1fr))',gap:14}}>
               {COMING_SOON_PROPERTIES.map(cs => (
                 <div key={cs.id} className="card" style={{opacity:0.85,position:'relative',background:'var(--bg-surface)'}}>
-                  <div style={{position:'absolute',top:14,right:14,fontSize:10,fontWeight:600,color:'#fff',background:'#928989',padding:'4px 12px',borderRadius:4,letterSpacing:'0.04em'}}>COMING SOON</div>
+                  <div style={{position:'absolute',top:14,right:14,fontSize:10,fontWeight:600,color:'#fff',background:'#3E4C59',padding:'4px 12px',borderRadius:4,letterSpacing:'0.04em'}}>COMING SOON</div>
                   <div style={{fontSize:16,fontWeight:600,color:'var(--text-secondary)',marginBottom:4}}>{cs.name}</div>
                   <div style={{fontSize:12,color:'var(--text-muted)',marginBottom:14}}>{cs.location}</div>
                   <div style={{fontSize:11,color:'var(--text-muted)',lineHeight:1.5,padding:'10px 12px',background:'#fff',borderRadius:6,border:'1px dashed var(--border-light)'}}>

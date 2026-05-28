@@ -13,8 +13,8 @@ const EscalationsPage = () => {
         <button className="btn btn-primary">{t('pm.newEscalationBtn')}</button>
       </div>
       <div className="kpi-row" style={{gridTemplateColumns:'repeat(4,1fr)'}}>
-        <div className="kpi-card"><div className="label">{t('pm.totalUnresolvedCard')}</div><div><span className="value">{unresolved.length}</span><span style={{fontSize:12,color:'#a89a92',marginLeft:4}}>{criticalCount} {t('pm.criticalLabel')}</span></div></div>
-        <div className="kpi-card"><div className="label">{t('pm.slaBreachesCard')}</div><div><span className="value">1</span><span style={{fontSize:12,color:'#a89a92',marginLeft:4}}>+18{t('pm.hoursOverdueSuffix')}</span></div></div>
+        <div className="kpi-card"><div className="label">{t('pm.totalUnresolvedCard')}</div><div><span className="value">{unresolved.length}</span><span style={{fontSize:12,color:'#61707D',marginLeft:4}}>{criticalCount} {t('pm.criticalLabel')}</span></div></div>
+        <div className="kpi-card"><div className="label">{t('pm.slaBreachesCard')}</div><div><span className="value">1</span><span style={{fontSize:12,color:'#61707D',marginLeft:4}}>+18{t('pm.hoursOverdueSuffix')}</span></div></div>
         <div className="kpi-card"><div className="label">{t('pm.securityAlertsCard')}</div><span className="value">1</span></div>
         <div className="kpi-card"><div className="label">{t('pm.complianceFlagsCard')}</div><span className="value">1</span></div>
       </div>
@@ -27,12 +27,12 @@ const EscalationsPage = () => {
               <div key={e.id} className="escalation-item" onClick={()=>setSelected(e)}>
                 <div style={{display:'flex',gap:6,marginBottom:6}}>
                   {e.severity && <StatusBadge status={e.severity}/>}
-                  <span style={{fontSize:12,background:'#e8e3de',padding:'2px 8px',borderRadius:4}}>{e.type}</span>
-                  <span style={{fontSize:11,color:'#a89a92'}}>{e.id}</span>
+                  <span style={{fontSize:12,background:'#E6EAE9',padding:'2px 8px',borderRadius:4}}>{e.type}</span>
+                  <span style={{fontSize:11,color:'#61707D'}}>{e.id}</span>
                 </div>
                 <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
-                  <div><div style={{fontWeight:600}}>{e.title}</div><div style={{fontSize:12,color:'#a89a92'}}>{e.flat && `${t('pm.flatLabel')} ${e.flat} · `}{t('pm.createdLabel')} {e.created} &nbsp; {t('pm.assignedLabel')} {e.assigned}</div></div>
-                  <div style={{textAlign:'right'}}><div style={{fontSize:12,color:'#a89a92'}}>⏱ {e.sla}</div><StatusBadge status={e.status}/></div>
+                  <div><div style={{fontWeight:600}}>{e.title}</div><div style={{fontSize:12,color:'#61707D'}}>{e.flat && `${t('pm.flatLabel')} ${e.flat} · `}{t('pm.createdLabel')} {e.created} &nbsp; {t('pm.assignedLabel')} {e.assigned}</div></div>
+                  <div style={{textAlign:'right'}}><div style={{fontSize:12,color:'#61707D'}}>⏱ {e.sla}</div><StatusBadge status={e.status}/></div>
                 </div>
               </div>
             ))}
@@ -40,9 +40,9 @@ const EscalationsPage = () => {
           <div className="card">
             <h3>✓ {t('pm.resolvedHeading')} ({resolved.length})</h3>
             {resolved.map(e => (
-              <div key={e.id} style={{padding:'12px 0',borderBottom:'1px solid #ebe7e3',opacity:0.6}}>
-                <div style={{display:'flex',gap:6,marginBottom:4}}><span style={{fontSize:12,background:'#e8e3de',padding:'2px 8px',borderRadius:4}}>{e.type}</span><span style={{fontSize:11,color:'#a89a92'}}>{e.id}</span></div>
-                <div>{e.title}</div><div style={{fontSize:12,color:'#a89a92'}}>{t('pm.createdLabel')} {e.created} · {t('pm.resolvedLabel')}</div>
+              <div key={e.id} style={{padding:'12px 0',borderBottom:'1px solid #E6EAE9',opacity:0.6}}>
+                <div style={{display:'flex',gap:6,marginBottom:4}}><span style={{fontSize:12,background:'#E6EAE9',padding:'2px 8px',borderRadius:4}}>{e.type}</span><span style={{fontSize:11,color:'#61707D'}}>{e.id}</span></div>
+                <div>{e.title}</div><div style={{fontSize:12,color:'#61707D'}}>{t('pm.createdLabel')} {e.created} · {t('pm.resolvedLabel')}</div>
               </div>
             ))}
           </div>
@@ -53,11 +53,11 @@ const EscalationsPage = () => {
             {selected ? (
               <div style={{marginTop:12}}>
                 <StatusBadge status={selected.severity}/><h3 style={{marginTop:8}}>{selected.title}</h3>
-                <p style={{fontSize:12,color:'#a89a92',marginTop:4}}>{t('pm.assignedToLabel')} {selected.assigned}</p>
-                <p style={{fontSize:12,color:'#a89a92'}}>{t('pm.slaSuffix')}: {selected.sla}</p>
+                <p style={{fontSize:12,color:'#61707D',marginTop:4}}>{t('pm.assignedToLabel')} {selected.assigned}</p>
+                <p style={{fontSize:12,color:'#61707D'}}>{t('pm.slaSuffix')}: {selected.sla}</p>
                 <button className="btn btn-primary btn-sm" style={{marginTop:12}}>{t('pm.resolveBtn')}</button>
               </div>
-            ) : (<p style={{color:'#a89a92',textAlign:'center',marginTop:24}}>{t('pm.selectEscalation')}</p>)}
+            ) : (<p style={{color:'#61707D',textAlign:'center',marginTop:24}}>{t('pm.selectEscalation')}</p>)}
           </div>
           <div className="card">
             <h3>{t('pm.slaTrackerLabel')}</h3>
@@ -65,7 +65,7 @@ const EscalationsPage = () => {
               <div key={e.id} className="sla-item">
                 <span>{e.id}</span>
                 <div className="sla-bar"><div className="sla-fill" style={{width: e.sla.includes('overdue') ? '100%' : e.sla.includes('remaining') ? '70%' : '40%'}}/></div>
-                <span style={{fontSize:11,color:'#a89a92',whiteSpace:'nowrap'}}>{e.sla}</span>
+                <span style={{fontSize:11,color:'#61707D',whiteSpace:'nowrap'}}>{e.sla}</span>
               </div>
             ))}
           </div>

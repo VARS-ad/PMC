@@ -436,14 +436,14 @@ const PCSummary = ({ section }) => {
                     <td>{(b.units||[]).length}</td>
                     <td>{b.created_at ? new Date(b.created_at).toLocaleDateString() : '—'}</td>
                     <td style={{textAlign:'right',whiteSpace:'nowrap'}}>
-                      <button onClick={(e) => { e.stopPropagation(); setEditing({ kind: 'building', record: b }); }} style={{padding:'4px 10px',fontSize:11,background:'#fff',border:'1px solid #d5cfc8',borderRadius:4,color:'var(--text-dark)',cursor:'pointer',marginRight:6}}>Edit</button>
+                      <button onClick={(e) => { e.stopPropagation(); setEditing({ kind: 'building', record: b }); }} style={{padding:'4px 10px',fontSize:11,background:'#fff',border:'1px solid #D0D6D5',borderRadius:4,color:'var(--text-dark)',cursor:'pointer',marginRight:6}}>Edit</button>
                       <button onClick={(e) => {
                         e.stopPropagation();
                         if (!window.confirm('Delete "' + b.name + '" and all its ' + (b.units||[]).length + ' unit(s)? This cannot be undone.')) return;
                         supabaseClient.from('buildings').delete().eq('id', b.id).then(({error}) => {
                           if (error) alert('Delete failed: ' + error.message); else reload();
                         });
-                      }} style={{padding:'4px 10px',fontSize:11,background:'#fff',border:'1px solid #d5cfc8',borderRadius:4,color:'#8b4a42',cursor:'pointer'}}>Delete</button>
+                      }} style={{padding:'4px 10px',fontSize:11,background:'#fff',border:'1px solid #D0D6D5',borderRadius:4,color:'#8b4a42',cursor:'pointer'}}>Delete</button>
                     </td>
                   </tr>
                 );
@@ -480,7 +480,7 @@ const PCSummary = ({ section }) => {
                 <td>{r.unit_number}</td>
                 <td>{r.created_at ? new Date(r.created_at).toLocaleDateString() : '—'}</td>
                 <td style={{textAlign:'right',whiteSpace:'nowrap'}}>
-                  <button onClick={(e) => { e.stopPropagation(); setEditing({ kind: 'resident', record: r }); }} style={{padding:'4px 10px',fontSize:11,background:'#fff',border:'1px solid #d5cfc8',borderRadius:4,color:'var(--text-dark)',cursor:'pointer',marginRight:6}}>Edit</button>
+                  <button onClick={(e) => { e.stopPropagation(); setEditing({ kind: 'resident', record: r }); }} style={{padding:'4px 10px',fontSize:11,background:'#fff',border:'1px solid #D0D6D5',borderRadius:4,color:'var(--text-dark)',cursor:'pointer',marginRight:6}}>Edit</button>
                   <button onClick={async (e) => {
                     e.stopPropagation();
                     if (!window.confirm('Delete resident "' + r.full_name + '"? This removes their login too.')) return;
@@ -488,7 +488,7 @@ const PCSummary = ({ section }) => {
                     const first = out && out.results && out.results[0];
                     if (!first || !first.ok) alert('Delete failed: ' + ((first && first.error) || (out && out.error) || 'Unknown'));
                     reload();
-                  }} style={{padding:'4px 10px',fontSize:11,background:'#fff',border:'1px solid #d5cfc8',borderRadius:4,color:'#8b4a42',cursor:'pointer'}}>Delete</button>
+                  }} style={{padding:'4px 10px',fontSize:11,background:'#fff',border:'1px solid #D0D6D5',borderRadius:4,color:'#8b4a42',cursor:'pointer'}}>Delete</button>
                 </td>
               </tr>
             ))}
@@ -604,14 +604,14 @@ const PCSummary = ({ section }) => {
               <td>{r.building_name}</td>
               <td>{r.shift}</td>
               <td style={{textAlign:'right',whiteSpace:'nowrap'}}>
-                <button onClick={() => setEditing({ kind: 'security', record: r })} style={{padding:'4px 10px',fontSize:11,background:'#fff',border:'1px solid #d5cfc8',borderRadius:4,color:'var(--text-dark)',cursor:'pointer',marginRight:6}}>Edit</button>
+                <button onClick={() => setEditing({ kind: 'security', record: r })} style={{padding:'4px 10px',fontSize:11,background:'#fff',border:'1px solid #D0D6D5',borderRadius:4,color:'var(--text-dark)',cursor:'pointer',marginRight:6}}>Edit</button>
                 <button onClick={async () => {
                   if (!window.confirm('Delete guard "' + r.full_name + '"? This removes their login too.')) return;
                   const out = await deleteUsersViaFunction([r.id]);
                   const first = out && out.results && out.results[0];
                   if (!first || !first.ok) alert('Delete failed: ' + ((first && first.error) || (out && out.error) || 'Unknown'));
                   reload();
-                }} style={{padding:'4px 10px',fontSize:11,background:'#fff',border:'1px solid #d5cfc8',borderRadius:4,color:'#8b4a42',cursor:'pointer'}}>Delete</button>
+                }} style={{padding:'4px 10px',fontSize:11,background:'#fff',border:'1px solid #D0D6D5',borderRadius:4,color:'#8b4a42',cursor:'pointer'}}>Delete</button>
               </td>
             </tr>
           ))}

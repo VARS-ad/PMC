@@ -124,7 +124,7 @@ const PMCServiceChargesPage = () => {
         });
         const total = Math.max(buckets.current + buckets.b30 + buckets.b60 + buckets.b90 + buckets.b91, 1);
         const rows = [
-          { label: 'Not yet due',  amt: buckets.current, color: '#c4b8b0' },
+          { label: 'Not yet due',  amt: buckets.current, color: '#D0D6D5' },
           { label: '1–30 days',     amt: buckets.b30,     color: '#a07d3c' },
           { label: '31–60 days',    amt: buckets.b60,     color: '#8b6a3c' },
           { label: '61–90 days',    amt: buckets.b90,     color: '#8b4a42' },
@@ -186,7 +186,7 @@ const PMCServiceChargesPage = () => {
                 type: 'bar',
                 data: { labels: buckets.map(m => m.label), datasets: [
                   { label: 'Paid', data: monthly.paid, backgroundColor: '#5a6b4f' },
-                  { label: 'Pending', data: monthly.pending, backgroundColor: '#c4b8b0' },
+                  { label: 'Pending', data: monthly.pending, backgroundColor: '#D0D6D5' },
                   { label: 'Overdue', data: monthly.overdue, backgroundColor: '#8b4a42' },
                 ]},
                 options: {
@@ -209,7 +209,7 @@ const PMCServiceChargesPage = () => {
                 type: 'doughnut',
                 data: { labels: Object.keys(bySource), datasets: [{
                   data: Object.values(bySource),
-                  backgroundColor: ['#928989','#a07d3c','#5a6b4f','#c4b8b0','#8b4a42','#7a6e60'],
+                  backgroundColor: ['#3E4C59','#a07d3c','#5a6b4f','#D0D6D5','#8b4a42','#61707D'],
                   borderWidth: 0,
                 }]},
                 options: {
@@ -260,8 +260,8 @@ const PMCServiceChargesPage = () => {
                   <td>{i.due_date || '—'}</td>
                   <td>
                     <span style={{padding:'3px 10px',borderRadius:4,fontSize:11,fontWeight:500,
-                      background: i.status === 'Paid' ? '#e6efe1' : i.status === 'Overdue' ? '#fdf2f1' : '#f5f3f0',
-                      color: i.status === 'Paid' ? '#5a6b4f' : i.status === 'Overdue' ? '#8b4a42' : '#7a6e60',
+                      background: i.status === 'Paid' ? '#e6efe1' : i.status === 'Overdue' ? '#fdf2f1' : '#E6EAE9',
+                      color: i.status === 'Paid' ? '#5a6b4f' : i.status === 'Overdue' ? '#8b4a42' : '#61707D',
                     }}>{i.status}</span>
                   </td>
                 </tr>

@@ -44,8 +44,8 @@ const vendorStatusBadge = (status, label) => {
     'Active':         { bg: '#e6efe1', fg: '#5a6b4f' },
     'Expiring Soon':  { bg: '#fdf2dc', fg: '#a07d3c' },
     'Expired':        { bg: '#fdf2f1', fg: '#8b4a42' },
-    'Terminated':     { bg: '#f5f3f0', fg: '#8a7e72' },
-  })[status] || { bg: '#f5f3f0', fg: '#888' };
+    'Terminated':     { bg: '#E6EAE9', fg: '#8a7e72' },
+  })[status] || { bg: '#E6EAE9', fg: '#888' };
   return <span style={{padding:'3px 10px',borderRadius:4,fontSize:11,fontWeight:500,background:c.bg,color:c.fg}}>{label || status}</span>;
 };
 const paymentStatusBadge = (status, label) => {
@@ -53,8 +53,8 @@ const paymentStatusBadge = (status, label) => {
     'Paid':       { bg: '#e6efe1', fg: '#5a6b4f' },
     'Pending':    { bg: '#fdf2dc', fg: '#a07d3c' },
     'Overdue':    { bg: '#fdf2f1', fg: '#8b4a42' },
-    'Cancelled':  { bg: '#f5f3f0', fg: '#8a7e72' },
-  })[status] || { bg: '#f5f3f0', fg: '#888' };
+    'Cancelled':  { bg: '#E6EAE9', fg: '#8a7e72' },
+  })[status] || { bg: '#E6EAE9', fg: '#888' };
   return <span style={{padding:'2px 8px',borderRadius:3,fontSize:10,fontWeight:600,background:c.bg,color:c.fg}}>{label || status}</span>;
 };
 

@@ -79,8 +79,8 @@ const OverviewPage = ({ setPage }) => {
 
   // SR status breakdown data
   const srStatusData = [
-    { label: t('pm.srOpen'), count: 12, color: '#d5cfc8' },
-    { label: t('pm.srInProgress'), count: 15, color: '#928989' },
+    { label: t('pm.srOpen'), count: 12, color: '#D0D6D5' },
+    { label: t('pm.srInProgress'), count: 15, color: '#3E4C59' },
     { label: t('pm.srScheduled'), count: 18, color: '#b0a898' },
     { label: t('pm.srCompleted'), count: 22, color: '#c4beb6' },
   ];
@@ -113,7 +113,7 @@ const OverviewPage = ({ setPage }) => {
   const calToday = 10;
   const calEventDays = [10, 15, 17, 18, 22, 25];
   const todayEvents = [
-    { time: '11:00', title: 'Tech Support — Etisalat', unit: 'A-0302', badge: 'Vendor', badgeColor: '#e8e3de' },
+    { time: '11:00', title: 'Tech Support — Etisalat', unit: 'A-0302', badge: 'Vendor', badgeColor: '#E6EAE9' },
     { time: '13:00', title: 'Move-In — Nour Al-Rashid', unit: 'C-0904', badge: 'Move', badgeColor: '#e0e5db' },
   ];
 
@@ -130,22 +130,22 @@ const OverviewPage = ({ setPage }) => {
     <div>
       <div className="page-header">
         <div><h1>{t('pm.overviewTitle')}</h1></div>
-        <div style={{fontSize:12,color:'#a89a92'}}>Abu Dhabi · GST+4 &nbsp; {pmDate + ', ' + pmTime}</div>
+        <div style={{fontSize:12,color:'#61707D'}}>Abu Dhabi · GST+4 &nbsp; {pmDate + ', ' + pmTime}</div>
       </div>
 
       {/* KPI Header */}
       <div style={{display:'flex',alignItems:'baseline',gap:10,marginBottom:14}}>
-        <span style={{fontSize:14,fontWeight:600,color:'#1a1a1a'}}>{t('pm.kpiHeader')}</span>
-        <span style={{fontSize:12,color:'#a89a92'}}>{t('common.today')}, {pmDate}</span>
+        <span style={{fontSize:14,fontWeight:600,color:'#131F23'}}>{t('pm.kpiHeader')}</span>
+        <span style={{fontSize:12,color:'#61707D'}}>{t('common.today')}, {pmDate}</span>
       </div>
 
       {/* KPI Cards — 6 columns */}
       <div style={{display:'grid',gridTemplateColumns:'repeat(6,1fr)',gap:12,marginBottom:28}}>
         {kpis.map((k,i) => (
           <div key={i} className="kpi-card" style={{padding:'16px 18px',display:'flex',flexDirection:'column'}}>
-            <div style={{fontSize:11,color:'#a89a92',marginBottom:6}}>{k.label}</div>
-            <div style={{fontSize:22,fontWeight:600,color:'#1a1a1a',flex:1}}>{k.value}</div>
-            <div style={{fontSize:11,color:'#a89a92',marginTop:10,cursor:'pointer'}} onClick={()=>setPage(k.page)}>{t('kpi.viewDetails')} →</div>
+            <div style={{fontSize:11,color:'#61707D',marginBottom:6}}>{k.label}</div>
+            <div style={{fontSize:22,fontWeight:600,color:'#131F23',flex:1}}>{k.value}</div>
+            <div style={{fontSize:11,color:'#61707D',marginTop:10,cursor:'pointer'}} onClick={()=>setPage(k.page)}>{t('kpi.viewDetails')} →</div>
           </div>
         ))}
       </div>
@@ -159,9 +159,9 @@ const OverviewPage = ({ setPage }) => {
           <div className="card" style={{padding:20}}>
             <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:4}}>
               <h3 style={{margin:0,fontSize:15,fontWeight:600}}>{t('pm.srSummary')}</h3>
-              <span style={{fontSize:12,color:'#a89a92',cursor:'pointer'}} onClick={()=>setPage('service')}>{t('pm.viewAll')} →</span>
+              <span style={{fontSize:12,color:'#61707D',cursor:'pointer'}} onClick={()=>setPage('service')}>{t('pm.viewAll')} →</span>
             </div>
-            <div style={{fontSize:12,color:'#a89a92',marginBottom:14}}>{t('pm.srStatusBreakdown')}</div>
+            <div style={{fontSize:12,color:'#61707D',marginBottom:14}}>{t('pm.srStatusBreakdown')}</div>
 
             {/* Stacked horizontal bar */}
             <div style={{display:'flex',height:28,borderRadius:4,overflow:'hidden',marginBottom:10}}>
@@ -170,7 +170,7 @@ const OverviewPage = ({ setPage }) => {
               ))}
             </div>
             {/* Legend */}
-            <div style={{display:'flex',gap:20,fontSize:11,color:'#a89a92',marginBottom:24}}>
+            <div style={{display:'flex',gap:20,fontSize:11,color:'#61707D',marginBottom:24}}>
               {srStatusData.map((s,i) => (
                 <span key={i} style={{display:'flex',alignItems:'center',gap:5}}>
                   <span style={{width:8,height:8,borderRadius:'50%',background:s.color,display:'inline-block'}}/> {s.label}
@@ -180,7 +180,7 @@ const OverviewPage = ({ setPage }) => {
 
             {/* Service Requests Requiring Action */}
             <div style={{fontSize:13,fontWeight:600,marginBottom:4}}>{t('pm.srRequireAction')}</div>
-            <div style={{fontSize:11,color:'#a89a92',marginBottom:12}}>{t('pm.srRequireActionDesc')}</div>
+            <div style={{fontSize:11,color:'#61707D',marginBottom:12}}>{t('pm.srRequireActionDesc')}</div>
             <table className="data-table" style={{fontSize:12}}>
               <thead><tr><th>{t('pm.th.srId')}</th><th>{t('pm.th.type')}</th><th>{t('pm.th.unit')}</th><th>{t('pm.th.resident')}</th><th>{t('pm.th.date')}</th><th>{t('pm.th.status')}</th><th>{t('pm.th.action')}</th></tr></thead>
               <tbody>
@@ -207,7 +207,7 @@ const OverviewPage = ({ setPage }) => {
           <div className="card" style={{padding:20}}>
             <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:14}}>
               <h3 style={{margin:0,fontSize:15,fontWeight:600}}>{t('pm.escalations')}</h3>
-              <span style={{fontSize:12,color:'#a89a92',cursor:'pointer'}} onClick={()=>setPage('escalations')}>{t('pm.viewAll')} →</span>
+              <span style={{fontSize:12,color:'#61707D',cursor:'pointer'}} onClick={()=>setPage('escalations')}>{t('pm.viewAll')} →</span>
             </div>
             <table className="data-table" style={{fontSize:12}}>
               <thead><tr><th>{t('pm.th.id')}</th><th>{t('pm.th.type')}</th><th>{t('pm.th.summary')}</th><th>{t('pm.th.unit')}</th><th>{t('pm.th.open')}</th><th>{t('pm.th.severity')}</th></tr></thead>
@@ -236,14 +236,14 @@ const OverviewPage = ({ setPage }) => {
           <div className="card" style={{padding:20}}>
             <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:14}}>
               <h3 style={{margin:0,fontSize:15,fontWeight:600}}>{t('pm.activityFeed')}</h3>
-              <span style={{fontSize:12,color:'#a89a92',cursor:'pointer'}}>{t('pm.viewAll')} →</span>
+              <span style={{fontSize:12,color:'#61707D',cursor:'pointer'}}>{t('pm.viewAll')} →</span>
             </div>
-            <div style={{fontSize:12,color:'#a89a92',marginBottom:12}}>{t('pm.activityFeedDesc')}</div>
+            <div style={{fontSize:12,color:'#61707D',marginBottom:12}}>{t('pm.activityFeedDesc')}</div>
             {ovFeed.map((item,i) => (
               <div key={i} style={{display:'flex',alignItems:'flex-start',gap:10,padding:'8px 0',borderTop: i > 0 ? '1px solid #f5f2ef' : 'none'}}>
                 <div style={{width:8,height:8,borderRadius:'50%',background:item.color,marginTop:5,flexShrink:0}}/>
                 <div style={{flex:1}}>
-                  <span style={{fontSize:12,color:'#1a1a1a'}}><span style={{color:'#a89a92',marginRight:6}}>{item.time}</span>{item.text}</span>
+                  <span style={{fontSize:12,color:'#131F23'}}><span style={{color:'#61707D',marginRight:6}}>{item.time}</span>{item.text}</span>
                 </div>
               </div>
             ))}
@@ -257,46 +257,46 @@ const OverviewPage = ({ setPage }) => {
           <div className="card" style={{padding:20}}>
             <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:4}}>
               <h3 style={{margin:0,fontSize:15,fontWeight:600}}>{t('pm.scCollection')}</h3>
-              <span style={{fontSize:12,color:'#a89a92',cursor:'pointer'}} onClick={()=>setPage('payment')}>{t('pm.viewAll')} →</span>
+              <span style={{fontSize:12,color:'#61707D',cursor:'pointer'}} onClick={()=>setPage('payment')}>{t('pm.viewAll')} →</span>
             </div>
-            <div style={{fontSize:12,color:'#a89a92',marginBottom:18}}>Q1 2026 · {t('pm.scQuarter')}</div>
+            <div style={{fontSize:12,color:'#61707D',marginBottom:18}}>Q1 2026 · {t('pm.scQuarter')}</div>
 
             <div style={{marginBottom:16}}>
-              <div style={{fontSize:11,color:'#a89a92',marginBottom:4}}>{t('pm.scTotalBilled')}</div>
-              <div style={{fontSize:22,fontWeight:600,color:'#1a1a1a'}}>AED {fmt(scTotalBilled)}</div>
+              <div style={{fontSize:11,color:'#61707D',marginBottom:4}}>{t('pm.scTotalBilled')}</div>
+              <div style={{fontSize:22,fontWeight:600,color:'#131F23'}}>AED {fmt(scTotalBilled)}</div>
             </div>
             <div style={{marginBottom:16}}>
-              <div style={{fontSize:11,color:'#a89a92',marginBottom:4}}>{t('pm.scTotalCollected')}</div>
-              <div style={{fontSize:22,fontWeight:600,color:'#1a1a1a'}}>AED {fmt(scTotalCollected)}</div>
+              <div style={{fontSize:11,color:'#61707D',marginBottom:4}}>{t('pm.scTotalCollected')}</div>
+              <div style={{fontSize:22,fontWeight:600,color:'#131F23'}}>AED {fmt(scTotalCollected)}</div>
             </div>
             <div style={{marginBottom:16}}>
-              <div style={{fontSize:11,color:'#a89a92',marginBottom:4}}>{t('pm.scOutstanding')}</div>
+              <div style={{fontSize:11,color:'#61707D',marginBottom:4}}>{t('pm.scOutstanding')}</div>
               <div style={{fontSize:22,fontWeight:600,color:'#c0392b'}}>AED {fmt(scOutstanding)}</div>
             </div>
 
             {/* Collection rate bar */}
-            <div style={{display:'flex',justifyContent:'space-between',fontSize:11,color:'#a89a92',marginBottom:6}}>
+            <div style={{display:'flex',justifyContent:'space-between',fontSize:11,color:'#61707D',marginBottom:6}}>
               <span>{t('pm.scCollectionRate')} · {scCollectionRate}%</span>
             </div>
-            <div style={{height:6,background:'#ebe7e3',borderRadius:3,marginBottom:20,overflow:'hidden'}}>
-              <div style={{height:'100%',width:scCollectionRate+'%',background:'#928989',borderRadius:3}}/>
+            <div style={{height:6,background:'#E6EAE9',borderRadius:3,marginBottom:20,overflow:'hidden'}}>
+              <div style={{height:'100%',width:scCollectionRate+'%',background:'#3E4C59',borderRadius:3}}/>
             </div>
 
             {/* Units in Arrears */}
             <div style={{fontSize:13,fontWeight:600,marginBottom:4}}>{t('pm.scUnitsInArrears')}</div>
-            <div style={{fontSize:11,color:'#a89a92',marginBottom:12}}>{arrearsUnits.length} {t('pm.scUnits')} · {t('pm.scTotal')} AED {fmt(arrearsUnits.reduce((s,u)=>s+u.amount,0))}</div>
+            <div style={{fontSize:11,color:'#61707D',marginBottom:12}}>{arrearsUnits.length} {t('pm.scUnits')} · {t('pm.scTotal')} AED {fmt(arrearsUnits.reduce((s,u)=>s+u.amount,0))}</div>
 
             {arrearsUnits.map((u,i) => (
-              <div key={i} style={{display:'flex',alignItems:'center',gap:10,padding:'10px 12px',background:'#faf8f6',borderRadius:8,marginBottom:8,border:'1px solid #ebe7e3'}}>
-                <div style={{width:32,height:32,borderRadius:6,background:'#928989',color:'#fff',display:'flex',alignItems:'center',justifyContent:'center',fontSize:12,fontWeight:600,flexShrink:0}}>
+              <div key={i} style={{display:'flex',alignItems:'center',gap:10,padding:'10px 12px',background:'#F4EEE4',borderRadius:8,marginBottom:8,border:'1px solid #E6EAE9'}}>
+                <div style={{width:32,height:32,borderRadius:6,background:'#3E4C59',color:'#fff',display:'flex',alignItems:'center',justifyContent:'center',fontSize:12,fontWeight:600,flexShrink:0}}>
                   {u.unit.charAt(0)}
                 </div>
                 <div style={{flex:1,minWidth:0}}>
-                  <div style={{fontSize:13,fontWeight:600,color:'#1a1a1a'}}>{u.unit}</div>
-                  <div style={{fontSize:11,color:'#a89a92'}}>{u.block}</div>
+                  <div style={{fontSize:13,fontWeight:600,color:'#131F23'}}>{u.unit}</div>
+                  <div style={{fontSize:11,color:'#61707D'}}>{u.block}</div>
                 </div>
                 <div style={{textAlign:'right',flexShrink:0}}>
-                  <div style={{fontSize:13,fontWeight:600,color:'#1a1a1a'}}>AED {fmt(u.amount)}</div>
+                  <div style={{fontSize:13,fontWeight:600,color:'#131F23'}}>AED {fmt(u.amount)}</div>
                   <div style={{fontSize:10,color:'#c0392b'}}>{t('pm.scDueFrom')} {u.due}</div>
                 </div>
               </div>
@@ -307,13 +307,13 @@ const OverviewPage = ({ setPage }) => {
           <div className="card" style={{padding:20}}>
             <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:14}}>
               <h3 style={{margin:0,fontSize:15,fontWeight:600}}>{t('pm.opsCalendar')}</h3>
-              <span style={{fontSize:13,color:'#a89a92'}}>{t('pm.months.mar')} {calYear}</span>
+              <span style={{fontSize:13,color:'#61707D'}}>{t('pm.months.mar')} {calYear}</span>
             </div>
 
             {/* Calendar grid */}
             <div style={{display:'grid',gridTemplateColumns:'repeat(7,1fr)',gap:2,textAlign:'center',marginBottom:16}}>
               {['S','M','T','W','T','F','S'].map((d,i) => (
-                <div key={i} style={{fontSize:10,color:'#a89a92',padding:'4px 0',fontWeight:500}}>{d}</div>
+                <div key={i} style={{fontSize:10,color:'#61707D',padding:'4px 0',fontWeight:500}}>{d}</div>
               ))}
               {Array.from({length:calFirstDay}).map((_,i) => <div key={'e'+i}/>)}
               {Array.from({length:calDaysInMonth}).map((_,i) => {
@@ -323,8 +323,8 @@ const OverviewPage = ({ setPage }) => {
                 return (
                   <div key={day} style={{
                     padding:'4px 0',fontSize:12,
-                    background: isToday ? '#928989' : 'transparent',
-                    color: isToday ? '#fff' : '#1a1a1a',
+                    background: isToday ? '#3E4C59' : 'transparent',
+                    color: isToday ? '#fff' : '#131F23',
                     borderRadius: isToday ? '50%' : 0,
                     width: isToday ? 28 : 'auto', height: isToday ? 28 : 'auto',
                     display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',
@@ -333,24 +333,24 @@ const OverviewPage = ({ setPage }) => {
                     position:'relative'
                   }}>
                     {day}
-                    {hasEvent && !isToday && <div style={{width:3,height:3,borderRadius:'50%',background:'#928989',marginTop:1}}/>}
+                    {hasEvent && !isToday && <div style={{width:3,height:3,borderRadius:'50%',background:'#3E4C59',marginTop:1}}/>}
                   </div>
                 );
               })}
             </div>
 
             {/* Today's events */}
-            <div style={{borderTop:'1px solid #ebe7e3',paddingTop:14}}>
+            <div style={{borderTop:'1px solid #E6EAE9',paddingTop:14}}>
               <div style={{fontSize:13,fontWeight:600,marginBottom:12}}>Today — {calToday} March</div>
               {todayEvents.map((ev,i) => (
                 <div key={i} style={{marginBottom:12}}>
-                  <div style={{fontSize:10,color:'#a89a92',marginBottom:2}}>{ev.time}</div>
+                  <div style={{fontSize:10,color:'#61707D',marginBottom:2}}>{ev.time}</div>
                   <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
                     <div>
-                      <div style={{fontSize:13,fontWeight:500,color:'#1a1a1a'}}>{ev.title}</div>
-                      <div style={{fontSize:11,color:'#a89a92'}}>{ev.unit}</div>
+                      <div style={{fontSize:13,fontWeight:500,color:'#131F23'}}>{ev.title}</div>
+                      <div style={{fontSize:11,color:'#61707D'}}>{ev.unit}</div>
                     </div>
-                    <span style={{fontSize:11,padding:'3px 10px',borderRadius:4,background:ev.badgeColor,color:'#1a1a1a',fontWeight:500}}>{ev.badge}</span>
+                    <span style={{fontSize:11,padding:'3px 10px',borderRadius:4,background:ev.badgeColor,color:'#131F23',fontWeight:500}}>{ev.badge}</span>
                   </div>
                 </div>
               ))}

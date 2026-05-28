@@ -23,7 +23,7 @@ const Sidebar = ({ page, setPage, isOpen, onClose, onLogout }) => {
     <div className={`sidebar ${isOpen ? 'open' : ''}`}>
       <div className="sidebar-header">
         <svg width="28" height="28" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg" aria-label="VARS" style={{flexShrink:0}}>
-          <rect width="100" height="100" rx="4" fill="#928989"/>
+          <rect width="100" height="100" rx="4" fill="#3E4C59"/>
           <path d="M33.3 16.7 L50 16.7 L58.1 25.2 L66.7 33.3 L66.7 83.3 L50 83.3 L33.3 66.7 Z" fill="#ffffff"/>
         </svg>
         <span>VARS PM</span>

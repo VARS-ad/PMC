@@ -78,10 +78,10 @@ const LoginPage = ({ onLogin, syncStatus }) => {
         <div style={{textAlign:'center',marginBottom:32}}>
           <div style={{display:'inline-flex',alignItems:'center',gap:14,marginBottom:10}}>
             <svg width="56" height="56" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg" aria-label="VARS">
-              <rect width="100" height="100" rx="4" fill="#928989"/>
+              <rect width="100" height="100" rx="4" fill="#3E4C59"/>
               <path d="M33.3 16.7 L50 16.7 L58.1 25.2 L66.7 33.3 L66.7 83.3 L50 83.3 L33.3 66.7 Z" fill="#ffffff"/>
             </svg>
-            <h1 style={{fontSize:38,fontWeight:500,letterSpacing:'-0.01em',margin:0,color:'#1a1a1a',lineHeight:1}}>VARS</h1>
+            <h1 style={{fontSize:38,fontWeight:500,letterSpacing:'-0.01em',margin:0,color:'#131F23',lineHeight:1}}>VARS</h1>
           </div>
           <p style={{fontSize:10,letterSpacing:'0.16em',textTransform:'uppercase',color:'var(--text-secondary)',margin:'8px 0 0',fontWeight:400}}>{t('login.subtitle')}</p>
         </div>
@@ -142,7 +142,7 @@ const LoginPage = ({ onLogin, syncStatus }) => {
         </div>
 
         <div style={{marginTop:12,textAlign:'center'}}>
-          <p style={{fontSize:10,color:'#c4b8b0',letterSpacing:'0.04em'}}>{formatDateTime(new Date())}</p>
+          <p style={{fontSize:10,color:'#D0D6D5',letterSpacing:'0.04em'}}>{formatDateTime(new Date())}</p>
         </div>
       </div>
     </div>

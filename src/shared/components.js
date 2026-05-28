@@ -58,11 +58,11 @@ const MiniCalendar = ({ selectedDate, onDateSelect, eventDayMap }) => {
   };
 
   const typeColors = {
-    'Move-In': '#928989', 'Move-Out': '#928989',
-    'Installation': '#8a8a8a',
+    'Move-In': '#3E4C59', 'Move-Out': '#3E4C59',
+    'Installation': '#61707D',
     'Handyman': '#c0c0c0', 'Electrical': '#c0c0c0', 'Plumbing': '#c0c0c0',
     'AC Repair': '#c0c0c0',
-    'Pest Control': '#e8e3de',
+    'Pest Control': '#E6EAE9',
   };
 
   return (

@@ -10,11 +10,11 @@ const ReportsPage = () => {
   }).join(' ');
 
   const resolutionTypes = [
-    {type:t('pm.typeAcRepair'),avg:'4.1h',max:'9.2h',sla:82,color:'#1a1a1a'},
-    {type:t('pm.typeHandyman'),avg:'5.4h',max:'11.0h',sla:71,color:'#1a1a1a'},
-    {type:t('pm.typeInstallation'),avg:'3.0h',max:'6.5h',sla:90,color:'#1a1a1a'},
-    {type:t('pm.typeMoveIn'),avg:'1.8h',max:'3.5h',sla:96,color:'#1a1a1a'},
-    {type:t('pm.typePestControl'),avg:'6.2h',max:'14.1h',sla:68,color:'#1a1a1a'}
+    {type:t('pm.typeAcRepair'),avg:'4.1h',max:'9.2h',sla:82,color:'#131F23'},
+    {type:t('pm.typeHandyman'),avg:'5.4h',max:'11.0h',sla:71,color:'#131F23'},
+    {type:t('pm.typeInstallation'),avg:'3.0h',max:'6.5h',sla:90,color:'#131F23'},
+    {type:t('pm.typeMoveIn'),avg:'1.8h',max:'3.5h',sla:96,color:'#131F23'},
+    {type:t('pm.typePestControl'),avg:'6.2h',max:'14.1h',sla:68,color:'#131F23'}
   ];
 
   const finData = [
@@ -48,7 +48,7 @@ const ReportsPage = () => {
 
       <div className="grid-2">
         <div className="card">
-          <div className="card-header"><h3>{t('pm.chartSlaCompliance')}</h3><span style={{fontSize:12,color:'#a89a92',cursor:'pointer'}}>{t('pm.viewAll')}</span></div>
+          <div className="card-header"><h3>{t('pm.chartSlaCompliance')}</h3><span style={{fontSize:12,color:'#61707D',cursor:'pointer'}}>{t('pm.viewAll')}</span></div>
           <svg viewBox="0 0 580 220" style={{width:'100%',height:200}}>
             {[100,95,90,85,80,75,70,65,60].map((v,i) => (
               <React.Fragment key={v}>
@@ -56,25 +56,25 @@ const ReportsPage = () => {
                 <text x="32" y={24+i*20} textAnchor="end" fontSize="10" fill="#999">{v}%</text>
               </React.Fragment>
             ))}
-            <polyline points={slaPoints} fill="none" stroke="#1a1a1a" strokeWidth="2"/>
+            <polyline points={slaPoints} fill="none" stroke="#131F23" strokeWidth="2"/>
             {slaData.map((d,i) => {
               const x = 40 + i * (520 / (slaData.length - 1));
               const y = 20 + ((slaMax - d.v) / (slaMax - slaMin)) * 160;
-              return <React.Fragment key={i}><circle cx={x} cy={y} r="4" fill="#fff" stroke="#1a1a1a" strokeWidth="2"/><text x={x} y={210} textAnchor="middle" fontSize="10" fill="#999">{d.m}</text></React.Fragment>;
+              return <React.Fragment key={i}><circle cx={x} cy={y} r="4" fill="#fff" stroke="#131F23" strokeWidth="2"/><text x={x} y={210} textAnchor="middle" fontSize="10" fill="#999">{d.m}</text></React.Fragment>;
             })}
           </svg>
         </div>
 
         <div className="card">
-          <div className="card-header"><h3>{t('pm.chartResolutionTime')}</h3><span style={{fontSize:12,color:'#a89a92',cursor:'pointer'}}>{t('pm.viewAll')}</span></div>
+          <div className="card-header"><h3>{t('pm.chartResolutionTime')}</h3><span style={{fontSize:12,color:'#61707D',cursor:'pointer'}}>{t('pm.viewAll')}</span></div>
           <div style={{display:'flex',flexDirection:'column',gap:16,marginTop:8}}>
             {resolutionTypes.map(r => (
               <div key={r.type}>
                 <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:6}}>
-                  <span style={{fontSize:13,fontWeight:500}}>{r.type} · <span style={{color:'#a89a92',fontWeight:400}}>{t('pm.avgLabel')} {r.avg} · {r.max}</span></span>
-                  <span style={{fontSize:13,fontWeight:600,color:r.sla>=90?'#1a1a1a':r.sla>=80?'#666':'#999'}}>{r.sla}% {t('pm.slaSuffix')}</span>
+                  <span style={{fontSize:13,fontWeight:500}}>{r.type} · <span style={{color:'#61707D',fontWeight:400}}>{t('pm.avgLabel')} {r.avg} · {r.max}</span></span>
+                  <span style={{fontSize:13,fontWeight:600,color:r.sla>=90?'#131F23':r.sla>=80?'#666':'#999'}}>{r.sla}% {t('pm.slaSuffix')}</span>
                 </div>
-                <div style={{height:6,background:'#e8e3de',borderRadius:3,overflow:'hidden'}}>
+                <div style={{height:6,background:'#E6EAE9',borderRadius:3,overflow:'hidden'}}>
                   <div style={{height:'100%',width:`${r.sla}%`,background:r.color,borderRadius:3}}/>
                 </div>
               </div>
@@ -84,23 +84,23 @@ const ReportsPage = () => {
       </div>
 
       <div className="grid-2" style={{marginTop:0}}>
-        <div className="card" style={{background:'#faf8f6',border:'none'}}>
+        <div className="card" style={{background:'#F4EEE4',border:'none'}}>
           <h4 style={{marginBottom:8}}>{t('pm.aiInsightTitle')}</h4>
-          <p style={{fontSize:13,color:'#a89a92',lineHeight:1.6}}>{t('pm.aiInsight1')}</p>
+          <p style={{fontSize:13,color:'#61707D',lineHeight:1.6}}>{t('pm.aiInsight1')}</p>
         </div>
-        <div className="card" style={{background:'#faf8f6',border:'none'}}>
+        <div className="card" style={{background:'#F4EEE4',border:'none'}}>
           <h4 style={{marginBottom:8}}>{t('pm.aiInsightTitle')}</h4>
-          <p style={{fontSize:13,color:'#a89a92',lineHeight:1.6}}>{t('pm.aiInsight2')}</p>
+          <p style={{fontSize:13,color:'#61707D',lineHeight:1.6}}>{t('pm.aiInsight2')}</p>
         </div>
       </div>
 
       <div className="grid-2">
         <div className="card">
-          <div className="card-header"><h3>{t('pm.chartFinancialMetrics')}</h3><span style={{fontSize:12,color:'#a89a92',cursor:'pointer'}}>{t('pm.viewAll')}</span></div>
+          <div className="card-header"><h3>{t('pm.chartFinancialMetrics')}</h3><span style={{fontSize:12,color:'#61707D',cursor:'pointer'}}>{t('pm.viewAll')}</span></div>
           <div style={{display:'flex',gap:16,marginBottom:12,justifyContent:'center'}}>
-            <span style={{display:'flex',alignItems:'center',gap:4,fontSize:11,color:'#a89a92'}}><span style={{width:8,height:8,borderRadius:'50%',background:'#d9d9d9',display:'inline-block'}}/> {t('pm.legendCollected')}</span>
-            <span style={{display:'flex',alignItems:'center',gap:4,fontSize:11,color:'#a89a92'}}><span style={{width:8,height:8,borderRadius:'50%',background:'#888',display:'inline-block'}}/> {t('pm.legendOverdue')}</span>
-            <span style={{display:'flex',alignItems:'center',gap:4,fontSize:11,color:'#a89a92'}}><span style={{width:8,height:8,borderRadius:'50%',background:'#c4c4c4',display:'inline-block'}}/> {t('pm.legendPending')}</span>
+            <span style={{display:'flex',alignItems:'center',gap:4,fontSize:11,color:'#61707D'}}><span style={{width:8,height:8,borderRadius:'50%',background:'#d9d9d9',display:'inline-block'}}/> {t('pm.legendCollected')}</span>
+            <span style={{display:'flex',alignItems:'center',gap:4,fontSize:11,color:'#61707D'}}><span style={{width:8,height:8,borderRadius:'50%',background:'#888',display:'inline-block'}}/> {t('pm.legendOverdue')}</span>
+            <span style={{display:'flex',alignItems:'center',gap:4,fontSize:11,color:'#61707D'}}><span style={{width:8,height:8,borderRadius:'50%',background:'#c4c4c4',display:'inline-block'}}/> {t('pm.legendPending')}</span>
           </div>
           <div style={{display:'flex',alignItems:'flex-end',gap:12,height:160,padding:'0 4px'}}>
             {finData.map((d,i) => {
@@ -112,7 +112,7 @@ const ReportsPage = () => {
                     <div style={{height:`${(d.overdue/total)*100}%`,background:'#888'}}/>
                     <div style={{height:`${(d.pending/total)*100}%`,background:'#c4c4c4'}}/>
                   </div>
-                  <span style={{fontSize:10,color:'#a89a92'}}>{d.m}</span>
+                  <span style={{fontSize:10,color:'#61707D'}}>{d.m}</span>
                 </div>
               );
             })}
@@ -120,12 +120,12 @@ const ReportsPage = () => {
         </div>
 
         <div className="card">
-          <div className="card-header"><h3>{t('pm.chartOccupancyTrend')}</h3><span style={{fontSize:12,color:'#a89a92',cursor:'pointer'}}>{t('pm.viewAll')}</span></div>
+          <div className="card-header"><h3>{t('pm.chartOccupancyTrend')}</h3><span style={{fontSize:12,color:'#61707D',cursor:'pointer'}}>{t('pm.viewAll')}</span></div>
           <div className="grid-2" style={{gap:12,marginBottom:16}}>
-            <div><div style={{fontSize:11,color:'#a89a92'}}>{t('pm.currentOccupancy')}</div><div style={{fontSize:28,fontWeight:700}}>94%</div><div style={{fontSize:11,color:'#22c55e'}}>↑ 1.5% {t('pm.vsLastMonth')}</div></div>
-            <div><div style={{fontSize:11,color:'#a89a92'}}>{t('pm.vacantUnits')}</div><div style={{fontSize:28,fontWeight:700}}>18 / 300</div><div style={{fontSize:11,color:'#a89a92'}}>3 {t('pm.newVacanciesThisMonth')}</div></div>
-            <div><div style={{fontSize:11,color:'#a89a92'}}>{t('pm.avgVacancyDuration')}</div><div style={{fontSize:28,fontWeight:700}}>22d</div><div style={{fontSize:11,color:'#22c55e'}}>↓ 5d {t('pm.vsPrior3MonthAvg')}</div></div>
-            <div><div style={{fontSize:11,color:'#a89a92'}}>{t('pm.renewalsThisMonth')}</div><div style={{fontSize:28,fontWeight:700}}>41</div><div style={{fontSize:11,color:'#a89a92'}}>87% {t('pm.renewalRate')}</div></div>
+            <div><div style={{fontSize:11,color:'#61707D'}}>{t('pm.currentOccupancy')}</div><div style={{fontSize:28,fontWeight:700}}>94%</div><div style={{fontSize:11,color:'#22c55e'}}>↑ 1.5% {t('pm.vsLastMonth')}</div></div>
+            <div><div style={{fontSize:11,color:'#61707D'}}>{t('pm.vacantUnits')}</div><div style={{fontSize:28,fontWeight:700}}>18 / 300</div><div style={{fontSize:11,color:'#61707D'}}>3 {t('pm.newVacanciesThisMonth')}</div></div>
+            <div><div style={{fontSize:11,color:'#61707D'}}>{t('pm.avgVacancyDuration')}</div><div style={{fontSize:28,fontWeight:700}}>22d</div><div style={{fontSize:11,color:'#22c55e'}}>↓ 5d {t('pm.vsPrior3MonthAvg')}</div></div>
+            <div><div style={{fontSize:11,color:'#61707D'}}>{t('pm.renewalsThisMonth')}</div><div style={{fontSize:28,fontWeight:700}}>41</div><div style={{fontSize:11,color:'#61707D'}}>87% {t('pm.renewalRate')}</div></div>
           </div>
           <svg viewBox="0 0 500 100" style={{width:'100%',height:80}}>
             <polyline points={occLine} fill="none" stroke="#d9d9d9" strokeWidth="1.5"/>
@@ -136,7 +136,7 @@ const ReportsPage = () => {
                 const y = 10 + ((occMax - v) / (occMax - occMin)) * 80;
                 return `${x},${y}`;
               }).join(' ');
-              return <polyline points={lastDash} fill="none" stroke="#1a1a1a" strokeWidth="1.5" strokeDasharray="4,3"/>;
+              return <polyline points={lastDash} fill="none" stroke="#131F23" strokeWidth="1.5" strokeDasharray="4,3"/>;
             })()}
             <line x1={`${(occPoints.length - 4) * (480 / (occPoints.length - 1))}`} y1="0" x2={`${(occPoints.length - 4) * (480 / (occPoints.length - 1))}`} y2="100" stroke="#e0e0e0" strokeWidth="1" strokeDasharray="3,3"/>
           </svg>
@@ -144,13 +144,13 @@ const ReportsPage = () => {
       </div>
 
       <div className="grid-2" style={{marginTop:0}}>
-        <div className="card" style={{background:'#faf8f6',border:'none'}}>
+        <div className="card" style={{background:'#F4EEE4',border:'none'}}>
           <h4 style={{marginBottom:8}}>{t('pm.aiInsightTitle')}</h4>
-          <p style={{fontSize:13,color:'#a89a92',lineHeight:1.6}}>{t('pm.aiInsight3')}</p>
+          <p style={{fontSize:13,color:'#61707D',lineHeight:1.6}}>{t('pm.aiInsight3')}</p>
         </div>
-        <div className="card" style={{background:'#faf8f6',border:'none'}}>
+        <div className="card" style={{background:'#F4EEE4',border:'none'}}>
           <h4 style={{marginBottom:8}}>{t('pm.aiInsightTitle')}</h4>
-          <p style={{fontSize:13,color:'#a89a92',lineHeight:1.6}}>{t('pm.aiInsight4')}</p>
+          <p style={{fontSize:13,color:'#61707D',lineHeight:1.6}}>{t('pm.aiInsight4')}</p>
         </div>
       </div>
     </div>

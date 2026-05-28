@@ -49,23 +49,23 @@ const UpcomingVisitsPanel = () => {
       <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:12,paddingBottom:10,borderBottom:'1px solid var(--border-light)'}}>
         <div>
           <div className="sec-kpi-label" style={{marginBottom:4}}>UPCOMING PRE-APPROVALS</div>
-          <div style={{fontSize:10,color:'#a89a92'}}>Live from new visits table · realtime stream + 15s fallback</div>
+          <div style={{fontSize:10,color:'#61707D'}}>Live from new visits table · realtime stream + 15s fallback</div>
         </div>
-        <div style={{fontSize:24,fontWeight:700,color:'#1a1a1a'}}>{visits.length}</div>
+        <div style={{fontSize:24,fontWeight:700,color:'#131F23'}}>{visits.length}</div>
       </div>
       {visits.length === 0 ? (
         <div style={{fontSize:12,color:'var(--text-muted)',padding:'14px 0',textAlign:'center'}}>No upcoming pre-approvals.</div>
       ) : (
         <div style={{maxHeight:280,overflowY:'auto'}}>
           {visits.map(v => (
-            <div key={v.id} style={{padding:'10px 12px',background:'#e8e3de',borderRadius:6,marginBottom:6,display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+            <div key={v.id} style={{padding:'10px 12px',background:'#E6EAE9',borderRadius:6,marginBottom:6,display:'flex',justifyContent:'space-between',alignItems:'center'}}>
               <div style={{minWidth:0,flex:1}}>
-                <div style={{fontSize:13,fontWeight:500,color:'#1a1a1a'}}>{v.visitor_name}</div>
+                <div style={{fontSize:13,fontWeight:500,color:'#131F23'}}>{v.visitor_name}</div>
                 <div style={{fontSize:11,color:'#6b6156',marginTop:2}}>
                   {v.visit_date}{v.visit_time ? ' · ' + v.visit_time : ''} · {v.type}{v.visitor_phone ? ' · ' + v.visitor_phone : ''}
                 </div>
               </div>
-              <div style={{fontSize:10,color:'#928989',background:'#fff',padding:'4px 8px',borderRadius:4,marginLeft:8,flexShrink:0}}>
+              <div style={{fontSize:10,color:'#3E4C59',background:'#fff',padding:'4px 8px',borderRadius:4,marginLeft:8,flexShrink:0}}>
                 {v.permit_ref || '—'}
               </div>
             </div>

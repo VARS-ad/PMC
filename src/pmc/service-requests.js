@@ -110,10 +110,10 @@ const ServiceRequestsPage = () => {
           <div className="subtitle">{activeCount} active · {pendingCount} pending approval · {escalatedCount} escalated</div>
         </div>
         <div style={{display:'flex',gap:12,alignItems:'center'}}>
-          <div style={{display:'flex',border:'1px solid #d5cfc8',borderRadius:6,overflow:'hidden'}}>
+          <div style={{display:'flex',border:'1px solid #D0D6D5',borderRadius:6,overflow:'hidden'}}>
             {[t('pm.calendarView'),t('pm.listView')].map(v => (
               <button key={v} onClick={() => setViewMode(v)}
-                style={{padding:'8px 20px',fontSize:13,fontWeight:viewMode===v?600:400,background:viewMode===v?'#1a1a1a':'#fff',color:viewMode===v?'#fff':'#1a1a1a',border:'none',cursor:'pointer'}}>
+                style={{padding:'8px 20px',fontSize:13,fontWeight:viewMode===v?600:400,background:viewMode===v?'#131F23':'#fff',color:viewMode===v?'#fff':'#131F23',border:'none',cursor:'pointer'}}>
                 {v}
               </button>
             ))}
@@ -128,10 +128,10 @@ const ServiceRequestsPage = () => {
         <div className="card">
           <MiniCalendar selectedDate={selectedDate} onDateSelect={setSelectedDate} eventDayMap={eventDayMap}/>
           <div style={{marginTop:16,fontSize:12}}>
-            <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:6}}><span style={{width:8,height:8,borderRadius:'50%',background:'#928989',display:'inline-block'}}/><span style={{color:'#1a1a1a'}}>{t('pm.legendMoveInOut')}</span></div>
-            <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:6}}><span style={{width:8,height:8,borderRadius:'50%',background:'#8a8a8a',display:'inline-block'}}/><span style={{color:'#a89a92'}}>{t('pm.legendInstallation')}</span></div>
-            <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:6}}><span style={{width:8,height:8,borderRadius:'50%',background:'#c0c0c0',display:'inline-block'}}/><span style={{color:'#a89a92'}}>{t('pm.legendHandymanMaint')}</span></div>
-            <div style={{display:'flex',alignItems:'center',gap:8}}><span style={{width:8,height:8,borderRadius:'50%',background:'#e8e3de',display:'inline-block'}}/><span style={{color:'#a89a92'}}>{t('pm.legendPestOther')}</span></div>
+            <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:6}}><span style={{width:8,height:8,borderRadius:'50%',background:'#3E4C59',display:'inline-block'}}/><span style={{color:'#131F23'}}>{t('pm.legendMoveInOut')}</span></div>
+            <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:6}}><span style={{width:8,height:8,borderRadius:'50%',background:'#61707D',display:'inline-block'}}/><span style={{color:'#61707D'}}>{t('pm.legendInstallation')}</span></div>
+            <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:6}}><span style={{width:8,height:8,borderRadius:'50%',background:'#c0c0c0',display:'inline-block'}}/><span style={{color:'#61707D'}}>{t('pm.legendHandymanMaint')}</span></div>
+            <div style={{display:'flex',alignItems:'center',gap:8}}><span style={{width:8,height:8,borderRadius:'50%',background:'#E6EAE9',display:'inline-block'}}/><span style={{color:'#61707D'}}>{t('pm.legendPestOther')}</span></div>
           </div>
         </div>
 
@@ -141,7 +141,7 @@ const ServiceRequestsPage = () => {
             <div className="card-header">
               <div style={{display:'flex',alignItems:'center',gap:12}}>
                 <h3>{formatDate(selectedDate)} — {dayRequests.length} requests</h3>
-                <input type="date" value={selectedDate instanceof Date ? selectedDate.toISOString().split('T')[0] : new Date(selectedDate).toISOString().split('T')[0]} onChange={e=>{ const d = new Date(e.target.value + 'T12:00:00'); if (!isNaN(d)) setSelectedDate(d); }} style={{padding:'6px 12px',border:'1px solid #d5cfc8',borderRadius:6,fontSize:13}}/>
+                <input type="date" value={selectedDate instanceof Date ? selectedDate.toISOString().split('T')[0] : new Date(selectedDate).toISOString().split('T')[0]} onChange={e=>{ const d = new Date(e.target.value + 'T12:00:00'); if (!isNaN(d)) setSelectedDate(d); }} style={{padding:'6px 12px',border:'1px solid #D0D6D5',borderRadius:6,fontSize:13}}/>
               </div>
               <button className="btn btn-sm" style={{display:'flex',alignItems:'center',gap:4}}><Icon name="filter" size={12}/> {t('pm.filterBtn')}</button>
             </div>
@@ -151,62 +151,62 @@ const ServiceRequestsPage = () => {
                 {/* Request row */}
                 <div style={{display:'flex',alignItems:'center',gap:16,padding:'14px 0',borderBottom: expandedSR?.id === r.id ? 'none' : '1px solid #f0f0f0',cursor:'pointer'}}
                   onClick={() => setExpandedSR(expandedSR?.id === r.id ? null : r)}>
-                  <span style={{fontWeight:600,color:'#a89a92',minWidth:44,fontSize:13}}>{r.time}</span>
+                  <span style={{fontWeight:600,color:'#61707D',minWidth:44,fontSize:13}}>{r.time}</span>
                   <div style={{flex:1}}>
-                    <div style={{fontWeight:600,color:'#1a1a1a',fontSize:14}}>{r.type} <span style={{fontWeight:400,color:'#a89a92'}}>— {r.id}</span></div>
-                    <div style={{fontSize:12,color:'#a89a92'}}>{r.flat} · {r.resident}</div>
+                    <div style={{fontWeight:600,color:'#131F23',fontSize:14}}>{r.type} <span style={{fontWeight:400,color:'#61707D'}}>— {r.id}</span></div>
+                    <div style={{fontSize:12,color:'#61707D'}}>{r.flat} · {r.resident}</div>
                   </div>
                   <StatusBadge status={r.status}/>
-                  <span style={{fontSize:11,color:'#a89a92',display:'flex',alignItems:'center',gap:4}}>
-                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#8a8a8a" strokeWidth="2"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+                  <span style={{fontSize:11,color:'#61707D',display:'flex',alignItems:'center',gap:4}}>
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#61707D" strokeWidth="2"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
                     SLA: {r.sla}
                   </span>
-                  <span style={{color:'#a89a92',fontSize:16,transform: expandedSR?.id === r.id ? 'rotate(180deg)' : 'rotate(0deg)',transition:'transform 0.2s'}}>∧</span>
+                  <span style={{color:'#61707D',fontSize:16,transform: expandedSR?.id === r.id ? 'rotate(180deg)' : 'rotate(0deg)',transition:'transform 0.2s'}}>∧</span>
                 </div>
 
                 {/* Expanded Detail */}
                 {expandedSR?.id === r.id && (
-                  <div style={{padding:'0 0 16px',borderBottom:'1px solid #ebe7e3'}}>
+                  <div style={{padding:'0 0 16px',borderBottom:'1px solid #E6EAE9'}}>
                     <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 280px',gap:16}}>
                       {/* Left: Detail Grid */}
                       <div>
                         <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12,marginBottom:16}}>
-                          <div><div style={{fontSize:10,color:'#a89a92',letterSpacing:'0.04em',textTransform:'uppercase',marginBottom:4}}>{t('pm.requestId')}</div><div style={{fontSize:13,fontWeight:600,color:'#1a1a1a'}}>{r.id}</div></div>
-                          <div><div style={{fontSize:10,color:'#a89a92',letterSpacing:'0.04em',textTransform:'uppercase',marginBottom:4}}>{t('pm.serviceType')}</div><div style={{fontSize:13,fontWeight:600,color:'#1a1a1a'}}>{r.type}</div></div>
-                          <div><div style={{fontSize:10,color:'#a89a92',letterSpacing:'0.04em',textTransform:'uppercase',marginBottom:4}}>{t('pm.flat')}</div><div style={{fontSize:13,fontWeight:600,color:'#1a1a1a'}}>{r.flat}</div></div>
-                          <div><div style={{fontSize:10,color:'#a89a92',letterSpacing:'0.04em',textTransform:'uppercase',marginBottom:4}}>{t('pm.residentCol')}</div><div style={{fontSize:13,fontWeight:600,color:'#1a1a1a'}}>{r.resident}</div></div>
-                          <div><div style={{fontSize:10,color:'#a89a92',letterSpacing:'0.04em',textTransform:'uppercase',marginBottom:4}}>SLA</div><div style={{fontSize:13,fontWeight:600,color:'#1a1a1a'}}>{r.sla} {t('pm.fromApproval')}</div></div>
-                          <div><div style={{fontSize:10,color:'#a89a92',letterSpacing:'0.04em',textTransform:'uppercase',marginBottom:4}}>Documents</div><div style={{fontSize:13,fontWeight:600,color:'#1a1a1a'}}>1 attached</div></div>
+                          <div><div style={{fontSize:10,color:'#61707D',letterSpacing:'0.04em',textTransform:'uppercase',marginBottom:4}}>{t('pm.requestId')}</div><div style={{fontSize:13,fontWeight:600,color:'#131F23'}}>{r.id}</div></div>
+                          <div><div style={{fontSize:10,color:'#61707D',letterSpacing:'0.04em',textTransform:'uppercase',marginBottom:4}}>{t('pm.serviceType')}</div><div style={{fontSize:13,fontWeight:600,color:'#131F23'}}>{r.type}</div></div>
+                          <div><div style={{fontSize:10,color:'#61707D',letterSpacing:'0.04em',textTransform:'uppercase',marginBottom:4}}>{t('pm.flat')}</div><div style={{fontSize:13,fontWeight:600,color:'#131F23'}}>{r.flat}</div></div>
+                          <div><div style={{fontSize:10,color:'#61707D',letterSpacing:'0.04em',textTransform:'uppercase',marginBottom:4}}>{t('pm.residentCol')}</div><div style={{fontSize:13,fontWeight:600,color:'#131F23'}}>{r.resident}</div></div>
+                          <div><div style={{fontSize:10,color:'#61707D',letterSpacing:'0.04em',textTransform:'uppercase',marginBottom:4}}>SLA</div><div style={{fontSize:13,fontWeight:600,color:'#131F23'}}>{r.sla} {t('pm.fromApproval')}</div></div>
+                          <div><div style={{fontSize:10,color:'#61707D',letterSpacing:'0.04em',textTransform:'uppercase',marginBottom:4}}>Documents</div><div style={{fontSize:13,fontWeight:600,color:'#131F23'}}>1 attached</div></div>
                         </div>
 
                         {/* Validation Checklist */}
-                        <div style={{fontSize:12,fontWeight:600,color:'#1a1a1a',marginBottom:8}}>{t('pm.validationChecklist')}</div>
+                        <div style={{fontSize:12,fontWeight:600,color:'#131F23',marginBottom:8}}>{t('pm.validationChecklist')}</div>
                         {getChecklist(r).map((c, ci) => (
                           <div key={ci} style={{display:'flex',alignItems:'center',gap:8,marginBottom:6}}>
                             {c.done ? (
-                              <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><rect width="24" height="24" rx="4" fill="#1a1a1a"/><path d="M9 12l2 2 4-4" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                              <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><rect width="24" height="24" rx="4" fill="#131F23"/><path d="M9 12l2 2 4-4" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
                             ) : (
                               <div style={{width:16,height:16,border:'1.5px solid #d0d0d0',borderRadius:4}}/>
                             )}
-                            <span style={{fontSize:12,color: c.done ? '#1a1a1a' : '#8a8a8a'}}>{c.label}</span>
+                            <span style={{fontSize:12,color: c.done ? '#131F23' : '#61707D'}}>{c.label}</span>
                           </div>
                         ))}
                       </div>
 
                       {/* Right: Documents + Actions */}
                       <div style={{gridColumn:'3'}}>
-                        <div style={{border:'1px solid #ebe7e3',borderRadius:6,padding:20,textAlign:'center',marginBottom:16}}>
-                          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#8a8a8a" strokeWidth="1.5" style={{marginBottom:8}}><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6"/><path d="M12 18v-6"/><path d="M9 15l3-3 3 3"/></svg>
-                          <div style={{fontSize:12,color:'#a89a92'}}>{t('pm.documentsLabel')} (1)</div>
+                        <div style={{border:'1px solid #E6EAE9',borderRadius:6,padding:20,textAlign:'center',marginBottom:16}}>
+                          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#61707D" strokeWidth="1.5" style={{marginBottom:8}}><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6"/><path d="M12 18v-6"/><path d="M9 15l3-3 3 3"/></svg>
+                          <div style={{fontSize:12,color:'#61707D'}}>{t('pm.documentsLabel')} (1)</div>
                         </div>
 
-                        <div style={{border:'1px solid #ebe7e3',borderRadius:6,padding:16,marginBottom:16}}>
+                        <div style={{border:'1px solid #E6EAE9',borderRadius:6,padding:16,marginBottom:16}}>
                           <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}}>
-                            <span style={{fontSize:12,fontWeight:600,color:'#1a1a1a'}}>{t('pm.residentApprovalLabel')}</span>
+                            <span style={{fontSize:12,fontWeight:600,color:'#131F23'}}>{t('pm.residentApprovalLabel')}</span>
                           </div>
                           <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
-                            <span style={{fontSize:12,color:'#a89a92'}}>{t('pm.overrideApproval')}</span>
-                            <div style={{width:36,height:20,borderRadius:10,background: r.status === 'Scheduled' || r.status === 'Completed' ? '#1a1a1a' : '#d0d0d0',position:'relative',cursor:'pointer'}}>
+                            <span style={{fontSize:12,color:'#61707D'}}>{t('pm.overrideApproval')}</span>
+                            <div style={{width:36,height:20,borderRadius:10,background: r.status === 'Scheduled' || r.status === 'Completed' ? '#131F23' : '#d0d0d0',position:'relative',cursor:'pointer'}}>
                               <div style={{width:16,height:16,borderRadius:'50%',background:'#fff',position:'absolute',top:2,left: r.status === 'Scheduled' || r.status === 'Completed' ? 18 : 2,transition:'left 0.2s'}}/>
                             </div>
                           </div>
@@ -221,7 +221,7 @@ const ServiceRequestsPage = () => {
                 )}
               </div>
             ))}
-            {dayRequests.length === 0 && <div style={{textAlign:'center',color:'#a89a92',padding:24,fontSize:13}}>{t('pm.noRequestsDate')}</div>}
+            {dayRequests.length === 0 && <div style={{textAlign:'center',color:'#61707D',padding:24,fontSize:13}}>{t('pm.noRequestsDate')}</div>}
           </div>
 
           {/* All Service Requests Table */}
@@ -239,13 +239,13 @@ const ServiceRequestsPage = () => {
               <tbody>
                 {paginatedSR.map(r => (
                   <tr key={r.id}>
-                    <td style={{color:'#a89a92'}}>{r.id}</td>
+                    <td style={{color:'#61707D'}}>{r.id}</td>
                     <td><strong>{r.type}</strong></td>
                     <td>{r.flat}</td>
                     <td>{r.resident}</td>
                     <td>{r.date} · {r.time}</td>
                     <td><StatusBadge status={r.status}/></td>
-                    <td style={{color:'#a89a92'}}>{r.sla || '4h'}</td>
+                    <td style={{color:'#61707D'}}>{r.sla || '4h'}</td>
                     <td>
                       <div style={{display:'flex',gap:6}}>
                         <button className="btn btn-sm" onClick={() => setExpandedSR(expandedSR?.id === r.id ? null : r)}>{t('pm.expandBtn')}</button>
@@ -261,12 +261,12 @@ const ServiceRequestsPage = () => {
             </table>
 
             {/* Pagination */}
-            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'12px 0',fontSize:12,color:'#a89a92'}}>
+            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'12px 0',fontSize:12,color:'#61707D'}}>
               <div style={{display:'flex',alignItems:'center',gap:8}}>
                 <span>Rows per page:</span>
                 {[10,25,50].map(s => (
                   <span key={s} onClick={() => { setSrPageSize(s); setSrPage(1); }}
-                    style={{padding:'4px 10px',border:'1px solid #d5cfc8',borderRadius:4,cursor:'pointer',background: srPageSize === s ? '#1a1a1a' : '#fff',color: srPageSize === s ? '#fff' : '#8a8a8a',fontWeight: srPageSize === s ? 600 : 400}}>
+                    style={{padding:'4px 10px',border:'1px solid #D0D6D5',borderRadius:4,cursor:'pointer',background: srPageSize === s ? '#131F23' : '#fff',color: srPageSize === s ? '#fff' : '#61707D',fontWeight: srPageSize === s ? 600 : 400}}>
                     {s}
                   </span>
                 ))}
@@ -285,30 +285,30 @@ const ServiceRequestsPage = () => {
               <div><div className="modal-sub">modal/schedule · {showSchedule.id}</div><h2>{t('pm.scheduleServiceTitle')}</h2></div>
               <button className="modal-close" onClick={()=>{setShowSchedule(null);setSelectedPersonnel(null);}}>×</button>
             </div>
-            <div style={{background:'#f2efec',borderRadius:6,padding:'14px 16px',marginBottom:20}}>
-              <div style={{fontWeight:600,color:'#1a1a1a',fontSize:14}}>{showSchedule.type} — {showSchedule.flat}</div>
-              <div style={{fontSize:12,color:'#a89a92',marginTop:2}}>{showSchedule.resident}</div>
+            <div style={{background:'#E6EAE9',borderRadius:6,padding:'14px 16px',marginBottom:20}}>
+              <div style={{fontWeight:600,color:'#131F23',fontSize:14}}>{showSchedule.type} — {showSchedule.flat}</div>
+              <div style={{fontSize:12,color:'#61707D',marginTop:2}}>{showSchedule.resident}</div>
             </div>
             <div style={{marginBottom:20}}>
-              <label style={{fontSize:13,fontWeight:500,color:'#1a1a1a',display:'block',marginBottom:12}}>{t('pm.chooseServicePersonnel')}</label>
+              <label style={{fontSize:13,fontWeight:500,color:'#131F23',display:'block',marginBottom:12}}>{t('pm.chooseServicePersonnel')}</label>
               {data.servicePersonnel.map(p => (
                 <div key={p.id} onClick={() => setSelectedPersonnel(p.id)}
-                  style={{display:'flex',alignItems:'center',gap:12,padding:'12px 14px',border: selectedPersonnel === p.id ? '1.5px solid #1a1a1a' : '1px solid #e0e0e0',borderRadius:6,marginBottom:8,cursor:'pointer',background: selectedPersonnel === p.id ? '#f5f5f5' : '#fff',transition:'all 0.15s'}}>
-                  <div style={{width:36,height:36,background: selectedPersonnel === p.id ? '#1a1a1a' : '#f0f0f0',borderRadius:'50%',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={selectedPersonnel === p.id ? '#fff' : '#8a8a8a'} strokeWidth="2"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                  style={{display:'flex',alignItems:'center',gap:12,padding:'12px 14px',border: selectedPersonnel === p.id ? '1.5px solid #131F23' : '1px solid #e0e0e0',borderRadius:6,marginBottom:8,cursor:'pointer',background: selectedPersonnel === p.id ? '#f5f5f5' : '#fff',transition:'all 0.15s'}}>
+                  <div style={{width:36,height:36,background: selectedPersonnel === p.id ? '#131F23' : '#f0f0f0',borderRadius:'50%',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={selectedPersonnel === p.id ? '#fff' : '#61707D'} strokeWidth="2"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
                   </div>
                   <div style={{flex:1}}>
-                    <div style={{fontWeight:selectedPersonnel === p.id ? 600 : 500,color:'#1a1a1a',fontSize:13}}>{p.name}</div>
-                    <div style={{fontSize:11,color:'#a89a92'}}>{p.specialty}</div>
+                    <div style={{fontWeight:selectedPersonnel === p.id ? 600 : 500,color:'#131F23',fontSize:13}}>{p.name}</div>
+                    <div style={{fontSize:11,color:'#61707D'}}>{p.specialty}</div>
                   </div>
                   {selectedPersonnel === p.id && (
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#1a1a1a" strokeWidth="2.5"><path d="M20 6L9 17l-5-5"/></svg>
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#131F23" strokeWidth="2.5"><path d="M20 6L9 17l-5-5"/></svg>
                   )}
                 </div>
               ))}
             </div>
-            <div className="form-group"><label style={{fontSize:13,fontWeight:500,color:'#1a1a1a'}}>b. {t('pm.scheduleServiceTitle')} Date</label><input className="form-input" type="date"/></div>
-            <div className="form-group"><label style={{fontSize:13,fontWeight:500,color:'#1a1a1a'}}>c. {t('pm.scheduleServiceTitle')} Time</label><input className="form-input" type="time"/></div>
+            <div className="form-group"><label style={{fontSize:13,fontWeight:500,color:'#131F23'}}>b. {t('pm.scheduleServiceTitle')} Date</label><input className="form-input" type="date"/></div>
+            <div className="form-group"><label style={{fontSize:13,fontWeight:500,color:'#131F23'}}>c. {t('pm.scheduleServiceTitle')} Time</label><input className="form-input" type="time"/></div>
             <div className="grid-2" style={{marginTop:8}}>
               <button className="btn btn-primary" style={{display:'flex',alignItems:'center',justifyContent:'center',gap:6}} onClick={()=>{setShowSchedule(null);setSelectedPersonnel(null);showToast('Service scheduled!');}}>
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>

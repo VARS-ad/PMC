@@ -108,13 +108,13 @@ const PMCServiceRequestsPage = () => {
 
   const statusBadge = (s) => {
     const c = ({
-      'New':         { bg: '#f5f3f0', fg: '#7a6e60' },
-      'Acknowledged':{ bg: '#e8e3de', fg: '#4a4540' },
+      'New':         { bg: '#E6EAE9', fg: '#61707D' },
+      'Acknowledged':{ bg: '#E6EAE9', fg: '#4a4540' },
       'In Progress': { bg: '#a07d3c', fg: '#fff' },
       'Done':        { bg: '#e6efe1', fg: '#5a6b4f' },
       'Closed':      { bg: '#ccc8c1', fg: '#4a4540' },
       'Rejected':    { bg: '#fdf2f1', fg: '#8b4a42' },
-    })[s] || { bg: '#f5f3f0', fg: '#888' };
+    })[s] || { bg: '#E6EAE9', fg: '#888' };
     return <span style={{padding:'3px 10px',borderRadius:4,fontSize:11,fontWeight:500,background:c.bg,color:c.fg}}>{s}</span>;
   };
 

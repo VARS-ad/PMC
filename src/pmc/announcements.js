@@ -73,7 +73,7 @@ const AnnouncementsPage = () => {
 
   // Simple toolbar button
   const ToolBtn = ({ children }) => (
-    <span style={{display:'inline-flex',alignItems:'center',justifyContent:'center',width:32,height:32,border:'1px solid #d5cfc8',borderRadius:4,cursor:'pointer',fontSize:13,fontWeight:600,color:'#1a1a1a',background:'#fff'}}>{children}</span>
+    <span style={{display:'inline-flex',alignItems:'center',justifyContent:'center',width:32,height:32,border:'1px solid #D0D6D5',borderRadius:4,cursor:'pointer',fontSize:13,fontWeight:600,color:'#131F23',background:'#fff'}}>{children}</span>
   );
 
   return (
@@ -85,15 +85,15 @@ const AnnouncementsPage = () => {
       <div className="filter-row">
         {filters.map(f => <span key={f.label} className={`chip ${filter===f.label?'active':''}`} onClick={()=>setFilter(f.label)}>{f.label} {f.count}</span>)}
       </div>
-      {filtered.length === 0 && <div style={{textAlign:'center',color:'#a89a92',padding:40,fontSize:13}}>{t('pm.noAnnouncementsCat')}</div>}
+      {filtered.length === 0 && <div style={{textAlign:'center',color:'#61707D',padding:40,fontSize:13}}>{t('pm.noAnnouncementsCat')}</div>}
       {filtered.map(a => (
         <div key={a.id} className="announcement-card">
           <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start'}}>
             <div style={{flex:1}}>
               <div className="tags">
                 <StatusBadge status={a.status}/>
-                {a.priority==='High' && <span style={{fontSize:11,color:'#8a7f76',border:'1px solid #d5cfc8',borderRadius:3,padding:'1px 8px'}}>△ {t('pm.markHighPriority')}</span>}
-                {a.ackRequired && <span style={{fontSize:11,color:'#8a7f76',border:'1px solid #d5cfc8',borderRadius:3,padding:'1px 8px'}}>{t('pm.ackRequiredLabel')} {t('pm.requireAck')}</span>}
+                {a.priority==='High' && <span style={{fontSize:11,color:'#61707D',border:'1px solid #D0D6D5',borderRadius:3,padding:'1px 8px'}}>△ {t('pm.markHighPriority')}</span>}
+                {a.ackRequired && <span style={{fontSize:11,color:'#61707D',border:'1px solid #D0D6D5',borderRadius:3,padding:'1px 8px'}}>{t('pm.ackRequiredLabel')} {t('pm.requireAck')}</span>}
               </div>
               <h3 style={{fontSize:16,fontWeight:600,marginBottom:6}}>{a.title}</h3>
               {a.body && <p style={{fontSize:13,color:'#7a6f66',margin:'4px 0 8px',lineHeight:1.5}}>{a.body}</p>}
@@ -112,14 +112,14 @@ const AnnouncementsPage = () => {
           </div>
           {(a.delivered > 0 || a.read > 0) && (
             <div style={{display:'flex',gap:24,alignItems:'center',flexWrap:'wrap',marginTop:16,paddingTop:16,borderTop:'1px solid #f0f0f0'}}>
-              <div><div style={{fontSize:10,color:'#a89a92',letterSpacing:'0.04em'}}>{t('pm.deliveredCol')}</div><div style={{fontWeight:600,fontSize:14}}>{a.delivered.toLocaleString()}</div></div>
-              <div><div style={{fontSize:10,color:'#a89a92',letterSpacing:'0.04em'}}>{t('pm.readCol')}</div><div style={{fontWeight:600,fontSize:14}}>{a.read.toLocaleString()}</div></div>
-              {a.acknowledged > 0 && <div><div style={{fontSize:10,color:'#a89a92',letterSpacing:'0.04em'}}>{t('pm.acknowledgedCol')}</div><div style={{fontWeight:600,fontSize:14}}>{a.acknowledged.toLocaleString()}</div></div>}
+              <div><div style={{fontSize:10,color:'#61707D',letterSpacing:'0.04em'}}>{t('pm.deliveredCol')}</div><div style={{fontWeight:600,fontSize:14}}>{a.delivered.toLocaleString()}</div></div>
+              <div><div style={{fontSize:10,color:'#61707D',letterSpacing:'0.04em'}}>{t('pm.readCol')}</div><div style={{fontWeight:600,fontSize:14}}>{a.read.toLocaleString()}</div></div>
+              {a.acknowledged > 0 && <div><div style={{fontSize:10,color:'#61707D',letterSpacing:'0.04em'}}>{t('pm.acknowledgedCol')}</div><div style={{fontWeight:600,fontSize:14}}>{a.acknowledged.toLocaleString()}</div></div>}
               {a.read > 0 && a.delivered > 0 && <div style={{flex:1,display:'flex',alignItems:'center',gap:8,minWidth:120}}>
                 <div className="progress-bar"><div className="fill" style={{width:`${Math.round(a.read/a.delivered*100)}%`}}/></div>
-                <span style={{fontSize:11,color:'#a89a92'}}>{Math.round(a.read/a.delivered*100)}% {t('pm.readRateLabel')}</span>
+                <span style={{fontSize:11,color:'#61707D'}}>{Math.round(a.read/a.delivered*100)}% {t('pm.readRateLabel')}</span>
               </div>}
-              <span style={{fontSize:11,color:'#a89a92'}}>{t('pm.announceAudit')}: {a.author} · {a.created}</span>
+              <span style={{fontSize:11,color:'#61707D'}}>{t('pm.announceAudit')}: {a.author} · {a.created}</span>
             </div>
           )}
         </div>
@@ -159,11 +159,11 @@ const AnnouncementsPage = () => {
             {/* Step 1: Compose */}
             {composerStep===1 && (<div>
               <div style={{marginBottom:20}}>
-                <label style={{fontSize:11,fontWeight:600,letterSpacing:'0.06em',textTransform:'uppercase',color:'#1a1a1a',display:'block',marginBottom:8}}>{t('pm.titleLabel')} *</label>
+                <label style={{fontSize:11,fontWeight:600,letterSpacing:'0.06em',textTransform:'uppercase',color:'#131F23',display:'block',marginBottom:8}}>{t('pm.titleLabel')} *</label>
                 <input className="form-input" placeholder="Announcement title" value={annForm.title} onChange={e => setAnnForm(p => ({...p, title: e.target.value}))} style={{padding:'12px 14px',fontSize:13}}/>
               </div>
               <div style={{marginBottom:20}}>
-                <label style={{fontSize:11,fontWeight:600,letterSpacing:'0.06em',textTransform:'uppercase',color:'#1a1a1a',display:'block',marginBottom:8}}>{t('pm.bodyLabel')}</label>
+                <label style={{fontSize:11,fontWeight:600,letterSpacing:'0.06em',textTransform:'uppercase',color:'#131F23',display:'block',marginBottom:8}}>{t('pm.bodyLabel')}</label>
                 {/* Rich text toolbar */}
                 <div style={{display:'flex',gap:4,marginBottom:8}}>
                   <ToolBtn>B</ToolBtn>
@@ -175,7 +175,7 @@ const AnnouncementsPage = () => {
                 <textarea className="form-input" rows={4} placeholder="Write your announcement here..." value={annForm.body} onChange={e => setAnnForm(p => ({...p, body: e.target.value}))} style={{resize:'vertical',padding:'12px 14px',fontSize:13}}/>
               </div>
               <div style={{marginBottom:20}}>
-                <label style={{fontSize:11,fontWeight:600,letterSpacing:'0.06em',textTransform:'uppercase',color:'#1a1a1a',display:'block',marginBottom:8}}>{t('pm.announcePriority')}</label>
+                <label style={{fontSize:11,fontWeight:600,letterSpacing:'0.06em',textTransform:'uppercase',color:'#131F23',display:'block',marginBottom:8}}>{t('pm.announcePriority')}</label>
                 <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
                   <div onClick={() => setAnnForm(p => ({...p, priority:'Normal'}))}
                     style={{padding:'14px 16px',textAlign:'center',border: annForm.priority==='Normal' ? '1.5px solid var(--bg-warm-dark)' : '1px solid var(--border-light)',borderRadius:8,cursor:'pointer',background: annForm.priority==='Normal' ? 'var(--bg-warm-dark)' : '#fff',color: annForm.priority==='Normal' ? '#fff' : 'var(--text-dark)',fontWeight:500,fontSize:13,transition:'all 0.15s'}}>
@@ -188,16 +188,16 @@ const AnnouncementsPage = () => {
                 </div>
               </div>
               <div style={{marginBottom:20}}>
-                <label style={{fontSize:11,fontWeight:600,letterSpacing:'0.06em',textTransform:'uppercase',color:'#1a1a1a',display:'block',marginBottom:8}}>{t('pm.announceAttachment')}</label>
-                <div style={{display:'flex',alignItems:'center',gap:10,padding:'14px 16px',border:'1px solid #ebe7e3',borderRadius:8,background:'#fff'}}>
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#8a8a8a" strokeWidth="1.5"><path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48"/></svg>
-                  <span style={{color:'#a89a92',fontSize:12}}>Upload image or document<br/>JPG, PNG, PDF up to 10MB</span>
+                <label style={{fontSize:11,fontWeight:600,letterSpacing:'0.06em',textTransform:'uppercase',color:'#131F23',display:'block',marginBottom:8}}>{t('pm.announceAttachment')}</label>
+                <div style={{display:'flex',alignItems:'center',gap:10,padding:'14px 16px',border:'1px solid #E6EAE9',borderRadius:8,background:'#fff'}}>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#61707D" strokeWidth="1.5"><path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48"/></svg>
+                  <span style={{color:'#61707D',fontSize:12}}>Upload image or document<br/>JPG, PNG, PDF up to 10MB</span>
                 </div>
               </div>
               <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:24}}>
                 <div>
-                  <div style={{fontSize:13,fontWeight:600,color:'#1a1a1a'}}>Acknowledgement Required</div>
-                  <div style={{fontSize:11,color:'#a89a92'}}>{t('pm.ackRequiredDesc')}</div>
+                  <div style={{fontSize:13,fontWeight:600,color:'#131F23'}}>Acknowledgement Required</div>
+                  <div style={{fontSize:11,color:'#61707D'}}>{t('pm.ackRequiredDesc')}</div>
                 </div>
                 <Toggle value={annForm.ackRequired} onChange={() => setAnnForm(p => ({...p, ackRequired: !p.ackRequired}))}/>
               </div>
@@ -206,7 +206,7 @@ const AnnouncementsPage = () => {
 
             {/* Step 2: Audience */}
             {composerStep===2 && (<div>
-              <p style={{color:'#a89a92',marginBottom:16,fontSize:13}}>{t('pm.selectWhoReceive')}</p>
+              <p style={{color:'#61707D',marginBottom:16,fontSize:13}}>{t('pm.selectWhoReceive')}</p>
               {[
                 {label:t('pm.allResidents'),sub:'1,240 ' + t('pm.recipientCount'),val:'All Residents'},
                 {label:t('pm.allResidentsGuards'),sub:'1,258 ' + t('pm.recipientCount'),val:'All Residents + Guards'},
@@ -235,7 +235,7 @@ const AnnouncementsPage = () => {
 
             {/* Step 3: Schedule */}
             {composerStep===3 && (<div>
-              <p style={{color:'#a89a92',marginBottom:16,fontSize:13}}>{t('pm.choosePubTime')}</p>
+              <p style={{color:'#61707D',marginBottom:16,fontSize:13}}>{t('pm.choosePubTime')}</p>
               <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:8,marginBottom:16}}>
                 {[
                   {key:'now',label:t('pm.publishNow'),sub:t('pm.sendImmediately')},
@@ -254,16 +254,16 @@ const AnnouncementsPage = () => {
 
               {/* Schedule Date/Time picker — only shown when Schedule is selected */}
               {annForm.publishMode === 'schedule' && (
-                <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12,marginBottom:16,padding:16,background:'#f2efec',borderRadius:6,border:'1px solid #ebe7e3'}}>
+                <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12,marginBottom:16,padding:16,background:'#E6EAE9',borderRadius:6,border:'1px solid #E6EAE9'}}>
                   <div>
-                    <label style={{fontSize:11,color:'#a89a92',letterSpacing:'0.04em',textTransform:'uppercase',display:'block',marginBottom:6}}>{t('pm.scheduleDateLabel')}</label>
+                    <label style={{fontSize:11,color:'#61707D',letterSpacing:'0.04em',textTransform:'uppercase',display:'block',marginBottom:6}}>{t('pm.scheduleDateLabel')}</label>
                     <input type="date" value={annForm.scheduleDate} onChange={e => setAnnForm(p => ({...p, scheduleDate: e.target.value}))}
-                      style={{width:'100%',padding:'10px 12px',background:'#fff',border:'1px solid #d5cfc8',borderRadius:4,color:'#1a1a1a',fontSize:13,boxSizing:'border-box',outline:'none'}}/>
+                      style={{width:'100%',padding:'10px 12px',background:'#fff',border:'1px solid #D0D6D5',borderRadius:4,color:'#131F23',fontSize:13,boxSizing:'border-box',outline:'none'}}/>
                   </div>
                   <div>
-                    <label style={{fontSize:11,color:'#a89a92',letterSpacing:'0.04em',textTransform:'uppercase',display:'block',marginBottom:6}}>{t('pm.scheduleTimeLabel')}</label>
+                    <label style={{fontSize:11,color:'#61707D',letterSpacing:'0.04em',textTransform:'uppercase',display:'block',marginBottom:6}}>{t('pm.scheduleTimeLabel')}</label>
                     <input type="time" value={annForm.scheduleTime} onChange={e => setAnnForm(p => ({...p, scheduleTime: e.target.value}))}
-                      style={{width:'100%',padding:'10px 12px',background:'#fff',border:'1px solid #d5cfc8',borderRadius:4,color:'#1a1a1a',fontSize:13,boxSizing:'border-box',outline:'none'}}/>
+                      style={{width:'100%',padding:'10px 12px',background:'#fff',border:'1px solid #D0D6D5',borderRadius:4,color:'#131F23',fontSize:13,boxSizing:'border-box',outline:'none'}}/>
                   </div>
                 </div>
               )}
@@ -276,32 +276,32 @@ const AnnouncementsPage = () => {
 
             {/* Step 4: Preview */}
             {composerStep===4 && (<div>
-              <div style={{background:'#f2efec',borderRadius:8,padding:20,marginBottom:20}}>
+              <div style={{background:'#E6EAE9',borderRadius:8,padding:20,marginBottom:20}}>
                 <div style={{display:'flex',gap:6,marginBottom:8}}>
                   <StatusBadge status={annForm.publishMode==='now'?'Live':annForm.publishMode==='schedule'?'Scheduled':'Draft'}/>
-                  {annForm.priority==='High' && <span style={{fontSize:11,border:'1px solid #d5cfc8',borderRadius:3,padding:'1px 8px',background:'#fff'}}>△ High Priority</span>}
-                  {annForm.ackRequired && <span style={{fontSize:11,border:'1px solid #d5cfc8',borderRadius:3,padding:'1px 8px',background:'#fff'}}>Ack Required</span>}
+                  {annForm.priority==='High' && <span style={{fontSize:11,border:'1px solid #D0D6D5',borderRadius:3,padding:'1px 8px',background:'#fff'}}>△ High Priority</span>}
+                  {annForm.ackRequired && <span style={{fontSize:11,border:'1px solid #D0D6D5',borderRadius:3,padding:'1px 8px',background:'#fff'}}>Ack Required</span>}
                 </div>
                 <div style={{fontWeight:600,fontSize:15,marginBottom:4}}>{annForm.title || '[Untitled]'}</div>
                 {annForm.body && <p style={{fontSize:13,color:'#7a6f66',margin:'0 0 8px',lineHeight:1.5}}>{annForm.body}</p>}
-                <div style={{fontSize:12,color:'#a89a92'}}>Audience: {annForm.audience}</div>
+                <div style={{fontSize:12,color:'#61707D'}}>Audience: {annForm.audience}</div>
                 {annForm.publishMode === 'schedule' && annForm.scheduleDate && (
-                  <div style={{fontSize:12,color:'#a89a92'}}>Scheduled: {annForm.scheduleDate} at {annForm.scheduleTime || '—'}</div>
+                  <div style={{fontSize:12,color:'#61707D'}}>Scheduled: {annForm.scheduleDate} at {annForm.scheduleTime || '—'}</div>
                 )}
-                {annForm.ackRequired && <div style={{fontSize:12,color:'#a89a92'}}>Acknowledgement required</div>}
+                {annForm.ackRequired && <div style={{fontSize:12,color:'#61707D'}}>Acknowledgement required</div>}
               </div>
 
-              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12,fontSize:13,marginBottom:20,background:'#fff',border:'1px solid #ebe7e3',borderRadius:6,padding:16}}>
-                <div><span style={{color:'#a89a92'}}>Audience:</span> <strong>{annForm.audience}</strong></div>
-                <div><span style={{color:'#a89a92'}}>Priority:</span> <strong>{annForm.priority}</strong></div>
-                <div><span style={{color:'#a89a92'}}>Publish:</span> <strong>{annForm.publishMode==='now'?'Immediately':annForm.publishMode==='schedule'?'Scheduled':'Draft'}</strong></div>
-                <div><span style={{color:'#a89a92'}}>Acknowledgement:</span> <strong>{annForm.ackRequired ? 'Required' : 'Not required'}</strong></div>
+              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12,fontSize:13,marginBottom:20,background:'#fff',border:'1px solid #E6EAE9',borderRadius:6,padding:16}}>
+                <div><span style={{color:'#61707D'}}>Audience:</span> <strong>{annForm.audience}</strong></div>
+                <div><span style={{color:'#61707D'}}>Priority:</span> <strong>{annForm.priority}</strong></div>
+                <div><span style={{color:'#61707D'}}>Publish:</span> <strong>{annForm.publishMode==='now'?'Immediately':annForm.publishMode==='schedule'?'Scheduled':'Draft'}</strong></div>
+                <div><span style={{color:'#61707D'}}>Acknowledgement:</span> <strong>{annForm.ackRequired ? 'Required' : 'Not required'}</strong></div>
               </div>
 
               {/* Data persistence notice */}
-              <div style={{display:'flex',alignItems:'center',gap:8,padding:'10px 14px',background:'#f2efec',borderRadius:6,marginBottom:20,border:'1px solid #ebe7e3'}}>
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#1a1a1a" strokeWidth="2"><path d="M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z"/><path d="M9 12l2 2 4-4"/></svg>
-                <span style={{fontSize:11,color:'#1a1a1a'}}>
+              <div style={{display:'flex',alignItems:'center',gap:8,padding:'10px 14px',background:'#E6EAE9',borderRadius:6,marginBottom:20,border:'1px solid #E6EAE9'}}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#131F23" strokeWidth="2"><path d="M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z"/><path d="M9 12l2 2 4-4"/></svg>
+                <span style={{fontSize:11,color:'#131F23'}}>
                   {annForm.publishMode === 'now' ? t('pm.publishImmediately') :
                    annForm.publishMode === 'schedule' ? t('pm.publishScheduled') :
                    t('pm.publishDraft')}
@@ -324,7 +324,7 @@ const AnnouncementsPage = () => {
         <div className="modal-overlay" onClick={()=>setShowDelete(null)}>
           <div className="modal" style={{maxWidth:400}} onClick={e=>e.stopPropagation()}>
             <h2 style={{marginBottom:8,fontSize:16}}>{t('pm.announceDelete')}</h2>
-            <p style={{color:'#8a7f76',marginBottom:20,fontSize:13}}>Are you sure you want to delete "{showDelete.title}"? {t('pm.confirmDelete')}</p>
+            <p style={{color:'#61707D',marginBottom:20,fontSize:13}}>Are you sure you want to delete "{showDelete.title}"? {t('pm.confirmDelete')}</p>
             <div className="grid-2">
               <button className="btn btn-primary" onClick={()=>handleDelete(showDelete)}>Delete</button>
               <button className="btn" onClick={()=>setShowDelete(null)}>Cancel</button>

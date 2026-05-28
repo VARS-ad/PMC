@@ -48,7 +48,7 @@ const SettingsPage = () => {
           {activeTab === t('pm.pmsProfile') && (<div>
             <h3 style={{marginBottom:20}}>{t('pm.pmsProfile')}</h3>
             <div style={{display:'flex',gap:16,marginBottom:20}}>
-              <div style={{width:56,height:56,background:'#e8e3de',borderRadius:'50%',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><Icon name="user" size={24}/></div>
+              <div style={{width:56,height:56,background:'#E6EAE9',borderRadius:'50%',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><Icon name="user" size={24}/></div>
               <div style={{flex:1}}>
                 <div className="form-group"><label>{t('pm.fullNameLabel')}</label><input className="form-input" defaultValue="Hassan Al-Manageeri"/></div>
                 <div className="grid-2">
@@ -58,7 +58,7 @@ const SettingsPage = () => {
               </div>
             </div>
             <div style={{display:'flex',gap:16,marginBottom:20}}>
-              <div style={{width:56,height:56,background:'#e8e3de',borderRadius:'50%',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><Icon name="user" size={24}/></div>
+              <div style={{width:56,height:56,background:'#E6EAE9',borderRadius:'50%',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><Icon name="user" size={24}/></div>
               <div style={{flex:1}}>
                 <div className="form-group"><label>{t('pm.fullNameLabel')}</label><input className="form-input" defaultValue="Hassan Al-Manageeri"/></div>
                 <div className="grid-2">
@@ -71,7 +71,7 @@ const SettingsPage = () => {
             <div className="grid-2" style={{marginBottom:16}}>
               {[t('pm.permVisitorManagement'),t('pm.permGuardManagement'),t('pm.permPropertyConfiguration'),t('pm.permAnnouncementCreation'),t('pm.permReportExport'),t('pm.permSystemAdmin')].map((p,i) => (
                 <div key={p} style={{display:'flex',alignItems:'center',gap:8,padding:'6px 0'}}>
-                  <div style={{width:18,height:18,borderRadius:4,border:i<5?'none':'1.5px solid #ccc',background:i<5?'#1a1a1a':'transparent',display:'flex',alignItems:'center',justifyContent:'center'}}>
+                  <div style={{width:18,height:18,borderRadius:4,border:i<5?'none':'1.5px solid #ccc',background:i<5?'#131F23':'transparent',display:'flex',alignItems:'center',justifyContent:'center'}}>
                     {i<5 && <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M2.5 6L5 8.5L9.5 3.5" stroke="#fff" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>}
                   </div>
                   <span style={{fontSize:13,color:i<5?'#333':'#999'}}>{p}</span>
@@ -101,11 +101,11 @@ const SettingsPage = () => {
               <div key={cat.category} style={{marginBottom:20}}>
                 <h4 style={{marginBottom:8}}>{cat.category}</h4>
                 {cat.items.map(item => (
-                  <div key={item.label} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'8px 0',borderBottom:'1px solid #ebe7e3'}}>
+                  <div key={item.label} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'8px 0',borderBottom:'1px solid #E6EAE9'}}>
                     <span>{item.label}</span>
                     <div style={{display:'flex',gap:16,alignItems:'center'}}>
-                      <span style={{fontSize:12,color:'#a89a92'}}>Push</span><Toggle value={item.push} onChange={()=>{}}/>
-                      <span style={{fontSize:12,color:'#a89a92'}}>Email</span><Toggle value={item.email} onChange={()=>{}}/>
+                      <span style={{fontSize:12,color:'#61707D'}}>Push</span><Toggle value={item.push} onChange={()=>{}}/>
+                      <span style={{fontSize:12,color:'#61707D'}}>Email</span><Toggle value={item.email} onChange={()=>{}}/>
                     </div>
                   </div>
                 ))}
@@ -127,8 +127,8 @@ const SettingsPage = () => {
               {label:'Enable QR pre-pass (resident-generated)',desc:'Residents can generate QR codes for guests via app',value:true},
               {label:'Two-factor approval for move-in/out',desc:'Move-in/out requires both PM and resident approval',value:true},
             ].map(p => (
-              <div key={p.label} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'12px 0',borderBottom:'1px solid #ebe7e3'}}>
-                <div><div style={{fontWeight:500}}>{p.label}</div><div style={{fontSize:12,color:'#a89a92'}}>{p.desc}</div></div>
+              <div key={p.label} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'12px 0',borderBottom:'1px solid #E6EAE9'}}>
+                <div><div style={{fontWeight:500}}>{p.label}</div><div style={{fontSize:12,color:'#61707D'}}>{p.desc}</div></div>
                 <Toggle value={p.value} onChange={()=>{}}/>
               </div>
             ))}
@@ -138,7 +138,7 @@ const SettingsPage = () => {
             <h3 style={{marginBottom:20}}>{t('pm.packagePreferences')}</h3>
             <h4 style={{marginBottom:12}}>Whitelisted Delivery Platforms</h4>
             {[{name:'Amazon',on:true},{name:'Noon',on:true},{name:'DHL',on:true},{name:'FedEx',on:true},{name:'Aramex',on:true},{name:'Deliveroo',on:false}].map(p => (
-              <div key={p.name} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'12px 0',borderBottom:'1px solid #ebe7e3'}}>
+              <div key={p.name} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'12px 0',borderBottom:'1px solid #E6EAE9'}}>
                 <span>{p.name}</span><Toggle value={p.on} onChange={()=>{}}/>
               </div>
             ))}
