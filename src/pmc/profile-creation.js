@@ -670,8 +670,8 @@ const BuildingDetailModal = ({ building, onClose }) => {
   return (
     <>
     <div className="modal-overlay" onClick={onClose}>
-      <div className="modal" onClick={e => e.stopPropagation()} style={{maxWidth:680}}>
-        <div className="modal-header">
+      <div className="modal" onClick={e => e.stopPropagation()} style={{maxWidth:1040,maxHeight:'90vh',padding:0,display:'flex',flexDirection:'column',overflow:'hidden'}}>
+        <div className="modal-header" style={{position:'sticky',top:0,background:'#fff',padding:'24px 28px 18px 32px',margin:0,borderBottom:'1px solid var(--border-light)',zIndex:2}}>
           <div>
             <div style={{fontSize:11,letterSpacing:'0.08em',textTransform:'uppercase',color:'var(--text-muted)',marginBottom:4}}>Building</div>
             <h2>{building.name}</h2>
@@ -680,7 +680,7 @@ const BuildingDetailModal = ({ building, onClose }) => {
           </div>
           <button className="modal-close" onClick={onClose}>×</button>
         </div>
-        <div style={{maxHeight:480,overflowY:'auto'}}>
+        <div style={{padding:'20px 32px 28px',overflowY:'auto',flex:1}}>
           {floors.map(f => (
             <div key={f} style={{marginBottom:18,paddingBottom:14,borderBottom:'1px solid var(--border-light)'}}>
               <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:10}}>

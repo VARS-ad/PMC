@@ -129,8 +129,8 @@ const UnitDetailModal = ({ unit, building, assignment: passedAssignment, profile
   return (
     <>
     <div className="modal-overlay" onClick={onClose}>
-      <div className="modal" onClick={e => e.stopPropagation()} style={{maxWidth:620,maxHeight:'88vh',overflowY:'auto'}}>
-        <div className="modal-header">
+      <div className="modal" onClick={e => e.stopPropagation()} style={{maxWidth:880,maxHeight:'90vh',padding:0,display:'flex',flexDirection:'column',overflow:'hidden'}}>
+        <div className="modal-header" style={{position:'sticky',top:0,background:'#fff',padding:'24px 28px 18px 32px',margin:0,borderBottom:'1px solid var(--border-light)',zIndex:2}}>
           <div>
             <div style={{fontSize:11,letterSpacing:'0.08em',textTransform:'uppercase',color:'var(--text-muted)',marginBottom:4}}>Unit</div>
             <h2>{unit.unit_number}</h2>
@@ -139,6 +139,7 @@ const UnitDetailModal = ({ unit, building, assignment: passedAssignment, profile
           <button className="modal-close" onClick={onClose}>×</button>
         </div>
 
+        <div style={{padding:'20px 32px 32px',overflowY:'auto',flex:1}}>
         {invoices === null ? (
           <div style={{padding:18,fontSize:13,color:'var(--text-muted)'}}>Loading…</div>
         ) : (
@@ -290,6 +291,7 @@ const UnitDetailModal = ({ unit, building, assignment: passedAssignment, profile
             </Section>
           </>
         )}
+        </div>
       </div>
     </div>
     {showAttachments && <UnitAttachmentsModal unit={unit} buildingName={building.name} onClose={() => setShowAttachments(false)}/>}
