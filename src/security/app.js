@@ -853,7 +853,7 @@ const SecurityApp = ({ onLogout }) => {
 
   // Filtered database export — format + visitor types + date range
   // Includes VARS branded header, metadata block, and full data columns
-  const handleExportFullDatabase = () => {
+  const handleExportFullDatabase = async () => {
     try {
       const normSt = (e) => (e.status||'').toUpperCase().trim();
       const isIn = (s) => s === 'PASSED SECURITY' || s === 'CLEARED' || s === 'INSIDE' || s === 'RESIDENT APPROVED' || s === 'APPROVED BY SECURITY' || s === 'APPROVED';
@@ -1234,6 +1234,7 @@ const SecurityApp = ({ onLogout }) => {
 
       } else if (exportFormat === 'pdf') {
         // Direct PDF download using jsPDF + autoTable — no print window, no popup
+        await ensurePdf();
         const jsPDFCtor = (window.jspdf && window.jspdf.jsPDF) || window.jsPDF;
         if (!jsPDFCtor) { showToast('PDF library failed to load — please reload the page'); return; }
         const doc = new jsPDFCtor({ orientation: 'landscape', unit: 'pt', format: 'a4' });

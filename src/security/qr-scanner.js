@@ -11,11 +11,12 @@ const QrScannerModal = ({ onClose, onScanned }) => {
     let mounted = true;
     const startScanner = async () => {
       if (!scannerRef.current) return;
-      // Check if Html5Qrcode library is loaded
-      if (typeof Html5Qrcode === 'undefined') {
-        if (mounted) { setError('QR scanner library not loaded. Use manual entry.'); setShowManual(true); }
+      // Lazy-load html5-qrcode on first use (saved ~50KB from initial page load)
+      try { await ensureQrScanner(); } catch (_) {
+        if (mounted) { setError('QR scanner library failed to load. Use manual entry.'); setShowManual(true); }
         return;
       }
+      if (!mounted) return;
       try {
         const html5QrCode = new Html5Qrcode('sec-qr-reader');
         html5QrCodeRef.current = html5QrCode;

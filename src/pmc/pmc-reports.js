@@ -211,7 +211,7 @@ const PMCReportsPage = () => {
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   };
 
-  const handleExport = (format) => {
+  const handleExport = async (format) => {
     setShowExport(false);
     if (!stats) { alert('Data is still loading — try again in a moment.'); return; }
     const today = new Date().toISOString().slice(0, 10);
@@ -304,6 +304,7 @@ const PMCReportsPage = () => {
     }
 
     if (format === 'PDF') {
+      await ensurePdf();
       const { jsPDF } = window.jspdf || {};
       if (!jsPDF) { alert('PDF library failed to load.'); return; }
       const doc = new jsPDF();

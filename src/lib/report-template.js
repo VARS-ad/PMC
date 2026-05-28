@@ -76,7 +76,8 @@ const _formatNumber = (v) => {
 
 // ---------- PDF export ----------
 
-const exportReportPDF = ({ title, subtitle, columns, rows, metadata, filename }) => {
+const exportReportPDF = async ({ title, subtitle, columns, rows, metadata, filename }) => {
+  await ensurePdf();
   const jsPDFCtor = (window.jspdf && window.jspdf.jsPDF) || window.jsPDF;
   if (!jsPDFCtor) { alert('PDF library failed to load — please reload the page'); return; }
 
@@ -224,7 +225,8 @@ const exportReportPDF = ({ title, subtitle, columns, rows, metadata, filename })
 //                      due_date, status, paid_at, payment_method }]
 // opts.filename   — base filename (timestamp + .pdf appended)
 
-const exportTenantStatementPDF = ({ tenant, contract, payments, filename }) => {
+const exportTenantStatementPDF = async ({ tenant, contract, payments, filename }) => {
+  await ensurePdf();
   const jsPDFCtor = (window.jspdf && window.jspdf.jsPDF) || window.jsPDF;
   if (!jsPDFCtor) { alert('PDF library failed to load — please reload the page'); return; }
   const doc = new jsPDFCtor({ orientation: 'portrait', unit: 'pt', format: 'a4' });
