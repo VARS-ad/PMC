@@ -82,6 +82,7 @@ const PC_TEMPLATES = {
       'After the metadata upload completes, an optional "Bulk attach documents" section appears where you can drag-drop multiple files at once.',
     ],
   },
+  contracts:   { label: 'Contracts',   singlePane: true },
   amenities:   { label: 'Amenities',   readOnly: true },
   maintenance: { label: 'Maintenance', readOnly: true },
   payments:    { label: 'Payments',    readOnly: true },
@@ -166,6 +167,8 @@ const ProfileCreationPage = () => {
   const [authChecked, setAuthChecked] = useState(false);
   const [pmcSession, setPmcSession] = useState(null);
   const isReadOnly = !!(PC_TEMPLATES[section] && PC_TEMPLATES[section].readOnly);
+  // Contracts uses a single-pane custom UI (no Summary / Bulk / Manual sub-tabs).
+  const isSinglePane = !!(PC_TEMPLATES[section] && PC_TEMPLATES[section].singlePane);
   // Vendors only has a Bulk upload sub-tab (no Summary / Manual — that lives
   // on the dedicated Vendors page in the sidebar).
   const vendorsOnly = section === 'vendors';
@@ -217,7 +220,7 @@ const ProfileCreationPage = () => {
         ))}
       </div>
 
-      {!isReadOnly && innerTabs.length > 1 && (
+      {!isReadOnly && !isSinglePane && innerTabs.length > 1 && (
         <div style={{display:'flex',gap:8,marginBottom:24}}>
           {innerTabs.map(id => (
             <div key={id}
@@ -229,9 +232,10 @@ const ProfileCreationPage = () => {
         </div>
       )}
 
-      {effectiveInner === 'summary' && <PCSummary section={section}/>}
-      {effectiveInner === 'bulk'    && <PCBulkUpload section={section}/>}
-      {effectiveInner === 'manual'  && <PCManualUpload section={section}/>}
+      {isSinglePane && section === 'contracts' && <ContractsSection/>}
+      {!isSinglePane && effectiveInner === 'summary' && <PCSummary section={section}/>}
+      {!isSinglePane && effectiveInner === 'bulk'    && <PCBulkUpload section={section}/>}
+      {!isSinglePane && effectiveInner === 'manual'  && <PCManualUpload section={section}/>}
     </div>
   );
 };
@@ -1602,11 +1606,27 @@ const EditRecordModal = ({ kind, record, onClose, onSaved }) => {
       amenities: Array.isArray(record.amenities) ? record.amenities : [],
     };
     if (kind === 'resident') return { full_name: record.full_name || '', phone: record.phone || '' };
+    if (kind === 'contract') return {
+      name:          record.name || '',
+      contract_type: record.contract_type || '',
+      counterparty:  record.counterparty || '',
+      start_date:    record.start_date || '',
+      end_date:      record.end_date || '',
+      value_aed:     record.value_aed == null ? '' : String(record.value_aed),
+      building_id:   record.building_id || '',
+      notes:         record.notes || '',
+    };
     return { full_name: record.full_name || '', phone: record.phone || '', shift: record.shift || 'Day' };
   })();
   const [form, setForm] = useState(initial);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
+  // Contracts edit needs a buildings list for the (optional) building_id select.
+  const [buildingsList, setBuildingsList] = useState([]);
+  useEffect(() => {
+    if (kind !== 'contract' || !supabaseClient) return;
+    supabaseClient.from('buildings').select('id,name').order('name').then(({ data }) => setBuildingsList(data || []));
+  }, [kind]);
   const setF = (k) => (v) => setForm(f => ({ ...f, [k]: v }));
   const toggleAmenity = (label) => setForm(f => ({ ...f, amenities: f.amenities.includes(label) ? f.amenities.filter(a => a !== label) : [...f.amenities, label] }));
 
@@ -1620,6 +1640,20 @@ const EditRecordModal = ({ kind, record, onClose, onSaved }) => {
           address: form.address.trim() || null,
           notes: form.notes.trim() || null,
           ...typePayload,
+        }).eq('id', record.id);
+        if (e) throw e;
+      } else if (kind === 'contract') {
+        if (!form.name.trim()) { setError('Contract name is required'); setBusy(false); return; }
+        if (!form.end_date)    { setError('End date is required');     setBusy(false); return; }
+        const { error: e } = await supabaseClient.from('contracts').update({
+          name:          form.name.trim(),
+          counterparty:  form.counterparty.trim() || null,
+          contract_type: form.contract_type || null,
+          start_date:    form.start_date || null,
+          end_date:      form.end_date,
+          value_aed:     form.value_aed === '' ? null : Number(form.value_aed),
+          building_id:   form.building_id || null,
+          notes:         form.notes.trim() || null,
         }).eq('id', record.id);
         if (e) throw e;
       } else if (kind === 'resident' || kind === 'security') {
@@ -1651,7 +1685,7 @@ const EditRecordModal = ({ kind, record, onClose, onSaved }) => {
         <div className="modal-header">
           <div>
             <div style={{fontSize:10,letterSpacing:'0.08em',textTransform:'uppercase',color:'var(--text-muted)',marginBottom:4}}>Edit {kind}</div>
-            <h2>{kind === 'building' ? record.name : record.full_name}</h2>
+            <h2>{kind === 'building' || kind === 'contract' ? record.name : record.full_name}</h2>
           </div>
           <button className="modal-close" onClick={onClose}>×</button>
         </div>
@@ -1703,6 +1737,24 @@ const EditRecordModal = ({ kind, record, onClose, onSaved }) => {
             <div style={{fontSize:11,color:'var(--text-muted)',marginBottom:14,padding:10,background:'var(--bg-page)',borderRadius:6}}>Email, building, and unit cannot be changed here. Delete and re-add the resident to move them to a different unit.</div>
           </div>
         )}
+        {kind === 'contract' && (
+          <div>
+            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:14,marginBottom:14}}>
+              <PCField label="Contract name" required value={form.name} onChange={setF('name')} placeholder="e.g. Building insurance 2026"/>
+              <PCSelect label="Contract type" value={form.contract_type} onChange={setF('contract_type')} options={[{value:'Insurance',label:'Insurance'},{value:'Government',label:'Government'},{value:'Utility',label:'Utility'},{value:'Other',label:'Other'}]}/>
+            </div>
+            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:14,marginBottom:14}}>
+              <PCField label="Counterparty" value={form.counterparty} onChange={setF('counterparty')} placeholder="e.g. AXA Gulf"/>
+              <PCSelect label="Building" value={form.building_id} onChange={setF('building_id')} options={[{value:'',label:'All buildings / portfolio-wide'}, ...buildingsList.map(b => ({ value: b.id, label: b.name }))]}/>
+            </div>
+            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:14,marginBottom:14}}>
+              <PCField label="Start date" type="date" value={form.start_date} onChange={setF('start_date')}/>
+              <PCField label="End date" type="date" required value={form.end_date} onChange={setF('end_date')}/>
+              <PCField label="Value (AED)" type="number" value={form.value_aed} onChange={setF('value_aed')} placeholder="Optional"/>
+            </div>
+            <div style={{marginBottom:14}}><PCField label="Notes" value={form.notes} onChange={setF('notes')} textarea placeholder="Optional"/></div>
+          </div>
+        )}
         {kind === 'security' && (
           <div>
             <div style={{marginBottom:14}}><PCField label="Full name" required value={form.full_name} onChange={setF('full_name')}/></div>
@@ -1716,6 +1768,298 @@ const EditRecordModal = ({ kind, record, onClose, onSaved }) => {
           <button className="btn" onClick={onClose}>Cancel</button>
           <button className="btn btn-primary" disabled={busy} onClick={save}>{busy ? 'Saving…' : 'Save changes'}</button>
         </div>
+      </div>
+    </div>
+  );
+};
+
+// ==================== CONTRACTS ====================
+// Insurance / Government / Utility / Other contracts at the portfolio or
+// per-building level. Single-pane UI (no Bulk / Manual sub-tabs) — summary
+// table + inline "Add Contract" form + per-row Edit / Delete / Attachments.
+// end_date drives expiry status badges and the Reminders page (separate file).
+const CONTRACT_TYPES = [
+  { value: 'Insurance',  label: 'Insurance'  },
+  { value: 'Government', label: 'Government' },
+  { value: 'Utility',    label: 'Utility'    },
+  { value: 'Other',      label: 'Other'      },
+];
+
+const CONTRACT_FORM_DEFAULTS = {
+  name: '', contract_type: '', counterparty: '',
+  start_date: '', end_date: '', value_aed: '',
+  building_id: '', notes: '',
+};
+
+const ContractsSection = () => {
+  const [rows, setRows] = useState(null);
+  const [buildings, setBuildings] = useState([]);
+  const [error, setError] = useState(null);
+  const [editing, setEditing] = useState(null);     // { record }
+  const [viewing, setViewing] = useState(null);     // contract row for attachments modal
+  const [showAdd, setShowAdd] = useState(false);
+
+  const reload = async () => {
+    setError(null);
+    if (!supabaseClient) { setError('Supabase not initialized'); return; }
+    try {
+      const [{ data: cs, error: ce }, { data: bs }] = await Promise.all([
+        supabaseClient.from('contracts')
+          .select('id,name,counterparty,contract_type,start_date,end_date,value_aed,building_id,notes,created_at')
+          .order('end_date', { ascending: true, nullsFirst: false }),
+        supabaseClient.from('buildings').select('id,name').order('name'),
+      ]);
+      if (ce) throw ce;
+      const bMap = Object.fromEntries((bs || []).map(b => [b.id, b]));
+      setBuildings(bs || []);
+      setRows((cs || []).map(c => ({
+        ...c,
+        building_name: c.building_id && bMap[c.building_id] ? bMap[c.building_id].name : 'Portfolio-wide',
+      })));
+    } catch (e) {
+      setError(String(e.message || e));
+    }
+  };
+  useEffect(() => { reload(); }, []);
+
+  const daysToExpiry = (end_date) => {
+    if (!end_date) return null;
+    const today = new Date(); today.setHours(0,0,0,0);
+    const end = new Date(end_date);
+    return Math.round((end - today) / (1000 * 60 * 60 * 24));
+  };
+
+  const statusBadge = (end_date) => {
+    const d = daysToExpiry(end_date);
+    if (d == null) return null;
+    if (d < 0)   return <span style={{display:'inline-block',padding:'2px 8px',borderRadius:10,background:'#fdf2f1',color:'#8b4a42',fontSize:10,fontWeight:600,letterSpacing:'0.04em',textTransform:'uppercase'}}>Expired</span>;
+    if (d <= 90) return <span style={{display:'inline-block',padding:'2px 8px',borderRadius:10,background:'#fdf6e3',color:'#a07d3c',fontSize:10,fontWeight:600,letterSpacing:'0.04em',textTransform:'uppercase'}}>Expiring soon</span>;
+    return       <span style={{display:'inline-block',padding:'2px 8px',borderRadius:10,background:'#e6efe1',color:'#5a6b4f',fontSize:10,fontWeight:600,letterSpacing:'0.04em',textTransform:'uppercase'}}>Active</span>;
+  };
+
+  if (error) return (<div className="card"><div style={{color:'#8b4a42',fontSize:13}}>{error}</div></div>);
+  if (rows === null) return (<div className="card"><div style={{color:'var(--text-muted)',fontSize:13,padding:24}}>Loading…</div></div>);
+
+  return (
+    <>
+      <div className="card">
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:12}}>
+          <div style={{fontSize:12,color:'var(--text-secondary)'}}>{rows.length} contract{rows.length===1?'':'s'} · sorted by expiry</div>
+          <div style={{display:'flex',gap:8}}>
+            <button className="btn btn-sm" onClick={reload}>Refresh</button>
+            <button className="btn btn-sm btn-primary" onClick={() => setShowAdd(true)}>+ Add contract</button>
+          </div>
+        </div>
+        {rows.length === 0 ? (
+          <div style={{color:'var(--text-muted)',fontSize:13,padding:32,textAlign:'center'}}>
+            No contracts yet. Click <strong>+ Add contract</strong> to create the first one.
+          </div>
+        ) : (
+          <table className="data-table">
+            <thead><tr>
+              <th style={{width:'20%'}}>Name</th>
+              <th style={{width:'14%'}}>Counterparty</th>
+              <th style={{width:'10%'}}>Type</th>
+              <th style={{width:'10%'}}>End date</th>
+              <th style={{width:'8%'}}>Days left</th>
+              <th style={{width:'12%'}}>Building</th>
+              <th style={{width:'10%',textAlign:'right'}}>Value (AED)</th>
+              <th style={{width:'8%'}}>Status</th>
+              <th style={{width:'8%',textAlign:'right'}}>Actions</th>
+            </tr></thead>
+            <tbody>
+              {rows.map(c => {
+                const d = daysToExpiry(c.end_date);
+                return (
+                  <tr key={c.id} onClick={() => setViewing(c)} style={{cursor:'pointer'}}>
+                    <td style={{fontWeight:500}}>{c.name}</td>
+                    <td>{c.counterparty || '—'}</td>
+                    <td>{c.contract_type || '—'}</td>
+                    <td>{c.end_date || '—'}</td>
+                    <td style={{color: d != null && d < 0 ? '#8b4a42' : (d != null && d <= 90 ? '#a07d3c' : 'var(--text-secondary)')}}>{d == null ? '—' : d}</td>
+                    <td>{c.building_name}</td>
+                    <td style={{textAlign:'right'}}>{c.value_aed == null ? '—' : Number(c.value_aed).toLocaleString()}</td>
+                    <td>{statusBadge(c.end_date)}</td>
+                    <td style={{textAlign:'right',whiteSpace:'nowrap'}}>
+                      <button onClick={(e) => { e.stopPropagation(); setEditing({ record: c }); }} style={{padding:'4px 10px',fontSize:11,background:'#fff',border:'1px solid #D0D6D5',borderRadius:4,color:'var(--text-dark)',cursor:'pointer',marginRight:6}}>Edit</button>
+                      <button onClick={(e) => {
+                        e.stopPropagation();
+                        if (!window.confirm('Delete contract "' + c.name + '"? This cannot be undone.')) return;
+                        supabaseClient.from('contracts').delete().eq('id', c.id).then(({ error: de }) => {
+                          if (de) alert('Delete failed: ' + de.message); else reload();
+                        });
+                      }} style={{padding:'4px 10px',fontSize:11,background:'#fff',border:'1px solid #D0D6D5',borderRadius:4,color:'#8b4a42',cursor:'pointer'}}>Delete</button>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        )}
+      </div>
+
+      {showAdd && (
+        <ContractManualForm
+          buildings={buildings}
+          onCancel={() => setShowAdd(false)}
+          onSaved={() => { setShowAdd(false); reload(); }}
+        />
+      )}
+
+      {editing && <EditRecordModal kind="contract" record={editing.record} onClose={() => setEditing(null)} onSaved={reload}/>}
+      {viewing && <ContractDetailModal contract={viewing} onClose={() => setViewing(null)}/>}
+    </>
+  );
+};
+
+// Inline "Add contract" form rendered below the summary table. Mirrors the
+// Building/Resident manual-form pattern but is collapsed by default so the
+// section starts at the summary view.
+const ContractManualForm = ({ buildings, onCancel, onSaved }) => {
+  const [form, setForm] = useState(CONTRACT_FORM_DEFAULTS);
+  const [busy, setBusy] = useState(false);
+  const [result, setResult] = useState(null);
+  const set = (k) => (v) => setForm(f => ({ ...f, [k]: v }));
+
+  const canSubmit = form.name.trim() && form.end_date;
+
+  const submit = async () => {
+    setBusy(true); setResult(null);
+    try {
+      const payload = {
+        name:          form.name.trim(),
+        counterparty:  form.counterparty.trim() || null,
+        contract_type: form.contract_type || null,
+        start_date:    form.start_date || null,
+        end_date:      form.end_date,
+        value_aed:     form.value_aed === '' ? null : Number(form.value_aed),
+        building_id:   form.building_id || null,
+        notes:         form.notes.trim() || null,
+      };
+      const { error } = await supabaseClient.from('contracts').insert([payload]);
+      if (error) { setResult({ ok: false, error: error.message }); setBusy(false); return; }
+      setResult({ ok: true, msg: 'Contract "' + payload.name + '" created.' });
+      setForm(CONTRACT_FORM_DEFAULTS);
+      if (onSaved) setTimeout(onSaved, 400);
+    } catch (e) {
+      setResult({ ok: false, error: String(e.message || e) });
+    }
+    setBusy(false);
+  };
+
+  return (
+    <div className="card">
+      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:14}}>
+        <div style={{fontSize:13,fontWeight:600}}>Add a contract</div>
+        <button className="btn btn-sm" onClick={onCancel}>Cancel</button>
+      </div>
+      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:14,marginBottom:14}}>
+        <PCField label="Contract name" required value={form.name} onChange={set('name')} placeholder="e.g. Building insurance 2026"/>
+        <PCSelect label="Contract type" value={form.contract_type} onChange={set('contract_type')} options={CONTRACT_TYPES}/>
+      </div>
+      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:14,marginBottom:14}}>
+        <PCField label="Counterparty" value={form.counterparty} onChange={set('counterparty')} placeholder="e.g. AXA Gulf"/>
+        <PCSelect label="Building" value={form.building_id} onChange={set('building_id')} options={[{value:'',label:'All buildings / portfolio-wide'}, ...buildings.map(b => ({ value: b.id, label: b.name }))]}/>
+      </div>
+      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:14,marginBottom:14}}>
+        <PCField label="Start date" type="date" value={form.start_date} onChange={set('start_date')}/>
+        <PCField label="End date" type="date" required value={form.end_date} onChange={set('end_date')}/>
+        <PCField label="Value (AED)" type="number" value={form.value_aed} onChange={set('value_aed')} placeholder="Optional"/>
+      </div>
+      <div style={{marginBottom:14}}>
+        <PCField label="Notes" value={form.notes} onChange={set('notes')} textarea placeholder="Optional"/>
+      </div>
+      <button className="btn btn-primary" disabled={busy || !canSubmit} onClick={submit}>{busy ? 'Saving…' : 'Create contract'}</button>
+      <FormBanner result={result}/>
+    </div>
+  );
+};
+
+// Click-through detail modal — shows contract summary + attachment uploader
+// (same UnitAttachmentSection helper used for residents/units).
+const ContractDetailModal = ({ contract, onClose }) => {
+  const [documents, setDocuments] = useState(null);
+  const [uploadingKind, setUploadingKind] = useState(null);
+  const [error, setError] = useState(null);
+
+  const reloadDocs = async () => {
+    if (!supabaseClient) return;
+    const { data, error: e } = await supabaseClient.from('contract_documents')
+      .select('id,kind,filename,storage_path,created_at')
+      .eq('contract_id', contract.id)
+      .order('created_at', { ascending: false });
+    if (e) setError(e.message); else { setDocuments(data || []); setError(null); }
+  };
+  useEffect(() => { reloadDocs(); }, [contract.id]);
+
+  const handleUpload = async (kind, file) => {
+    if (!file || !supabaseClient) return;
+    setUploadingKind(kind); setError(null);
+    const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+    const path = contract.id + '/' + kind + '-' + Date.now() + '-' + safeName;
+    const { error: upErr } = await supabaseClient.storage.from('contract-documents').upload(path, file);
+    if (upErr) { setError('Upload failed: ' + upErr.message); setUploadingKind(null); return; }
+    const { error: insErr } = await supabaseClient.from('contract_documents').insert({
+      contract_id: contract.id, kind, filename: file.name, storage_path: path,
+    });
+    if (insErr) setError('Metadata: ' + insErr.message);
+    setUploadingKind(null);
+    await reloadDocs();
+  };
+  const handleDelete = async (doc) => {
+    if (!supabaseClient) return;
+    if (!window.confirm('Delete ' + doc.filename + '?')) return;
+    await supabaseClient.storage.from('contract-documents').remove([doc.storage_path]);
+    await supabaseClient.from('contract_documents').delete().eq('id', doc.id);
+    await reloadDocs();
+  };
+
+  const docSections = [
+    { kind: 'contract',  label: 'Contract document',  accept: '.pdf,image/*', multiple: false },
+    { kind: 'amendment', label: 'Amendments / Annexes', accept: '.pdf,image/*', multiple: true  },
+    { kind: 'invoice',   label: 'Invoices / Receipts', accept: '.pdf,image/*', multiple: true  },
+    { kind: 'other',     label: 'Other Documents',    accept: '*/*',          multiple: true  },
+  ];
+  const groupedDocs = (documents || []).reduce((acc, d) => { (acc[d.kind] = acc[d.kind] || []).push(d); return acc; }, {});
+
+  const InfoCell = ({ label, value }) => (
+    <div>
+      <div style={{fontSize:10,letterSpacing:'0.06em',textTransform:'uppercase',color:'var(--text-secondary)',marginBottom:4}}>{label}</div>
+      <div style={{fontSize:13,color:'var(--text-dark)'}}>{value == null || value === '' ? '—' : value}</div>
+    </div>
+  );
+
+  return (
+    <div className="modal-overlay" onClick={onClose} style={{zIndex:1050}}>
+      <div className="modal" onClick={e => e.stopPropagation()} style={{maxWidth:680,maxHeight:'85vh',overflowY:'auto'}}>
+        <div className="modal-header">
+          <div>
+            <div style={{fontSize:10,letterSpacing:'0.08em',textTransform:'uppercase',color:'var(--text-muted)',marginBottom:4}}>Contract</div>
+            <h2>{contract.name}</h2>
+            <div className="modal-sub">{contract.counterparty || '—'}{contract.contract_type ? ' · ' + contract.contract_type : ''}</div>
+          </div>
+          <button className="modal-close" onClick={onClose}>×</button>
+        </div>
+
+        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:14,marginBottom:18,padding:'14px 0',borderBottom:'1px solid var(--border-light)'}}>
+          <InfoCell label="Start date" value={contract.start_date}/>
+          <InfoCell label="End date"   value={contract.end_date}/>
+          <InfoCell label="Value (AED)" value={contract.value_aed == null ? null : Number(contract.value_aed).toLocaleString()}/>
+          <InfoCell label="Building"   value={contract.building_name}/>
+          <InfoCell label="Notes"      value={contract.notes}/>
+        </div>
+
+        <div style={{fontSize:11,letterSpacing:'0.06em',textTransform:'uppercase',color:'var(--text-secondary)',marginBottom:10,fontWeight:500}}>Documents</div>
+        {error && <div style={{padding:10,background:'#fdf2f1',color:'#8b4a42',borderRadius:6,fontSize:12,marginBottom:14}}>{error}</div>}
+        {documents === null ? (
+          <div style={{padding:24,color:'var(--text-muted)',fontSize:13}}>Loading…</div>
+        ) : (
+          <div>
+            {docSections.map(s => (
+              <UnitAttachmentSection key={s.kind} section={s} files={groupedDocs[s.kind] || []} uploading={uploadingKind === s.kind} onUpload={handleUpload} onDelete={handleDelete} bucket="contract-documents"/>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );

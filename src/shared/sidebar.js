@@ -14,6 +14,7 @@ const Sidebar = ({ page, setPage, isOpen, onClose, onLogout }) => {
     ]},
     { label: 'Operational', items: [
       { id: 'service',         label: t('nav.service'),       icon: 'service' },
+      { id: 'reminders',       label: 'Reminders',            icon: 'announcements' },
       { id: 'announcements',   label: t('nav.announcements'), icon: 'announcements' },
       { id: 'visitors',        label: t('nav.visitors'),      icon: 'visitors' },
       { id: 'vendors',         label: t('nav.vendors'),       icon: 'vendors' },

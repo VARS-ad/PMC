@@ -64,7 +64,7 @@ const TopBar = ({ onCreateClick, onMenuToggle, onLogout, onNavigate }) => {
 
   // ===== Notifications =====
   const [showNotifications, setShowNotifications] = useState(false);
-  const [notifs, setNotifs] = useState({ srs: [], invoices: [], visits: [] });
+  const [notifs, setNotifs] = useState({ srs: [], invoices: [], visits: [], reminders: [] });
   // Persisted "last marked-as-read" timestamp. When user clicks the
   // "Mark all read" link we store now(); the bell's red dot only shows
   // when at least one item was created after that timestamp.
@@ -85,24 +85,46 @@ const TopBar = ({ onCreateClick, onMenuToggle, onLogout, onNavigate }) => {
         const { data: units } = await supabaseClient.from('units').select('id,building_id,unit_number');
         const filteredUnits = (units || []).filter(u => !filterB || filterB.includes(u.building_id));
         const fIds = filteredUnits.map(u => u.id);
-        if (fIds.length === 0) { if (mounted) setNotifs({ srs: [], invoices: [], visits: [] }); return; }
+        if (fIds.length === 0) { if (mounted) setNotifs({ srs: [], invoices: [], visits: [], reminders: [] }); return; }
         const today = new Date().toISOString().slice(0, 10);
         const uMap = Object.fromEntries(filteredUnits.map(u => [u.id, u]));
-        const [{ data: srs }, { data: invs }, { data: visits }] = await Promise.all([
+        const [{ data: srs }, { data: invs }, { data: visits },
+               { data: leasesData }, { data: vendorsData }, { data: contractsData }, { data: dismissals },
+               { data: bs }, { data: profs }] = await Promise.all([
           supabaseClient.from('service_requests').select('id,category,description,status,priority,created_at,unit_id').in('unit_id', fIds).in('status', ['New','Acknowledged']).order('created_at', { ascending: false }).limit(8),
           supabaseClient.from('invoices').select('id,invoice_number,description,amount_aed,due_date,status,unit_id').in('unit_id', fIds).eq('status', 'Overdue').order('amount_aed', { ascending: false }).limit(8),
           supabaseClient.from('visits').select('id,visitor_name,type,status,visit_date,unit_id').in('unit_id', fIds).eq('visit_date', today).eq('status', 'Pre-Approved').limit(8),
+          supabaseClient.from('resident_assignments').select('profile_id,unit_id,lease_end').in('unit_id', fIds).not('lease_end','is',null),
+          supabaseClient.from('vendors').select('id,name,service_category,contract_end').not('contract_end','is',null),
+          supabaseClient.from('contracts').select('id,name,counterparty,contract_type,end_date,building_id'),
+          supabaseClient.from('reminder_dismissals').select('source_type,source_id,lead_days,dismissal_anchor,dismissed_at'),
+          supabaseClient.from('buildings').select('id,name'),
+          supabaseClient.from('profiles').select('id,full_name').eq('role','resident'),
         ]);
         if (!mounted) return;
         const addUnit = (rows) => (rows || []).map(r => ({ ...r, unit_number: uMap[r.unit_id]?.unit_number || '—' }));
-        setNotifs({ srs: addUnit(srs), invoices: addUnit(invs), visits: addUnit(visits) });
+        const bMap = Object.fromEntries((bs || []).map(b => [b.id, b]));
+        const pMap = Object.fromEntries((profs || []).map(p => [p.id, p]));
+        const leasesEnriched = (leasesData || []).map(r => ({
+          ...r,
+          resident_name: pMap[r.profile_id]?.full_name || 'Tenant',
+          unit_number:   uMap[r.unit_id]?.unit_number || '—',
+          building_name: uMap[r.unit_id] && bMap[uMap[r.unit_id].building_id] ? bMap[uMap[r.unit_id].building_id].name : '—',
+        }));
+        // buildReminders is defined in src/pmc/reminders.js (loaded later in the bundle).
+        // By the time this effect runs, all scripts have executed so it's available globally.
+        const reminders = (typeof buildReminders === 'function')
+          ? buildReminders({ leases: leasesEnriched, vendors: vendorsData, contracts: contractsData, dismissals })
+          : [];
+        setNotifs({ srs: addUnit(srs), invoices: addUnit(invs), visits: addUnit(visits), reminders });
       } catch (_) { /* silent */ }
     })();
     return () => { mounted = false; };
   }, [selectedProperties.join(',')]);
-  const notifTotal = notifs.srs.length + notifs.invoices.length + notifs.visits.length;
-  // "Unread" = at least one item created after the last mark-as-read timestamp
-  const hasUnread = !notifReadAt || [...notifs.srs, ...notifs.invoices, ...notifs.visits]
+  const notifTotal = notifs.srs.length + notifs.invoices.length + notifs.visits.length + notifs.reminders.length;
+  // "Unread" = at least one item created after the last mark-as-read timestamp.
+  // Reminders use end_date as the signal (every reminder is implicitly unread until acted on).
+  const hasUnread = !notifReadAt || notifs.reminders.length > 0 || [...notifs.srs, ...notifs.invoices, ...notifs.visits]
     .some(item => (item.created_at || '') > notifReadAt);
   const showDot = notifTotal > 0 && hasUnread;
   const fmtAED = (n) => 'AED ' + Math.round(Number(n) || 0).toLocaleString();
@@ -208,6 +230,32 @@ const TopBar = ({ onCreateClick, onMenuToggle, onLogout, onNavigate }) => {
                     </div>
                   ) : (
                     <>
+                      {notifs.reminders.length > 0 && (
+                        <div>
+                          <div style={{padding:'10px 16px 6px',fontSize:10,letterSpacing:'0.08em',textTransform:'uppercase',color:'#61707D',fontWeight:600,background:'#F4EEE4',display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+                            <span>Contract Reminders · {notifs.reminders.length}</span>
+                            <span onClick={() => goTo('reminders')} style={{fontSize:10,color:'var(--accent-warm-dark)',cursor:'pointer',textTransform:'none',letterSpacing:0,fontWeight:500}}>View all →</span>
+                          </div>
+                          {notifs.reminders.slice(0, 5).map(r => {
+                            const dotColor = r.lead_days === 0 ? '#8b4a42' : r.lead_days <= 7 ? '#a07d3c' : '#61707D';
+                            const remainTxt = r.days_until < 0
+                              ? Math.abs(r.days_until) + ' days overdue'
+                              : 'in ' + r.days_until + ' day' + (r.days_until === 1 ? '' : 's');
+                            return (
+                              <div key={r.key} onClick={() => goTo('reminders')} style={{padding:'10px 16px',borderBottom:'1px solid #E6EAE9',cursor:'pointer',display:'flex',gap:10,alignItems:'flex-start'}}
+                                onMouseEnter={e => e.currentTarget.style.background='#F4EEE4'}
+                                onMouseLeave={e => e.currentTarget.style.background='transparent'}>
+                                <div style={{width:6,height:6,borderRadius:3,background:dotColor,marginTop:6,flexShrink:0}}/>
+                                <div style={{flex:1,minWidth:0}}>
+                                  <div style={{fontSize:13,color:'#131F23',fontWeight:500,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{r.title}</div>
+                                  <div style={{fontSize:11,color:'#61707D',marginTop:2,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{r.subtitle}</div>
+                                  <div style={{fontSize:10,color:'#61707D',marginTop:3}}>Expires {r.end_date} · {remainTxt}</div>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
                       {notifs.srs.length > 0 && (
                         <div>
                           <div style={{padding:'10px 16px 6px',fontSize:10,letterSpacing:'0.08em',textTransform:'uppercase',color:'#61707D',fontWeight:600,background:'#F4EEE4'}}>
