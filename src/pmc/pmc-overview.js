@@ -120,23 +120,23 @@ const PMCOverviewPage = ({ setPage }) => {
           };
         }).sort((a, b) => b.amount - a.amount).slice(0, 4);
 
-        // -------- Service Requests Requiring Action --------
-        const srNeedingAction = (srs || []).filter(s => ['New','Acknowledged','In Progress'].includes(s.status)).slice(0, 5);
+        // -------- Recent Service Requests (all-status) for the SR section table --------
+        const srRecent = (srs || []).slice(0, 10);
 
         setStats({
-          // Properties group
+          // Portfolio Summary KPIs
           selectedPropsCount, totalUnits, occupied, occupancyRate, lastMonthCollected, pendingSCAmount,
-          // Service Requests group
+          // Service Requests KPIs
           todaySRs, completedToday, pendingRequests,
-          // Visitors group
+          // Visitors KPIs
           upcomingVisits, todayVisits,
-          // Cards
-          srStatusCounts,
+          // Financial Summary cards
           monthBilled, monthCollected, monthOutstanding, monthCollectionRate,
           arrearsList,
           totalUnitsInArrears: Object.keys(arrearsByUnit).length,
           totalArrears: Object.values(arrearsByUnit).reduce((s, a) => s + a.amount, 0),
-          srNeedingAction,
+          // Service Requests table
+          srRecent,
         });
       } catch (e) {
         if (mounted) setError(String(e.message || e));
@@ -147,7 +147,11 @@ const PMCOverviewPage = ({ setPage }) => {
 
   const fmt = (n) => 'AED ' + Math.round(n).toLocaleString();
 
-  if (error) return (<div><div className="page-header"><h1>Dashboard</h1></div><div className="card"><div style={{color:'#8b4a42',fontSize:13}}>{error}</div></div></div>);
+  // Dynamic current-month label, e.g. "May 2026". Auto-updates when the
+  // calendar month changes — the user explicitly asked for this.
+  const monthLabel = new Date().toLocaleString('en-GB', { month: 'long', year: 'numeric' });
+
+  if (error) return (<div><div className="page-header"><h1>Overview</h1></div><div className="card"><div style={{color:'#8b4a42',fontSize:13}}>{error}</div></div></div>);
 
   const statusBadge = (s) => {
     const c = ({
@@ -181,99 +185,40 @@ const PMCOverviewPage = ({ setPage }) => {
   return (
     <div>
       <div className="page-header">
-        <div><h1>Dashboard</h1></div>
+        <div><h1>Overview</h1></div>
       </div>
 
       {!stats ? (
         <div className="card"><div style={{padding:24,color:'var(--text-muted)',fontSize:13}}>Loading…</div></div>
       ) : (<>
-        <div style={{fontSize:11,letterSpacing:'0.06em',textTransform:'uppercase',color:'var(--text-secondary)',margin:'8px 0 10px',fontWeight:500}}>Key Performance Indicators</div>
-
-        {/* Properties — 5 KPIs */}
-        <div style={groupEyebrow}>Properties</div>
+        {/* ============ PORTFOLIO SUMMARY ============ */}
+        <div style={groupEyebrow}>Portfolio Summary</div>
         <div className="kpi-row" style={{gridTemplateColumns:'repeat(5, minmax(0, 1fr))',marginBottom:0}}>
           <KpiCard label="Total Properties Selected" value={stats.selectedPropsCount + ' ' + (stats.selectedPropsCount === 1 ? 'property' : 'properties')} page="properties"/>
           <KpiCard label="Units Occupied"            value={stats.occupied + ' / ' + stats.totalUnits}        page="properties"/>
           <KpiCard label="Occupancy Rate"            value={stats.occupancyRate + '%'}                         page="properties"/>
-          <KpiCard label="Collected (last month)"    value={fmt(stats.lastMonthCollected)} color="#5a6b4f"     page="payment"/>
-          <KpiCard label="Pending Service Charges"   value={fmt(stats.pendingSCAmount)}    color="#8b4a42"     page="payment"/>
+          <KpiCard label={'Collected ' + monthLabel}             value={fmt(stats.monthCollected)}    color="#5a6b4f" page="payment"/>
+          <KpiCard label={'Pending Service Charges ' + monthLabel} value={fmt(stats.monthOutstanding)} color="#8b4a42" page="payment"/>
         </div>
 
-        {/* Service Requests — 3 KPIs */}
-        <div style={groupEyebrow}>Service Requests</div>
-        <div className="kpi-row" style={{gridTemplateColumns:'repeat(3, minmax(0, 1fr))',marginBottom:0}}>
-          <KpiCard label="Requests Today"           value={stats.todaySRs}         page="service"/>
-          <KpiCard label="Completed Today"          value={stats.completedToday}   color="#5a6b4f" page="service"/>
-          <KpiCard label="Pending"                  value={stats.pendingRequests}  color="#a07d3c" page="service"/>
-        </div>
-
-        {/* Visitors — 2 KPIs */}
-        <div style={groupEyebrow}>Visitors</div>
-        <div className="kpi-row" style={{gridTemplateColumns:'repeat(2, minmax(0, 1fr))',marginBottom:28}}>
-          <KpiCard label="Upcoming Visitors" value={stats.upcomingVisits} page="visitors"/>
-          <KpiCard label="Visitors Today"    value={stats.todayVisits}    page="visitors"/>
-        </div>
-
-        {/* Cards stacked full-width: Summary → Charge Collection (this month) → Arrears → Requiring Action */}
-        <div style={{display:'grid',gridTemplateColumns:'1fr',gap:18}}>
-          {/* Service Request Summary card */}
-          <div className="card">
-            <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:6}}>
-              <div>
-                <div style={{fontSize:15,fontWeight:600,color:'var(--text-dark)'}}>Service Request Summary</div>
-                <div style={{fontSize:11,color:'var(--text-muted)',marginTop:2}}>Status breakdown — across selected properties</div>
-              </div>
-              <span onClick={() => setPage && setPage('service')} style={{fontSize:11,color:'var(--accent-warm-dark)',cursor:'pointer'}}>View all →</span>
-            </div>
-            {(() => {
-              const c = stats.srStatusCounts;
-              return (<>
-                <div style={{display:'flex',height:14,borderRadius:7,overflow:'hidden',marginTop:14,marginBottom:10,background:'var(--bg-surface)'}}>
-                  <div style={{flex: c.open, background:'#E6EAE9'}} title={'Open: ' + c.open}/>
-                  <div style={{flex: c.inProgress, background:'#3E4C59'}} title={'In Progress: ' + c.inProgress}/>
-                  <div style={{flex: c.scheduled, background:'#D0D6D5'}} title={'Scheduled: ' + c.scheduled}/>
-                  <div style={{flex: c.completed, background:'#ccc8c1'}} title={'Completed: ' + c.completed}/>
-                </div>
-                <div style={{display:'flex',gap:16,fontSize:11,color:'var(--text-secondary)',flexWrap:'wrap'}}>
-                  <div><span style={{display:'inline-block',width:8,height:8,borderRadius:4,background:'#E6EAE9',marginRight:6,verticalAlign:'middle'}}/>Open ({c.open})</div>
-                  <div><span style={{display:'inline-block',width:8,height:8,borderRadius:4,background:'#3E4C59',marginRight:6,verticalAlign:'middle'}}/>In Progress ({c.inProgress})</div>
-                  <div><span style={{display:'inline-block',width:8,height:8,borderRadius:4,background:'#D0D6D5',marginRight:6,verticalAlign:'middle'}}/>Scheduled ({c.scheduled})</div>
-                  <div><span style={{display:'inline-block',width:8,height:8,borderRadius:4,background:'#ccc8c1',marginRight:6,verticalAlign:'middle'}}/>Completed ({c.completed})</div>
-                </div>
-              </>);
-            })()}
-          </div>
-
-          {/* Service Charge Collection — THIS MONTH */}
+        {/* ============ FINANCIAL SUMMARY ============ */}
+        <div style={groupEyebrow}>Financial Summary</div>
+        <div style={{display:'grid',gridTemplateColumns:'1fr',gap:18,marginBottom:8}}>
+          {/* Service Charge Collection — THIS MONTH (Outstanding + rate bar only) */}
           <div className="card">
             <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:14}}>
-              <div>
-                <div style={{fontSize:14,fontWeight:600,color:'var(--text-dark)'}}>Service Charge Collection</div>
-                <div style={{fontSize:11,color:'var(--text-muted)',marginTop:2}}>This month — invoices created this calendar month</div>
-              </div>
+              <div style={{fontSize:14,fontWeight:600,color:'var(--text-dark)'}}>Service Charge Collection {monthLabel}</div>
               <span onClick={() => setPage && setPage('payment')} style={{fontSize:11,color:'var(--accent-warm-dark)',cursor:'pointer'}}>View all →</span>
             </div>
-            <div style={{display:'grid',gridTemplateColumns:'repeat(3, minmax(0, 1fr))',gap:18,marginBottom:14}}>
-              <div>
-                <div style={{fontSize:10,letterSpacing:'0.08em',textTransform:'uppercase',color:'var(--text-secondary)',marginBottom:6,fontWeight:600}}>Total Billed</div>
-                <div style={{fontSize:24,fontWeight:600,color:'var(--text-dark)',letterSpacing:'-0.03em'}}>{fmt(stats.monthBilled)}</div>
-              </div>
-              <div>
-                <div style={{fontSize:10,letterSpacing:'0.08em',textTransform:'uppercase',color:'var(--text-secondary)',marginBottom:6,fontWeight:600}}>Total Collected</div>
-                <div style={{fontSize:24,fontWeight:600,color:'#5a6b4f',letterSpacing:'-0.03em'}}>{fmt(stats.monthCollected)}</div>
-              </div>
-              <div>
-                <div style={{fontSize:10,letterSpacing:'0.08em',textTransform:'uppercase',color:'var(--text-secondary)',marginBottom:6,fontWeight:600}}>Outstanding</div>
-                <div style={{fontSize:24,fontWeight:600,color:'#8b4a42',letterSpacing:'-0.03em'}}>{fmt(stats.monthOutstanding)}</div>
-              </div>
-            </div>
+            <div style={{fontSize:10,letterSpacing:'0.08em',textTransform:'uppercase',color:'var(--text-secondary)',marginBottom:6,fontWeight:600}}>Outstanding</div>
+            <div style={{fontSize:24,fontWeight:600,color:'#8b4a42',letterSpacing:'-0.03em',marginBottom:14}}>{fmt(stats.monthOutstanding)}</div>
             <div style={{fontSize:11,color:'var(--text-muted)',marginBottom:8}}>Collection rate this month · {stats.monthCollectionRate}%</div>
             <div style={{height:8,background:'var(--bg-surface)',borderRadius:4,overflow:'hidden'}}>
               <div style={{height:'100%',width:stats.monthCollectionRate+'%',background:'linear-gradient(90deg, var(--accent-warm) 0%, var(--bg-warm-dark) 100%)'}}/>
             </div>
           </div>
 
-          {/* Units in Arrears — who owes service charges */}
+          {/* Units in Arrears — who owes us money */}
           <div className="card">
             <div style={{marginBottom:14}}>
               <div style={{fontSize:14,fontWeight:600,color:'var(--text-dark)'}}>Units in Arrears</div>
@@ -295,32 +240,48 @@ const PMCOverviewPage = ({ setPage }) => {
               </div>
             ))}
           </div>
+        </div>
 
-          {/* Service Requests Requiring Action — now at the bottom */}
-          <div className="card">
-            <div style={{marginBottom:14}}>
-              <div style={{fontSize:14,fontWeight:600,color:'var(--text-dark)'}}>Service Requests Requiring Action</div>
-              <div style={{fontSize:11,color:'var(--text-muted)',marginTop:2}}>Pending approval or scheduling, no resolution yet</div>
+        {/* ============ SERVICE REQUESTS ============ */}
+        <div style={groupEyebrow}>Service Requests</div>
+        <div className="kpi-row" style={{gridTemplateColumns:'repeat(3, minmax(0, 1fr))',marginBottom:18}}>
+          <KpiCard label="Requests Today"  value={stats.todaySRs}        page="service"/>
+          <KpiCard label="Completed Today" value={stats.completedToday}  color="#5a6b4f" page="service"/>
+          <KpiCard label="Pending"         value={stats.pendingRequests} color="#a07d3c" page="service"/>
+        </div>
+        <div className="card">
+          <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:14}}>
+            <div>
+              <div style={{fontSize:14,fontWeight:600,color:'var(--text-dark)'}}>All Service Requests</div>
+              <div style={{fontSize:11,color:'var(--text-muted)',marginTop:2}}>Most recent {stats.srRecent.length} across selected properties</div>
             </div>
-            {stats.srNeedingAction.length === 0 ? (
-              <div style={{color:'var(--text-muted)',fontSize:13,padding:24,textAlign:'center'}}>Nothing waiting on you. ✓</div>
-            ) : (
-              <table className="data-table">
-                <thead><tr><th style={{width:'16%'}}>Category</th><th style={{width:'44%'}}>Description</th><th style={{width:'12%'}}>Priority</th><th style={{width:'16%'}}>Status</th><th style={{width:'12%'}}>Created</th></tr></thead>
-                <tbody>
-                  {stats.srNeedingAction.map(s => (
-                    <tr key={s.id} style={{cursor:'pointer'}} onClick={() => setPage && setPage('service')}>
-                      <td style={{fontWeight:500}}>{s.category}</td>
-                      <td style={{maxWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}} title={s.description}>{s.description}</td>
-                      <td>{s.priority}</td>
-                      <td>{statusBadge(s.status)}</td>
-                      <td>{s.created_at ? new Date(s.created_at).toLocaleDateString() : '—'}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            )}
+            <span onClick={() => setPage && setPage('service')} style={{fontSize:11,color:'var(--accent-warm-dark)',cursor:'pointer'}}>View all →</span>
           </div>
+          {stats.srRecent.length === 0 ? (
+            <div style={{color:'var(--text-muted)',fontSize:13,padding:24,textAlign:'center'}}>No service requests yet.</div>
+          ) : (
+            <table className="data-table">
+              <thead><tr><th style={{width:'16%'}}>Category</th><th style={{width:'44%'}}>Description</th><th style={{width:'12%'}}>Priority</th><th style={{width:'16%'}}>Status</th><th style={{width:'12%'}}>Created</th></tr></thead>
+              <tbody>
+                {stats.srRecent.map(s => (
+                  <tr key={s.id} style={{cursor:'pointer'}} onClick={() => setPage && setPage('service')}>
+                    <td style={{fontWeight:500}}>{s.category}</td>
+                    <td style={{maxWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}} title={s.description}>{s.description}</td>
+                    <td>{s.priority}</td>
+                    <td>{statusBadge(s.status)}</td>
+                    <td>{s.created_at ? new Date(s.created_at).toLocaleDateString() : '—'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+
+        {/* ============ VISITORS ============ */}
+        <div style={groupEyebrow}>Visitors</div>
+        <div className="kpi-row" style={{gridTemplateColumns:'repeat(2, minmax(0, 1fr))',marginBottom:0}}>
+          <KpiCard label="Upcoming Visitors" value={stats.upcomingVisits} page="visitors"/>
+          <KpiCard label="Visitors Today"    value={stats.todayVisits}    page="visitors"/>
         </div>
       </>)}
     </div>

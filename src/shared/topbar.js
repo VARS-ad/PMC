@@ -164,10 +164,10 @@ const TopBar = ({ onCreateClick, onMenuToggle, onLogout, onNavigate }) => {
       <div style={{flex:1}}/>
       <div className="topbar-right">
         <div style={{position:'relative'}}>
-          <div className="topbar-icon" onClick={() => setShowNotifications(!showNotifications)} style={{borderRadius:'50%',width:34,height:34,position:'relative',cursor:'pointer'}} title={notifTotal > 0 ? `${notifTotal} item${notifTotal === 1 ? '' : 's'} need attention` : 'Notifications'}>
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#61707D" strokeWidth="1.5"><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 01-3.46 0"/></svg>
+          <div onClick={() => setShowNotifications(!showNotifications)} style={{width:34,height:34,display:'flex',alignItems:'center',justifyContent:'center',position:'relative',cursor:'pointer',background:'transparent',border:'none'}} title={notifTotal > 0 ? `${notifTotal} item${notifTotal === 1 ? '' : 's'} need attention` : 'Notifications'}>
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#131F23" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 01-3.46 0"/></svg>
             {notifTotal > 0 && (
-              <span style={{position:'absolute',top:8,right:9,width:8,height:8,borderRadius:'50%',background:'#c62828',border:'2px solid #F4EEE4',boxSizing:'content-box'}}/>
+              <span style={{position:'absolute',top:4,right:6,width:8,height:8,borderRadius:'50%',background:'#c62828',border:'2px solid #F4EEE4',boxSizing:'content-box'}}/>
             )}
           </div>
           {showNotifications && (
