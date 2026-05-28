@@ -216,12 +216,12 @@ const PMCServiceRequestsPage = () => {
           <div style={{padding:32,color:'var(--text-muted)',fontSize:13,textAlign:'center'}}>No service requests match these filters.</div>
         ) : (
           <table className="data-table">
-            <thead><tr><th>Category</th><th>Description</th><th>Resident</th><th>Building / Unit</th><th>Priority</th><th>Status</th><th>Created</th></tr></thead>
+            <thead><tr><th>Category</th><th style={{width:'100%'}}>Description</th><th>Resident</th><th>Building / Unit</th><th>Priority</th><th>Status</th><th>Created</th></tr></thead>
             <tbody>
               {filtered.slice(0, 200).map(s => (
                 <tr key={s.id} style={{cursor:'pointer'}} onClick={() => setSelectedSR(s)}>
                   <td style={{fontWeight:500}}>{s.category}</td>
-                  <td style={{maxWidth:280,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}} title={s.description}>{s.description}</td>
+                  <td style={{overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',maxWidth:0}} title={s.description}>{s.description}</td>
                   <td>{s.resident_name}</td>
                   <td>{s.building_name}<div style={{fontSize:11,color:'var(--text-muted)'}}>Unit {s.unit_number}</div></td>
                   <td>{s.priority}</td>

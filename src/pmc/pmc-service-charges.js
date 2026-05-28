@@ -248,12 +248,12 @@ const PMCServiceChargesPage = () => {
           <div style={{padding:32,color:'var(--text-muted)',fontSize:13,textAlign:'center'}}>No invoices match these filters.</div>
         ) : (
           <table className="data-table">
-            <thead><tr><th>Invoice #</th><th>Description</th><th>Resident</th><th>Building / Unit</th><th style={{textAlign:'right'}}>Amount</th><th>Due</th><th>Status</th></tr></thead>
+            <thead><tr><th>Invoice #</th><th style={{width:'100%'}}>Description</th><th>Resident</th><th>Building / Unit</th><th style={{textAlign:'right'}}>Amount</th><th>Due</th><th>Status</th></tr></thead>
             <tbody>
               {filtered.slice(0, 200).map(i => (
                 <tr key={i.id}>
                   <td style={{fontWeight:500,fontSize:12}}>{i.invoice_number || '—'}</td>
-                  <td style={{maxWidth:240,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}} title={i.description}>{i.description}</td>
+                  <td style={{maxWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}} title={i.description}>{i.description}</td>
                   <td>{i.resident_name}</td>
                   <td>{i.building_name}<div style={{fontSize:11,color:'var(--text-muted)'}}>Unit {i.unit_number}</div></td>
                   <td style={{textAlign:'right',fontWeight:500}}>{fmt(i.amount_aed)}</td>

@@ -187,7 +187,7 @@ const PMCVisitorsPage = () => {
           <div style={{padding:32,color:'var(--text-muted)',fontSize:13,textAlign:'center'}}>No visits match these filters.</div>
         ) : (
           <table className="data-table">
-            <thead><tr><th>Date</th><th>Time</th><th>Visitor</th><th>Type</th><th>Building / Unit</th><th>Permit</th><th>Status</th></tr></thead>
+            <thead><tr><th>Date</th><th>Time</th><th style={{width:'100%'}}>Visitor</th><th>Type</th><th>Building / Unit</th><th>Permit</th><th>Status</th></tr></thead>
             <tbody>
               {filtered.slice(0, 200).map(v => (
                 <tr key={v.id}>

@@ -211,12 +211,12 @@ const PMCOverviewPage = ({ setPage }) => {
                 <div style={{color:'var(--text-muted)',fontSize:13,padding:24,textAlign:'center'}}>Nothing waiting on you. ✓</div>
               ) : (
                 <table className="data-table">
-                  <thead><tr><th>Category</th><th>Description</th><th>Priority</th><th>Status</th><th>Created</th></tr></thead>
+                  <thead><tr><th>Category</th><th style={{width:'100%'}}>Description</th><th>Priority</th><th>Status</th><th>Created</th></tr></thead>
                   <tbody>
                     {stats.srNeedingAction.map(s => (
                       <tr key={s.id} style={{cursor:'pointer'}} onClick={() => setPage && setPage('service')}>
                         <td style={{fontWeight:500}}>{s.category}</td>
-                        <td style={{maxWidth:260,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}} title={s.description}>{s.description}</td>
+                        <td style={{maxWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}} title={s.description}>{s.description}</td>
                         <td>{s.priority}</td>
                         <td>{statusBadge(s.status)}</td>
                         <td>{s.created_at ? new Date(s.created_at).toLocaleDateString() : '—'}</td>
