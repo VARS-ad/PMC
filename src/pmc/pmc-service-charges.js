@@ -33,12 +33,15 @@ const PMCServiceChargesPage = () => {
   const [statusFilter, setStatusFilter] = useState('all');
   const [search, setSearch] = useState('');
   const [showDownload, setShowDownload] = useState(false);
-  // Sort state for the invoice table. Default = most-recent issue date first.
+  // Sort state for the invoice table. Default = most-recent issue date
+  // first (created_at desc) — the user can switch to Status / Building /
+  // Unit / Resident via the four sortable headers. Status sorts past-due
+  // to paid first; the three text columns sort A→Z first.
   const [sortBy, setSortBy] = useState({ column: 'created_at', dir: 'desc' });
   const toggleSort = (col) => {
     setSortBy(prev => prev.column === col
       ? { column: col, dir: prev.dir === 'asc' ? 'desc' : 'asc' }
-      : { column: col, dir: col === 'invoice_number' || col === 'resident_name' || col === 'building_name' ? 'asc' : 'desc' });
+      : { column: col, dir: col === 'effective_status' ? 'asc' : 'asc' });
   };
   const monthsBack = ({ '1m': 1, '2m': 2, '3m': 3, '12m': 12 })[timeRange] || 1;
 
@@ -486,18 +489,19 @@ const PMCServiceChargesPage = () => {
           // dates compare lexically (ISO YYYY-MM-DD); status uses a
           // priority order from past-due to paid so visually sorting feels
           // intuitive instead of alphabetical.
+          // Only four columns are sortable: Status, Building, Unit, Resident.
+          // Everything else (Invoice / Description / Amount / Due) shows a
+          // plain non-clickable header — the user asked to keep the table
+          // focused on grouping by who/where, not by recency or value.
           const statusPriority = { Pending: 0, Upcoming: 1, Future: 2, Paid: 3, Cancelled: 4 };
           const sorted = [...filtered].sort((a, b) => {
             const col = sortBy.column;
             let av, bv;
-            if (col === 'invoice_number')      { av = a.invoice_number || ''; bv = b.invoice_number || ''; }
-            else if (col === 'description')    { av = a.description     || ''; bv = b.description     || ''; }
-            else if (col === 'resident_name')  { av = a.resident_name   || ''; bv = b.resident_name   || ''; }
-            else if (col === 'building_name')  { av = (a.building_name||'') + ' ' + (a.unit_number||''); bv = (b.building_name||'') + ' ' + (b.unit_number||''); }
-            else if (col === 'amount_aed')     { av = Number(a.amount_aed) || 0; bv = Number(b.amount_aed) || 0; }
-            else if (col === 'due_date')       { av = a.due_date || ''; bv = b.due_date || ''; }
+            if (col === 'resident_name')         { av = a.resident_name || ''; bv = b.resident_name || ''; }
+            else if (col === 'building_name')    { av = a.building_name  || ''; bv = b.building_name  || ''; }
+            else if (col === 'unit_number')      { av = a.unit_number    || ''; bv = b.unit_number    || ''; }
             else if (col === 'effective_status') { av = statusPriority[a.effective_status] ?? 99; bv = statusPriority[b.effective_status] ?? 99; }
-            else                                { av = a.created_at || ''; bv = b.created_at || ''; }
+            else                                  { av = a.created_at || ''; bv = b.created_at || ''; }
             const cmp = typeof av === 'number' && typeof bv === 'number'
               ? av - bv
               : String(av).localeCompare(String(bv));
@@ -514,15 +518,16 @@ const PMCServiceChargesPage = () => {
           return (
           <table className="data-table">
             <thead><tr>
-              {sortableTh('invoice_number',   'Invoice #',        {width:'9%'})}
-              {sortableTh('description',      'Description',      {width:'22%'})}
-              {sortableTh('resident_name',    'Resident',         {width:'12%'})}
-              {sortableTh('building_name',    'Building / Unit',  {width:'14%'})}
-              {sortableTh('amount_aed',       'Amount',           {width:'10%',textAlign:'right'})}
-              {sortableTh('due_date',         'Due',              {width:'8%'})}
-              {sortableTh('effective_status', 'Status',           {width:'8%'})}
+              <th style={{width:'9%'}}>Invoice #</th>
+              <th style={{width:'19%'}}>Description</th>
+              {sortableTh('resident_name',    'Resident',  {width:'12%'})}
+              {sortableTh('building_name',    'Building',  {width:'12%'})}
+              {sortableTh('unit_number',      'Unit',      {width:'7%'})}
+              <th style={{width:'9%',textAlign:'right'}}>Amount</th>
+              <th style={{width:'8%'}}>Due</th>
+              {sortableTh('effective_status', 'Status',    {width:'8%'})}
               <th style={{width:'7%',textAlign:'center'}}>Invoice</th>
-              <th style={{width:'10%',textAlign:'center'}}>Proof of payment</th>
+              <th style={{width:'9%',textAlign:'center'}}>Proof of payment</th>
             </tr></thead>
             <tbody>
               {sorted.slice(0, 200).map(i => (
@@ -530,7 +535,8 @@ const PMCServiceChargesPage = () => {
                   <td style={{fontWeight:500,fontSize:12}}>{i.invoice_number || '—'}</td>
                   <td style={{maxWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}} title={i.description}>{i.description}</td>
                   <td>{i.resident_name}</td>
-                  <td>{i.building_name}<div style={{fontSize:11,color:'var(--text-muted)'}}>Unit {i.unit_number}</div></td>
+                  <td>{i.building_name}</td>
+                  <td>{i.unit_number}</td>
                   <td style={{textAlign:'right',fontWeight:500}}>{fmt(i.amount_aed)}</td>
                   <td>{i.due_date || '—'}</td>
                   <td>
