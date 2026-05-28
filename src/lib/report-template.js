@@ -83,7 +83,27 @@ const _formatNumber = (v) => {
 
 // ---------- PDF export ----------
 
-const exportReportPDF = async ({ title, subtitle, columns, rows, metadata, filename }) => {
+// Auto-generate a short descriptive paragraph from the report title +
+// metadata (date range, filters, etc.). Callers can override with an
+// explicit `description` prop.
+const _buildDescription = (title, rows, metadata, explicit) => {
+  if (explicit) return explicit;
+  const t = (title || 'Records').toLowerCase();
+  const parts = [
+    `This report contains ${rows.length} ${t} record${rows.length === 1 ? '' : 's'} from the VARS Property Management system.`
+  ];
+  const meta = metadata || {};
+  if (meta['Date Range']) parts.push(`Date range: ${meta['Date Range']}.`);
+  // Pull in the most common filter-style metadata keys as a sentence
+  const filterKeys = Object.keys(meta).filter(k => /Filter|Search|Property|Building/i.test(k) && meta[k] && meta[k] !== '—' && meta[k] !== 'All');
+  if (filterKeys.length) {
+    parts.push('Filters applied: ' + filterKeys.map(k => `${k.toLowerCase()} = ${meta[k]}`).join('; ') + '.');
+  }
+  parts.push('Generated ' + _nowStamp() + '.');
+  return parts.join(' ');
+};
+
+const exportReportPDF = async ({ title, subtitle, description, columns, rows, metadata, filename }) => {
   await ensurePdf();
   const jsPDFCtor = (window.jspdf && window.jspdf.jsPDF) || window.jsPDF;
   if (!jsPDFCtor) { alert('PDF library failed to load — please reload the page'); return; }
@@ -169,6 +189,20 @@ const exportReportPDF = async ({ title, subtitle, columns, rows, metadata, filen
     doc.text(valStr, cellX + 82, cellY);
   });
   y += metaBoxH + 12;
+
+  // === About this report (description paragraph) ===
+  const descText = _buildDescription(title, rows, metadata, description);
+  doc.setFontSize(7);
+  doc.setTextColor(...REPORT_BRAND.textMuteRgb);
+  doc.setFont('helvetica', 'bold');
+  doc.text('ABOUT THIS REPORT', marginX, y);
+  y += 10;
+  doc.setFontSize(9);
+  doc.setTextColor(...REPORT_BRAND.textDarkRgb);
+  doc.setFont('helvetica', 'normal');
+  const descLines = doc.splitTextToSize(descText, pageW - marginX * 2);
+  doc.text(descLines, marginX, y);
+  y += descLines.length * 11 + 10;
 
   // === Data table ===
   if (!doc.autoTable) { alert('PDF table plugin failed to load — please reload the page'); return; }
@@ -483,7 +517,7 @@ const exportTenantStatementPDF = async ({ tenant, contract, payments, filename }
 
 // ---------- Excel export ----------
 
-const exportReportExcel = ({ title, subtitle, sheetName, columns, rows, metadata, filename }) => {
+const exportReportExcel = ({ title, subtitle, description, sheetName, columns, rows, metadata, filename }) => {
   if (!window.XLSX) { alert('Excel library failed to load — please reload the page'); return; }
   const X = window.XLSX;
 
@@ -561,6 +595,21 @@ const exportReportExcel = ({ title, subtitle, sheetName, columns, rows, metadata
     if (nCols > 1) merges.push({ s: { r, c: 1 }, e: { r, c: nCols - 1 } });
     r++;
   });
+  r++; // spacer
+
+  // About-this-report description block (spans all columns, two rows)
+  setCell(r, 0, 'ABOUT THIS REPORT', {
+    font: { name: FONT, sz: 9, bold: true, color: { rgb: C.textMute } },
+    alignment: { horizontal: 'left', vertical: 'center', indent: 1 },
+  });
+  if (nCols > 1) merges.push({ s: { r, c: 0 }, e: { r, c: nCols - 1 } });
+  r++;
+  setCell(r, 0, _buildDescription(title, rows, metadata, description), {
+    font: { name: FONT, sz: 10, color: { rgb: C.textDark } },
+    alignment: { horizontal: 'left', vertical: 'top', indent: 1, wrapText: true },
+  });
+  if (nCols > 1) merges.push({ s: { r, c: 0 }, e: { r, c: nCols - 1 } });
+  r++;
   r++; // spacer
   const headerRowIdx = r;
 

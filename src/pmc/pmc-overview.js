@@ -27,6 +27,10 @@ const PMCOverviewPage = ({ setPage }) => {
   const { selectedProperties = [] } = useApp();
   const [stats, setStats] = useState(null);
   const [error, setError] = useState(null);
+  // Selected period for the financial KPIs and Service Charge Collection card.
+  // '1m' = current calendar month; otherwise the last N months including this one.
+  const [timeRange, setTimeRange] = useState('1m');
+  const monthsBack = ({ '1m': 1, '2m': 2, '3m': 3, '12m': 12 })[timeRange] || 1;
 
   useEffect(() => {
     let mounted = true;
@@ -51,6 +55,9 @@ const PMCOverviewPage = ({ setPage }) => {
 
         const today = new Date().toISOString().slice(0,10);
         const now = new Date();
+        // Period start = first day of (now.month - monthsBack + 1). So '1m' is
+        // this month only, '3m' is the rolling window of this + 2 prior months.
+        const periodStart = new Date(now.getFullYear(), now.getMonth() - monthsBack + 1, 1).toISOString().slice(0,10);
         const thisMonthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0,10);
         const lastMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1).toISOString().slice(0,10);
         const lastMonthEnd   = new Date(now.getFullYear(), now.getMonth(), 0).toISOString().slice(0,10);
@@ -90,18 +97,18 @@ const PMCOverviewPage = ({ setPage }) => {
           else srStatusCounts.open++;
         });
 
-        // -------- Service Charge Collection (THIS MONTH) --------
-        // Three buckets so the card can show Collected / Pending / Outstanding
-        // distinctly and the rate bar still has a meaningful denominator.
-        const monthInvoices = (invoices || []).filter(i => i.created_at && i.created_at.slice(0,10) >= thisMonthStart);
-        const monthBilled = monthInvoices.reduce((s, i) => s + Number(i.amount_aed), 0);
-        const monthCollected = monthInvoices.filter(i => i.status === 'Paid').reduce((s, i) => s + Number(i.amount_aed), 0);
-        const monthPending = monthInvoices.filter(i => i.status === 'Pending').reduce((s, i) => s + Number(i.amount_aed), 0);
-        const monthOverdue = monthInvoices.filter(i => i.status === 'Overdue').reduce((s, i) => s + Number(i.amount_aed), 0);
+        // -------- Service Charge Collection (SELECTED PERIOD) --------
+        // Three buckets so the card can show Collection / Pending / Outstanding
+        // distinctly. periodInvoices honours the user's time-range pill.
+        const periodInvoices = (invoices || []).filter(i => i.created_at && i.created_at.slice(0,10) >= periodStart);
+        const monthBilled = periodInvoices.reduce((s, i) => s + Number(i.amount_aed), 0);
+        const monthCollected = periodInvoices.filter(i => i.status === 'Paid').reduce((s, i) => s + Number(i.amount_aed), 0);
+        const monthPending = periodInvoices.filter(i => i.status === 'Pending').reduce((s, i) => s + Number(i.amount_aed), 0);
+        const monthOverdue = periodInvoices.filter(i => i.status === 'Overdue').reduce((s, i) => s + Number(i.amount_aed), 0);
         const monthOutstanding = monthPending + monthOverdue;
         const monthCollectionRate = monthBilled > 0 ? Math.round((monthCollected / monthBilled) * 100) : 0;
 
-        // -------- Per-unit payment activity (THIS MONTH) --------
+        // -------- Per-unit payment activity (SELECTED PERIOD) --------
         const uMap = Object.fromEntries(filteredUnits.map(u => [u.id, u]));
         const bMap = Object.fromEntries((buildings || []).map(b => [b.id, b]));
         const enrich = (u_id, amount, count, oldest_due) => {
@@ -116,7 +123,7 @@ const PMCOverviewPage = ({ setPage }) => {
         };
 
         const paidByUnit = {};
-        monthInvoices.filter(i => i.status === 'Paid').forEach(i => {
+        periodInvoices.filter(i => i.status === 'Paid').forEach(i => {
           if (!paidByUnit[i.unit_id]) paidByUnit[i.unit_id] = { amount: 0, count: 0 };
           paidByUnit[i.unit_id].amount += Number(i.amount_aed);
           paidByUnit[i.unit_id].count++;
@@ -162,13 +169,15 @@ const PMCOverviewPage = ({ setPage }) => {
       }
     })();
     return () => { mounted = false; };
-  }, [selectedProperties.join(',')]);
+  }, [selectedProperties.join(','), timeRange]);
 
   const fmt = (n) => 'AED ' + Math.round(n).toLocaleString();
 
   // Dynamic current-month label, e.g. "May 2026". Auto-updates when the
   // calendar month changes — the user explicitly asked for this.
   const monthLabel = new Date().toLocaleString('en-GB', { month: 'long', year: 'numeric' });
+  // Human label for the selected time-range pill (used in KPI captions + card title).
+  const periodLabel = timeRange === '1m' ? monthLabel : ('Last ' + monthsBack + ' Months');
 
   if (error) return (<div><div className="page-header"><h1>Overview</h1></div><div className="card"><div style={{color:'#8b4a42',fontSize:13}}>{error}</div></div></div>);
 
@@ -205,6 +214,25 @@ const PMCOverviewPage = ({ setPage }) => {
     <div>
       <div className="page-header">
         <div><h1>Overview</h1></div>
+        <div style={{display:'flex',gap:6,alignItems:'center'}}>
+          {[{id:'1m',label:'1M'},{id:'2m',label:'2M'},{id:'3m',label:'3M'},{id:'12m',label:'12M'}].map(opt => (
+            <button key={opt.id} onClick={()=>setTimeRange(opt.id)}
+              style={{
+                padding:'7px 14px',
+                fontSize:12,
+                fontWeight:500,
+                borderRadius:6,
+                cursor:'pointer',
+                background: timeRange === opt.id ? 'var(--accent-warm-dark)' : 'transparent',
+                color: timeRange === opt.id ? '#fff' : 'var(--text-secondary)',
+                border: '1px solid ' + (timeRange === opt.id ? 'var(--accent-warm-dark)' : 'var(--border-light)'),
+                transition:'all .12s',
+                fontFamily:'inherit',
+              }}>
+              {opt.label}
+            </button>
+          ))}
+        </div>
       </div>
 
       {!stats ? (
@@ -216,22 +244,22 @@ const PMCOverviewPage = ({ setPage }) => {
           <KpiCard label="Total Properties Selected" value={stats.selectedPropsCount + ' ' + (stats.selectedPropsCount === 1 ? 'property' : 'properties')} page="properties"/>
           <KpiCard label="Units Occupied"            value={stats.occupied + ' / ' + stats.totalUnits}        page="properties"/>
           <KpiCard label="Occupancy Rate"            value={stats.occupancyRate + '%'}                         page="properties"/>
-          <KpiCard label={'Collected ' + monthLabel}             value={fmt(stats.monthCollected)}    color="#5a6b4f" page="payment"/>
-          <KpiCard label={'Pending Service Charges ' + monthLabel} value={fmt(stats.monthOutstanding)} color="#8b4a42" page="payment"/>
+          <KpiCard label={'Collected ' + periodLabel}             value={fmt(stats.monthCollected)}    color="#5a6b4f" page="payment"/>
+          <KpiCard label={'Pending Service Charges ' + periodLabel} value={fmt(stats.monthOutstanding)} color="#8b4a42" page="payment"/>
         </div>
 
         {/* ============ FINANCIAL SUMMARY ============ */}
         <div style={groupEyebrow}>Financial Summary</div>
         <div style={{display:'grid',gridTemplateColumns:'1fr',gap:18,marginBottom:8}}>
-          {/* Service Charge Collection — THIS MONTH: Collected / Pending / Outstanding */}
+          {/* Service Charge Collection — Collection / Pending / Outstanding for selected period */}
           <div className="card">
             <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:14}}>
-              <div style={{fontSize:14,fontWeight:600,color:'var(--text-dark)'}}>Service Charge Collection {monthLabel}</div>
+              <div style={{fontSize:14,fontWeight:600,color:'var(--text-dark)'}}>Service Charge Collection {periodLabel}</div>
               <span onClick={() => setPage && setPage('payment')} style={{fontSize:11,color:'var(--accent-warm-dark)',cursor:'pointer'}}>View all →</span>
             </div>
-            <div style={{display:'grid',gridTemplateColumns:'repeat(3, minmax(0, 1fr))',gap:18,marginBottom:14}}>
+            <div style={{display:'grid',gridTemplateColumns:'repeat(3, minmax(0, 1fr))',gap:18}}>
               <div>
-                <div style={{fontSize:10,letterSpacing:'0.08em',textTransform:'uppercase',color:'var(--text-secondary)',marginBottom:6,fontWeight:600}}>Collected</div>
+                <div style={{fontSize:10,letterSpacing:'0.08em',textTransform:'uppercase',color:'var(--text-secondary)',marginBottom:6,fontWeight:600}}>Collection</div>
                 <div style={{fontSize:24,fontWeight:600,color:'#5a6b4f',letterSpacing:'-0.03em'}}>{fmt(stats.monthCollected)}</div>
               </div>
               <div>
@@ -243,16 +271,12 @@ const PMCOverviewPage = ({ setPage }) => {
                 <div style={{fontSize:24,fontWeight:600,color:'#8b4a42',letterSpacing:'-0.03em'}}>{fmt(stats.monthOverdue)}</div>
               </div>
             </div>
-            <div style={{fontSize:11,color:'var(--text-muted)',marginBottom:8}}>Collection rate this month · {stats.monthCollectionRate}%</div>
-            <div style={{height:8,background:'var(--bg-surface)',borderRadius:4,overflow:'hidden'}}>
-              <div style={{height:'100%',width:stats.monthCollectionRate+'%',background:'linear-gradient(90deg, var(--accent-warm) 0%, var(--bg-warm-dark) 100%)'}}/>
-            </div>
           </div>
 
           {/* Unit Payment Activity — Paid (this month) | Pending (all unpaid) */}
           <div className="card">
             <div style={{marginBottom:14}}>
-              <div style={{fontSize:14,fontWeight:600,color:'var(--text-dark)'}}>Unit Payment Activity {monthLabel}</div>
+              <div style={{fontSize:14,fontWeight:600,color:'var(--text-dark)'}}>Unit Payment Activity {periodLabel}</div>
               <div style={{fontSize:11,color:'var(--text-muted)',marginTop:2}}>Top paying units this month · Top units with pending or overdue invoices</div>
             </div>
             <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:28}}>
