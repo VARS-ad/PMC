@@ -30,6 +30,11 @@ const App = () => {
   // Lifted from TopBar so other PMC pages (Visitors, Guards, future Overview) can
   // filter their data by the currently-selected building ids.
   const [selectedProperties, setSelectedProperties] = useState([]);
+  // Time range filter — shared across Overview / Service Charges / other
+  // financial pages so navigating between them carries the selection.
+  const [timeRange, setTimeRange] = useState('1m');
+  const [customStart, setCustomStart] = useState('');
+  const [customEnd, setCustomEnd] = useState('');
   const [toast, setToast] = useState(null);
   const [language, setLanguageState] = useState(getInitialLanguage);
   // Apply RTL/LTR to <html> + <body> whenever language changes
@@ -242,7 +247,7 @@ const App = () => {
 
   // If not logged in, show login page (with scan notice if QR was scanned)
   if (!role) return (
-    <AppContext.Provider value={{ data, setData, showToast, language, setLanguage, t, selectedProperties, setSelectedProperties }}>
+    <AppContext.Provider value={{ data, setData, showToast, language, setLanguage, t, selectedProperties, setSelectedProperties, timeRange, setTimeRange, customStart, setCustomStart, customEnd, setCustomEnd }}>
       <LoginPage onLogin={(selectedRole) => {
         try { localStorage.setItem('varspm_role', selectedRole); } catch(e) {}
         setRole(selectedRole);
@@ -261,7 +266,7 @@ const App = () => {
   // If logged in as resident, show resident app
   if (role === 'resident') {
     return (
-      <AppContext.Provider value={{ data, setData, showToast, language, setLanguage, t, selectedProperties, setSelectedProperties }}>
+      <AppContext.Provider value={{ data, setData, showToast, language, setLanguage, t, selectedProperties, setSelectedProperties, timeRange, setTimeRange, customStart, setCustomStart, customEnd, setCustomEnd }}>
         <ResidentApp onLogout={handleLogout}/>
         {toast && <div className="toast">{toast}</div>}
       </AppContext.Provider>
@@ -271,7 +276,7 @@ const App = () => {
   // If logged in as security, show security app
   if (role === 'security') {
     return (
-      <AppContext.Provider value={{ data, setData, showToast, language, setLanguage, t, selectedProperties, setSelectedProperties }}>
+      <AppContext.Provider value={{ data, setData, showToast, language, setLanguage, t, selectedProperties, setSelectedProperties, timeRange, setTimeRange, customStart, setCustomStart, customEnd, setCustomEnd }}>
         <SecurityApp onLogout={handleLogout}/>
         <SyncDot/>
         {toast && <div className="toast">{toast}</div>}
@@ -301,7 +306,7 @@ const App = () => {
   };
 
   return (
-    <AppContext.Provider value={{ data, setData, showToast, language, setLanguage, t, selectedProperties, setSelectedProperties }}>
+    <AppContext.Provider value={{ data, setData, showToast, language, setLanguage, t, selectedProperties, setSelectedProperties, timeRange, setTimeRange, customStart, setCustomStart, customEnd, setCustomEnd }}>
       <div className="app-layout">
         <div className={`sidebar-overlay ${sidebarOpen ? 'show' : ''}`} onClick={() => setSidebarOpen(false)}/>
         <Sidebar page={page} setPage={setPage} isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} onLogout={handleLogout}/>

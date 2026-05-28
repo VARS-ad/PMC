@@ -24,15 +24,11 @@ const PMCStat = ({ label, value, color, onClick, hint }) => (
 );
 
 const PMCOverviewPage = ({ setPage }) => {
-  const { selectedProperties = [] } = useApp();
+  const { selectedProperties = [], timeRange, setTimeRange, customStart, setCustomStart, customEnd, setCustomEnd } = useApp();
   const [stats, setStats] = useState(null);
   const [error, setError] = useState(null);
-  // Selected period for the financial KPIs and Service Charge Collection card.
-  // '1m' / '2m' / '3m' / '12m' = rolling last N months (1m = this month only).
-  // 'custom' = user-picked from/to dates.
-  const [timeRange, setTimeRange] = useState('1m');
-  const [customStart, setCustomStart] = useState('');
-  const [customEnd, setCustomEnd] = useState('');
+  // Selected period for the financial KPIs and Operating Income card.
+  // Lives in AppContext so navigating to Service Charges keeps the choice.
   const monthsBack = ({ '1m': 1, '2m': 2, '3m': 3, '12m': 12 })[timeRange] || 1;
 
   useEffect(() => {

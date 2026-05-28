@@ -27,12 +27,47 @@ const effectiveInvoiceStatus = (inv, today = new Date()) => {
 };
 
 const PMCServiceChargesPage = () => {
-  const { selectedProperties = [] } = useApp();
+  const { selectedProperties = [], timeRange, setTimeRange, customStart, setCustomStart, customEnd, setCustomEnd } = useApp();
   const [invoices, setInvoices] = useState(null);
   const [error, setError] = useState(null);
   const [statusFilter, setStatusFilter] = useState('all');
   const [search, setSearch] = useState('');
   const [showDownload, setShowDownload] = useState(false);
+  const monthsBack = ({ '1m': 1, '2m': 2, '3m': 3, '12m': 12 })[timeRange] || 1;
+
+  // Compute the period bounds the same way Overview does, so the shared
+  // dropdown means exactly the same thing on both pages.
+  const periodBounds = (() => {
+    if (timeRange === 'custom' && customStart && customEnd) {
+      return { start: customStart, end: customEnd };
+    }
+    const _now = new Date();
+    const start = new Date(_now.getFullYear(), _now.getMonth() - monthsBack + 1, 1).toISOString().slice(0, 10);
+    const end   = _now.toISOString().slice(0, 10);
+    return { start, end };
+  })();
+
+  // Explicit "1 May – 28 May 2026" subtitle so the user always sees the
+  // bounds the KPIs below are honouring.
+  const explicitRange = (() => {
+    const fmtDay = (d, withYear) => {
+      const day = d.getDate();
+      const mon = d.toLocaleString('en-GB', { month: 'long' });
+      return withYear ? (day + ' ' + mon + ' ' + d.getFullYear()) : (day + ' ' + mon);
+    };
+    let start, end;
+    if (timeRange === 'custom') {
+      if (!customStart || !customEnd) return 'Pick start and end dates';
+      start = new Date(customStart);
+      end   = new Date(customEnd);
+    } else {
+      const _now = new Date();
+      start = new Date(_now.getFullYear(), _now.getMonth() - monthsBack + 1, 1);
+      end   = _now;
+    }
+    const sameYear = start.getFullYear() === end.getFullYear();
+    return fmtDay(start, !sameYear) + ' – ' + fmtDay(end, true);
+  })();
 
   useEffect(() => {
     let mounted = true;
@@ -94,6 +129,10 @@ const PMCServiceChargesPage = () => {
   }, []);
 
   const filtered = (invoices || []).filter(i => {
+    // Honour the shared time range. Same rule as Overview: invoices
+    // whose created_at falls inside [periodStart, periodEnd].
+    const issued = (i.created_at || '').slice(0, 10);
+    if (!issued || issued < periodBounds.start || issued > periodBounds.end) return false;
     if (statusFilter !== 'all' && i.effective_status !== statusFilter) return false;
     if (search) {
       const hay = ((i.invoice_number || '') + ' ' + i.description + ' ' + i.resident_name + ' ' + i.unit_number).toLowerCase();
@@ -118,8 +157,28 @@ const PMCServiceChargesPage = () => {
       <div className="page-header">
         <div>
           <h1>Service Charges</h1>
+          <div style={{marginTop:6,fontSize:14,color:'var(--text-secondary)',fontWeight:500,letterSpacing:'-0.01em'}}>
+            {explicitRange}
+          </div>
         </div>
-        <div className="btn-group">
+        <div style={{display:'flex',gap:8,alignItems:'center',flexWrap:'wrap'}}>
+          <select value={timeRange} onChange={e => setTimeRange(e.target.value)}
+            style={{padding:'8px 14px',fontSize:13,fontWeight:500,borderRadius:6,background:'#fff',border:'1px solid var(--border-light)',color:'var(--text-dark)',cursor:'pointer',fontFamily:'inherit',outline:'none'}}>
+            <option value="1m">1 Month (this month)</option>
+            <option value="2m">2 Months</option>
+            <option value="3m">3 Months</option>
+            <option value="12m">12 Months</option>
+            <option value="custom">Custom range…</option>
+          </select>
+          {timeRange === 'custom' && (
+            <>
+              <input type="date" value={customStart} onChange={e => setCustomStart(e.target.value)}
+                style={{padding:'8px 12px',fontSize:13,borderRadius:6,background:'#fff',border:'1px solid var(--border-light)',color:'var(--text-dark)',fontFamily:'inherit',outline:'none'}}/>
+              <span style={{color:'var(--text-muted)',fontSize:13}}>→</span>
+              <input type="date" value={customEnd} onChange={e => setCustomEnd(e.target.value)}
+                style={{padding:'8px 12px',fontSize:13,borderRadius:6,background:'#fff',border:'1px solid var(--border-light)',color:'var(--text-dark)',fontFamily:'inherit',outline:'none'}}/>
+            </>
+          )}
           <button className="btn" onClick={() => setShowDownload(true)} disabled={!invoices || invoices.length === 0}>Download Data</button>
         </div>
       </div>
@@ -149,6 +208,7 @@ const PMCServiceChargesPage = () => {
                 value: (r) => r.created_at ? new Date(r.created_at).toLocaleDateString() : '' },
             ],
             extraMetadata: {
+              'Period':          explicitRange,
               'Status Filter':   statusFilter === 'all' ? 'All' : statusFilter,
               'Search':          search || '—',
               'Property Filter': selectedProperties.length === 0 ? 'All buildings' : (selectedProperties.length + ' selected'),
