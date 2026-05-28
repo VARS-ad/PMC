@@ -430,8 +430,9 @@ const PCSummary = ({ section }) => {
             <div style={{fontSize:12,color:'var(--text-secondary)'}}>{rows.length} building{rows.length===1?'':'s'} · click a row to see floors & units</div>
             <button className="btn btn-sm" onClick={reload}>Refresh</button>
           </div>
+          <div className="data-table-scroll">
           <table className="data-table">
-            <thead><tr><th style={{width:'22%'}}>Name</th><th style={{width:'42%'}}>Address</th><th style={{width:'8%'}}>Floors</th><th style={{width:'8%'}}>Units</th><th style={{width:'12%'}}>Created</th><th style={{width:'8%',textAlign:'right'}}>Actions</th></tr></thead>
+            <thead><tr><th>Name</th><th>Address</th><th>Floors</th><th>Units</th><th>Created</th><th style={{textAlign:'right'}}>Actions</th></tr></thead>
             <tbody>
               {rows.map(b => {
                 const floors = new Set((b.units||[]).map(u => u.floor)).size;
@@ -457,6 +458,7 @@ const PCSummary = ({ section }) => {
               })}
             </tbody>
           </table>
+          </div>
         </div>
         {selectedBuilding && <BuildingDetailModal building={selectedBuilding} onClose={() => setSelectedBuilding(null)}/>}
         {editing && <EditRecordModal kind={editing.kind} record={editing.record} onClose={() => setEditing(null)} onSaved={reload}/>}
@@ -472,8 +474,9 @@ const PCSummary = ({ section }) => {
           <div style={{fontSize:12,color:'var(--text-secondary)'}}>{rows.length} resident{rows.length===1?'':'s'}</div>
           <button className="btn btn-sm" onClick={reload}>Refresh</button>
         </div>
+        <div className="data-table-scroll">
         <table className="data-table">
-          <thead><tr><th style={{width:'14%'}}>Name</th><th style={{width:'18%'}}>Email</th><th style={{width:'11%'}}>Phone</th><th style={{width:'10%'}}>Passport</th><th style={{width:'8%'}}>DOB</th><th style={{width:'14%'}}>Building</th><th style={{width:'5%'}}>Floor</th><th style={{width:'5%'}}>Unit</th><th style={{width:'8%'}}>Created</th><th style={{width:'7%',textAlign:'right'}}>Actions</th></tr></thead>
+          <thead><tr><th>Name</th><th>Email</th><th>Phone</th><th>Passport</th><th>DOB</th><th>Building</th><th>Floor</th><th>Unit</th><th>Created</th><th style={{textAlign:'right'}}>Actions</th></tr></thead>
           <tbody>
             {rows.map(r => (
               <tr key={r.id} onClick={() => setViewingResident(r)} style={{cursor:'pointer'}}>
@@ -501,6 +504,7 @@ const PCSummary = ({ section }) => {
             ))}
           </tbody>
         </table>
+        </div>
       </div>
       {editing && <EditRecordModal kind={editing.kind} record={editing.record} onClose={() => setEditing(null)} onSaved={reload}/>}
       {viewingResident && <ResidentDetailModal resident={viewingResident} onClose={() => setViewingResident(null)}/>}
@@ -515,8 +519,9 @@ const PCSummary = ({ section }) => {
           <div style={{fontSize:12,color:'var(--text-secondary)'}}>{rows.length} booking{rows.length===1?'':'s'} · read-only</div>
           <button className="btn btn-sm" onClick={reload}>Refresh</button>
         </div>
+        <div className="data-table-scroll">
         <table className="data-table">
-          <thead><tr><th style={{width:'16%'}}>Amenity</th><th style={{width:'18%'}}>Building</th><th style={{width:'8%'}}>Unit</th><th style={{width:'22%'}}>Resident</th><th style={{width:'12%'}}>Date</th><th style={{width:'12%'}}>Time</th><th style={{width:'12%'}}>Status</th></tr></thead>
+          <thead><tr><th>Amenity</th><th>Building</th><th>Unit</th><th>Resident</th><th>Date</th><th>Time</th><th>Status</th></tr></thead>
           <tbody>
             {rows.map(r => (
               <tr key={r.id}>
@@ -531,6 +536,7 @@ const PCSummary = ({ section }) => {
             ))}
           </tbody>
         </table>
+        </div>
       </div>
     );
   }
@@ -542,13 +548,14 @@ const PCSummary = ({ section }) => {
           <div style={{fontSize:12,color:'var(--text-secondary)'}}>{rows.length} request{rows.length===1?'':'s'} · read-only</div>
           <button className="btn btn-sm" onClick={reload}>Refresh</button>
         </div>
+        <div className="data-table-scroll">
         <table className="data-table">
-          <thead><tr><th style={{width:'12%'}}>Category</th><th style={{width:'28%'}}>Description</th><th style={{width:'14%'}}>Building</th><th style={{width:'7%'}}>Unit</th><th style={{width:'15%'}}>Resident</th><th style={{width:'8%'}}>Priority</th><th style={{width:'9%'}}>Status</th><th style={{width:'7%'}}>Created</th></tr></thead>
+          <thead><tr><th>Category</th><th>Description</th><th>Building</th><th>Unit</th><th>Resident</th><th>Priority</th><th>Status</th><th>Created</th></tr></thead>
           <tbody>
             {rows.map(r => (
               <tr key={r.id}>
                 <td style={{fontWeight:500}}>{r.category}</td>
-                <td style={{maxWidth:220,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}} title={r.description}>{r.description}</td>
+                <td style={{maxWidth:320,overflow:'hidden',textOverflow:'ellipsis'}} title={r.description}>{r.description}</td>
                 <td>{r.building_name}</td>
                 <td>{r.unit_label}</td>
                 <td>{r.resident_name}</td>
@@ -559,6 +566,7 @@ const PCSummary = ({ section }) => {
             ))}
           </tbody>
         </table>
+        </div>
       </div>
     );
   }
@@ -570,13 +578,14 @@ const PCSummary = ({ section }) => {
           <div style={{fontSize:12,color:'var(--text-secondary)'}}>{rows.length} invoice{rows.length===1?'':'s'} · read-only</div>
           <button className="btn btn-sm" onClick={reload}>Refresh</button>
         </div>
+        <div className="data-table-scroll">
         <table className="data-table">
-          <thead><tr><th style={{width:'10%'}}>Invoice #</th><th style={{width:'26%'}}>Description</th><th style={{width:'14%'}}>Building</th><th style={{width:'7%'}}>Unit</th><th style={{width:'15%'}}>Resident</th><th style={{width:'11%',textAlign:'right'}}>Amount (AED)</th><th style={{width:'8%'}}>Due</th><th style={{width:'9%'}}>Status</th></tr></thead>
+          <thead><tr><th>Invoice #</th><th>Description</th><th>Building</th><th>Unit</th><th>Resident</th><th style={{textAlign:'right'}}>Amount (AED)</th><th>Due</th><th>Status</th></tr></thead>
           <tbody>
             {rows.map(r => (
               <tr key={r.id}>
                 <td style={{fontWeight:500}}>{r.invoice_number || '—'}</td>
-                <td style={{maxWidth:220,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}} title={r.description}>{r.description}</td>
+                <td style={{maxWidth:320,overflow:'hidden',textOverflow:'ellipsis'}} title={r.description}>{r.description}</td>
                 <td>{r.building_name}</td>
                 <td>{r.unit_label}</td>
                 <td>{r.resident_name}</td>
@@ -587,6 +596,7 @@ const PCSummary = ({ section }) => {
             ))}
           </tbody>
         </table>
+        </div>
       </div>
     );
   }
@@ -598,8 +608,9 @@ const PCSummary = ({ section }) => {
         <div style={{fontSize:12,color:'var(--text-secondary)'}}>{rows.length} guard{rows.length===1?'':'s'}</div>
         <button className="btn btn-sm" onClick={reload}>Refresh</button>
       </div>
+      <div className="data-table-scroll">
       <table className="data-table">
-        <thead><tr><th style={{width:'16%'}}>Name</th><th style={{width:'20%'}}>Email</th><th style={{width:'12%'}}>Phone</th><th style={{width:'11%'}}>Passport</th><th style={{width:'10%'}}>DOB</th><th style={{width:'15%'}}>Building</th><th style={{width:'8%'}}>Shift</th><th style={{width:'8%',textAlign:'right'}}>Actions</th></tr></thead>
+        <thead><tr><th>Name</th><th>Email</th><th>Phone</th><th>Passport</th><th>DOB</th><th>Building</th><th>Shift</th><th style={{textAlign:'right'}}>Actions</th></tr></thead>
         <tbody>
           {rows.map(r => (
             <tr key={r.id}>
@@ -624,6 +635,7 @@ const PCSummary = ({ section }) => {
           ))}
         </tbody>
       </table>
+      </div>
     </div>
     {editing && <EditRecordModal kind={editing.kind} record={editing.record} onClose={() => setEditing(null)} onSaved={reload}/>}
     </>
@@ -802,7 +814,7 @@ const PCBulkUpload = ({ section }) => {
       <div className="card">
         <div style={{fontSize:11,letterSpacing:'0.06em',textTransform:'uppercase',color:'var(--text-secondary)',marginBottom:12}}>1. Example data</div>
         <div style={{fontSize:12,color:'var(--text-secondary)',marginBottom:12}}>The template is pre-populated with rows that look like this. Replace them with your real data before uploading.</div>
-        <div style={{overflowX:'auto'}}>
+        <div className="data-table-scroll">
           <table className="data-table" style={{fontSize:12}}>
             <thead><tr>{cfg.headers.map(h => <th key={h}>{h}</th>)}</tr></thead>
             <tbody>{cfg.examples.map((row,i) => (<tr key={i}>{row.map((v,j) => <td key={j}>{v == null || v === '' ? '—' : v}</td>)}</tr>))}</tbody>
@@ -850,7 +862,7 @@ const PCBulkUpload = ({ section }) => {
         {parsedRows && (
           <div style={{marginTop:16}}>
             <div style={{fontSize:12,fontWeight:500,marginBottom:8}}>Preview — {parsedRows.length} row{parsedRows.length===1?'':'s'}</div>
-            <div style={{maxHeight:280,overflowY:'auto',border:'1px solid var(--border-light)',borderRadius:6}}>
+            <div className="data-table-scroll" style={{maxHeight:280,overflowY:'auto',border:'1px solid var(--border-light)',borderRadius:6}}>
               <table className="data-table" style={{fontSize:11}}>
                 <thead><tr>{cfg.headers.map(h => <th key={h}>{h}</th>)}</tr></thead>
                 <tbody>{parsedRows.slice(0,50).map((r,i) => (<tr key={i}>{cfg.headers.map(h => <td key={h}>{r[h] == null ? '—' : String(r[h])}</td>)}</tr>))}</tbody>
@@ -1090,7 +1102,7 @@ const PCVendorAttachments = ({ createdVendors }) => {
 
       {pending.length > 0 && (
         <div style={{marginTop: 16}}>
-          <div style={{maxHeight: 320, overflowY: 'auto', border: '1px solid var(--border-light)', borderRadius: 6}}>
+          <div className="data-table-scroll" style={{maxHeight: 320, overflowY: 'auto', border: '1px solid var(--border-light)', borderRadius: 6}}>
             <table className="data-table" style={{fontSize: 12}}>
               <thead>
                 <tr>
@@ -1864,17 +1876,18 @@ const ContractsSection = () => {
             No contracts yet. Click <strong>+ Add contract</strong> to create the first one.
           </div>
         ) : (
+          <div className="data-table-scroll">
           <table className="data-table">
             <thead><tr>
-              <th style={{width:'20%'}}>Name</th>
-              <th style={{width:'14%'}}>Counterparty</th>
-              <th style={{width:'10%'}}>Type</th>
-              <th style={{width:'10%'}}>End date</th>
-              <th style={{width:'8%'}}>Days left</th>
-              <th style={{width:'12%'}}>Building</th>
-              <th style={{width:'10%',textAlign:'right'}}>Value (AED)</th>
-              <th style={{width:'8%'}}>Status</th>
-              <th style={{width:'8%',textAlign:'right'}}>Actions</th>
+              <th>Name</th>
+              <th>Counterparty</th>
+              <th>Type</th>
+              <th>End date</th>
+              <th>Days left</th>
+              <th>Building</th>
+              <th style={{textAlign:'right'}}>Value (AED)</th>
+              <th>Status</th>
+              <th style={{textAlign:'right'}}>Actions</th>
             </tr></thead>
             <tbody>
               {rows.map(c => {
@@ -1904,6 +1917,7 @@ const ContractsSection = () => {
               })}
             </tbody>
           </table>
+          </div>
         )}
       </div>
 
@@ -2590,14 +2604,14 @@ const InvoiceDocumentsBulkSection = () => {
       </div>
 
       {files.length > 0 && (
-        <div style={{marginBottom:14,maxHeight:320,overflowY:'auto',border:'1px solid var(--border-light)',borderRadius:8}}>
+        <div className="data-table-scroll" style={{marginBottom:14,maxHeight:320,overflowY:'auto',border:'1px solid var(--border-light)',borderRadius:8}}>
           <table className="data-table" style={{fontSize:12}}>
             <thead>
               <tr>
-                <th style={{width:'34%'}}>File</th>
-                <th style={{width:'24%'}}>Invoice #</th>
-                <th style={{width:'14%'}}>Slot</th>
-                <th style={{width:'28%'}}>Status</th>
+                <th>File</th>
+                <th>Invoice #</th>
+                <th>Slot</th>
+                <th>Status</th>
               </tr>
             </thead>
             <tbody>
