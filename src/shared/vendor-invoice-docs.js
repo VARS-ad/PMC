@@ -47,19 +47,7 @@ const VendorSlotCell = ({ payment, vendorId, slot }) => {
         {docs === null ? (
           <span style={{fontSize:10,color:'var(--text-muted)'}}>…</span>
         ) : (
-          <span
-            style={{
-              display:'inline-flex',alignItems:'center',justifyContent:'center',gap:3,
-              minWidth:28,height:20,padding:'0 8px',borderRadius:4,
-              fontSize:11,fontWeight:600,
-              background: filled ? '#e6efe1' : '#fff',
-              color:      filled ? '#5a6b4f' : '#a8b0b6',
-              border:     '1px solid ' + (filled ? '#c8d4be' : '#dde1e0'),
-            }}
-          >
-            {filled ? '\u{1F4CE}' : '+'}
-            {count > 1 && <span style={{fontSize:10}}>{count}</span>}
-          </span>
+          <SlotPill filled={filled} count={count}/>
         )}
       </td>
       {open && (
@@ -142,6 +130,25 @@ const VendorSlotModal = ({ payment, vendorId, slot, docs, onClose, onChange }) =
       });
       if (insErr) throw new Error('Metadata: ' + insErr.message);
       await onChange();
+      // Same Mark-as-Paid flow as the resident widget — but here the
+      // status column is vendor_payments.payment_status.
+      if (slot === 'payment_receipt' && payment.payment_status !== 'Paid' && payment.payment_status !== 'Cancelled') {
+        if (window.confirm('Mark vendor invoice ' + (payment.invoice_number || '') + ' as Paid?')) {
+          const { error: stErr } = await supabaseClient.from('vendor_payments')
+            .update({ payment_status: 'Paid', paid_date: new Date().toISOString().slice(0, 10) })
+            .eq('id', payment.id);
+          if (stErr) {
+            setError('Status update failed: ' + stErr.message);
+          } else {
+            payment.payment_status = 'Paid';
+            try {
+              window.dispatchEvent(new CustomEvent('vars:vendor-payment-status-changed', {
+                detail: { payment_id: payment.id, new_status: 'Paid' },
+              }));
+            } catch (_) {}
+          }
+        }
+      }
     } catch (e) {
       setError(e.message || String(e));
     }

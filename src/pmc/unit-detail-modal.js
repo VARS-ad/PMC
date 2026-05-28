@@ -92,6 +92,18 @@ const UnitDetailModal = ({ unit, building, assignment: passedAssignment, profile
     return () => { mounted = false; };
   }, [unit.id]);
 
+  // Listen for status changes fired by the InvoiceSlotModal so the row
+  // re-buckets without a full reload.
+  useEffect(() => {
+    const handler = (e) => {
+      const { invoice_id, new_status } = (e && e.detail) || {};
+      if (!invoice_id) return;
+      setInvoices(prev => (prev || []).map(i => i.id === invoice_id ? { ...i, status: new_status } : i));
+    };
+    window.addEventListener('vars:invoice-status-changed', handler);
+    return () => window.removeEventListener('vars:invoice-status-changed', handler);
+  }, []);
+
   const fmt = (n) => 'AED ' + Math.round(Number(n) || 0).toLocaleString();
   // Same rule as Service Charges: split "Pending" into Upcoming (>30 days out)
   // and the actually-outstanding ones (due within 30 days, or already overdue).

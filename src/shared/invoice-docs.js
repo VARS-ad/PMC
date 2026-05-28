@@ -16,6 +16,34 @@ const INVOICE_SLOT_META = {
   payment_proof: { label: 'Proof of payment', hint: 'Bank slip, receipt or cheque image' },
 };
 
+// Shared pill rendered in both the resident and vendor docs cells. Uses
+// an inline SVG paperclip so the icon size, baseline and stroke colour
+// match the "+" exactly — the emoji rendering shifted the pill height
+// inconsistently across rows.
+const SlotPill = ({ filled, count }) => (
+  <span
+    style={{
+      display:'inline-flex',alignItems:'center',justifyContent:'center',gap:4,
+      width:'auto',minWidth:32,height:22,padding:'0 8px',borderRadius:4,
+      lineHeight:1,fontSize:12,fontWeight:600,
+      background: filled ? '#e6efe1' : '#fff',
+      color:      filled ? '#5a6b4f' : '#a8b0b6',
+      border:     '1px solid ' + (filled ? '#c8d4be' : '#dde1e0'),
+      verticalAlign:'middle',
+    }}
+  >
+    {filled ? (
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+           strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" style={{display:'block'}}>
+        <path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 17.93 8.83l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48"/>
+      </svg>
+    ) : (
+      <span style={{fontSize:14,lineHeight:1,display:'block'}}>+</span>
+    )}
+    {filled && count > 1 && <span style={{fontSize:11,lineHeight:1}}>{count}</span>}
+  </span>
+);
+
 const InvoiceSlotCell = ({ invoice, slot }) => {
   const [docs, setDocs] = useState(null);
   const [open, setOpen] = useState(false);
@@ -50,19 +78,7 @@ const InvoiceSlotCell = ({ invoice, slot }) => {
         {docs === null ? (
           <span style={{fontSize:10,color:'var(--text-muted)'}}>…</span>
         ) : (
-          <span
-            style={{
-              display:'inline-flex',alignItems:'center',justifyContent:'center',gap:3,
-              minWidth:28,height:20,padding:'0 8px',borderRadius:4,
-              fontSize:11,fontWeight:600,
-              background: filled ? '#e6efe1' : '#fff',
-              color:      filled ? '#5a6b4f' : '#a8b0b6',
-              border:     '1px solid ' + (filled ? '#c8d4be' : '#dde1e0'),
-            }}
-          >
-            {filled ? '\u{1F4CE}' : '+'}
-            {count > 1 && <span style={{fontSize:10}}>{count}</span>}
-          </span>
+          <SlotPill filled={filled} count={count}/>
         )}
       </td>
       {open && (
@@ -156,6 +172,26 @@ const InvoiceSlotModal = ({ invoice, slot, docs, onClose, onChange }) => {
       });
       if (insErr) throw new Error('Metadata: ' + insErr.message);
       await onChange();
+      // If this was a payment proof and the invoice isn't already Paid,
+      // offer to mark it as Paid. We dispatch a window event so any open
+      // table can update its row in place without a full reload.
+      if (slot === 'payment_proof' && invoice.status !== 'Paid' && invoice.status !== 'Cancelled') {
+        if (window.confirm('Mark invoice ' + (invoice.invoice_number || '') + ' as Paid?')) {
+          const { error: stErr } = await supabaseClient.from('invoices')
+            .update({ status: 'Paid' })
+            .eq('id', invoice.id);
+          if (stErr) {
+            setError('Status update failed: ' + stErr.message);
+          } else {
+            invoice.status = 'Paid';
+            try {
+              window.dispatchEvent(new CustomEvent('vars:invoice-status-changed', {
+                detail: { invoice_id: invoice.id, new_status: 'Paid' },
+              }));
+            } catch (_) {}
+          }
+        }
+      }
     } catch (e) {
       setError(e.message || String(e));
     }

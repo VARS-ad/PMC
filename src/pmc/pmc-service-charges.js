@@ -73,6 +73,21 @@ const PMCServiceChargesPage = () => {
     return () => { mounted = false; };
   }, [selectedProperties.join(',')]);
 
+  // Listen for in-app status flips (Mark-as-Paid from the slot modal) so
+  // the pill + bucket update without a round-trip.
+  useEffect(() => {
+    const handler = (e) => {
+      const { invoice_id, new_status } = (e && e.detail) || {};
+      if (!invoice_id) return;
+      const today = new Date();
+      setInvoices(prev => (prev || []).map(i => i.id === invoice_id
+        ? { ...i, status: new_status, effective_status: effectiveInvoiceStatus({ ...i, status: new_status }, today) }
+        : i));
+    };
+    window.addEventListener('vars:invoice-status-changed', handler);
+    return () => window.removeEventListener('vars:invoice-status-changed', handler);
+  }, []);
+
   const filtered = (invoices || []).filter(i => {
     if (statusFilter !== 'all' && i.effective_status !== statusFilter) return false;
     if (search) {

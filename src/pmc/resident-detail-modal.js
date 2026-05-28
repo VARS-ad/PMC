@@ -54,6 +54,18 @@ const ResidentDetailModal = ({ resident, onClose }) => {
     return () => { mounted = false; };
   }, [resident.id]);
 
+  // Pick up the Paid flip fired by InvoiceSlotModal so the row re-buckets
+  // from Outstanding/Future into Paid without reloading the modal.
+  useEffect(() => {
+    const handler = (e) => {
+      const { invoice_id, new_status } = (e && e.detail) || {};
+      if (!invoice_id) return;
+      setInvoices(prev => (prev || []).map(i => i.id === invoice_id ? { ...i, status: new_status } : i));
+    };
+    window.addEventListener('vars:invoice-status-changed', handler);
+    return () => window.removeEventListener('vars:invoice-status-changed', handler);
+  }, []);
+
   // === Upload / delete handlers (unchanged behaviour) ===
   const handleUpload = async (kind, file) => {
     if (!file || !supabaseClient) return;

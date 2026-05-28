@@ -493,6 +493,18 @@ const VendorDetailModal = ({ vendor, buildings, vendorBuildingIds, onClose, onEd
 
   useEffect(() => { loadDocs(); loadPayments(); }, [vendor.id]);
 
+  // Update payment_status in place when VendorSlotModal flips it after a
+  // payment_receipt upload, so the badge re-renders without re-fetching.
+  useEffect(() => {
+    const handler = (e) => {
+      const { payment_id, new_status } = (e && e.detail) || {};
+      if (!payment_id) return;
+      setPayments(prev => (prev || []).map(p => p.id === payment_id ? { ...p, payment_status: new_status } : p));
+    };
+    window.addEventListener('vars:vendor-payment-status-changed', handler);
+    return () => window.removeEventListener('vars:vendor-payment-status-changed', handler);
+  }, []);
+
   const handleUploadDoc = async (kind, file) => {
     if (!file) return;
     setUploadingKind(kind); setError(null);
