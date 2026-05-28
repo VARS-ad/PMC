@@ -424,7 +424,7 @@ const PCSummary = ({ section }) => {
             <button className="btn btn-sm" onClick={reload}>Refresh</button>
           </div>
           <table className="data-table">
-            <thead><tr><th>Name</th><th>Address</th><th>Floors</th><th>Units</th><th>Created</th><th style={{textAlign:'right'}}>Actions</th></tr></thead>
+            <thead><tr><th style={{width:'22%'}}>Name</th><th style={{width:'42%'}}>Address</th><th style={{width:'8%'}}>Floors</th><th style={{width:'8%'}}>Units</th><th style={{width:'12%'}}>Created</th><th style={{width:'8%',textAlign:'right'}}>Actions</th></tr></thead>
             <tbody>
               {rows.map(b => {
                 const floors = new Set((b.units||[]).map(u => u.floor)).size;
@@ -466,7 +466,7 @@ const PCSummary = ({ section }) => {
           <button className="btn btn-sm" onClick={reload}>Refresh</button>
         </div>
         <table className="data-table">
-          <thead><tr><th>Name</th><th>Email</th><th>Phone</th><th>Passport</th><th>DOB</th><th>Building</th><th>Floor</th><th>Unit</th><th>Created</th><th style={{textAlign:'right'}}>Actions</th></tr></thead>
+          <thead><tr><th style={{width:'14%'}}>Name</th><th style={{width:'18%'}}>Email</th><th style={{width:'11%'}}>Phone</th><th style={{width:'10%'}}>Passport</th><th style={{width:'8%'}}>DOB</th><th style={{width:'14%'}}>Building</th><th style={{width:'5%'}}>Floor</th><th style={{width:'5%'}}>Unit</th><th style={{width:'8%'}}>Created</th><th style={{width:'7%',textAlign:'right'}}>Actions</th></tr></thead>
           <tbody>
             {rows.map(r => (
               <tr key={r.id} onClick={() => setViewingResident(r)} style={{cursor:'pointer'}}>
@@ -509,7 +509,7 @@ const PCSummary = ({ section }) => {
           <button className="btn btn-sm" onClick={reload}>Refresh</button>
         </div>
         <table className="data-table">
-          <thead><tr><th>Amenity</th><th>Building</th><th>Unit</th><th>Resident</th><th>Date</th><th>Time</th><th>Status</th></tr></thead>
+          <thead><tr><th style={{width:'16%'}}>Amenity</th><th style={{width:'18%'}}>Building</th><th style={{width:'8%'}}>Unit</th><th style={{width:'22%'}}>Resident</th><th style={{width:'12%'}}>Date</th><th style={{width:'12%'}}>Time</th><th style={{width:'12%'}}>Status</th></tr></thead>
           <tbody>
             {rows.map(r => (
               <tr key={r.id}>
@@ -536,7 +536,7 @@ const PCSummary = ({ section }) => {
           <button className="btn btn-sm" onClick={reload}>Refresh</button>
         </div>
         <table className="data-table">
-          <thead><tr><th>Category</th><th>Description</th><th>Building</th><th>Unit</th><th>Resident</th><th>Priority</th><th>Status</th><th>Created</th></tr></thead>
+          <thead><tr><th style={{width:'12%'}}>Category</th><th style={{width:'28%'}}>Description</th><th style={{width:'14%'}}>Building</th><th style={{width:'7%'}}>Unit</th><th style={{width:'15%'}}>Resident</th><th style={{width:'8%'}}>Priority</th><th style={{width:'9%'}}>Status</th><th style={{width:'7%'}}>Created</th></tr></thead>
           <tbody>
             {rows.map(r => (
               <tr key={r.id}>
@@ -564,7 +564,7 @@ const PCSummary = ({ section }) => {
           <button className="btn btn-sm" onClick={reload}>Refresh</button>
         </div>
         <table className="data-table">
-          <thead><tr><th>Invoice #</th><th>Description</th><th>Building</th><th>Unit</th><th>Resident</th><th style={{textAlign:'right'}}>Amount (AED)</th><th>Due</th><th>Status</th></tr></thead>
+          <thead><tr><th style={{width:'10%'}}>Invoice #</th><th style={{width:'26%'}}>Description</th><th style={{width:'14%'}}>Building</th><th style={{width:'7%'}}>Unit</th><th style={{width:'15%'}}>Resident</th><th style={{width:'11%',textAlign:'right'}}>Amount (AED)</th><th style={{width:'8%'}}>Due</th><th style={{width:'9%'}}>Status</th></tr></thead>
           <tbody>
             {rows.map(r => (
               <tr key={r.id}>
@@ -592,7 +592,7 @@ const PCSummary = ({ section }) => {
         <button className="btn btn-sm" onClick={reload}>Refresh</button>
       </div>
       <table className="data-table">
-        <thead><tr><th>Name</th><th>Email</th><th>Phone</th><th>Passport</th><th>DOB</th><th>Building</th><th>Shift</th><th style={{textAlign:'right'}}>Actions</th></tr></thead>
+        <thead><tr><th style={{width:'16%'}}>Name</th><th style={{width:'20%'}}>Email</th><th style={{width:'12%'}}>Phone</th><th style={{width:'11%'}}>Passport</th><th style={{width:'10%'}}>DOB</th><th style={{width:'15%'}}>Building</th><th style={{width:'8%'}}>Shift</th><th style={{width:'8%',textAlign:'right'}}>Actions</th></tr></thead>
         <tbody>
           {rows.map(r => (
             <tr key={r.id}>

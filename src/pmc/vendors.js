@@ -646,7 +646,7 @@ const VendorDetailModal = ({ vendor, buildings, vendorBuildingIds, onClose, onEd
         {tab === 'payments' && (
           <div>
             {payments !== null && payments.length > 0 && (
-              <div className="kpi-row" style={{marginBottom: 14}}>
+              <div className="kpi-row" style={{gridTemplateColumns:'repeat(4, minmax(0, 1fr))',marginBottom: 14}}>
                 <div className="kpi-card"><div className="label">{t('vendors.pay.totalBilled')}</div><div className="value" style={{fontSize:18}}>{fmtAED(totals.total)}</div></div>
                 <div className="kpi-card"><div className="label">{t('vendors.pay.paid')}</div><div className="value" style={{fontSize:18, color:'#5a6b4f'}}>{fmtAED(totals.paid)}</div></div>
                 <div className="kpi-card"><div className="label">{t('vendors.pay.pending')}</div><div className="value" style={{fontSize:18, color:'#a07d3c'}}>{fmtAED(totals.pending)}</div></div>
@@ -666,12 +666,12 @@ const VendorDetailModal = ({ vendor, buildings, vendorBuildingIds, onClose, onEd
               <table className="data-table" style={{fontSize: 12}}>
                 <thead>
                   <tr>
-                    <th>{t('vendors.pay.th.invoice')}</th>
-                    <th>{t('vendors.pay.th.date')}</th>
-                    <th>{t('vendors.pay.th.description')}</th>
-                    <th style={{textAlign:'right'}}>{t('vendors.pay.th.amount')}</th>
-                    <th>{t('vendors.pay.th.status')}</th>
-                    <th></th>
+                    <th style={{width:'14%'}}>{t('vendors.pay.th.invoice')}</th>
+                    <th style={{width:'14%'}}>{t('vendors.pay.th.date')}</th>
+                    <th style={{width:'40%'}}>{t('vendors.pay.th.description')}</th>
+                    <th style={{width:'12%',textAlign:'right'}}>{t('vendors.pay.th.amount')}</th>
+                    <th style={{width:'15%'}}>{t('vendors.pay.th.status')}</th>
+                    <th style={{width:'5%'}}></th>
                   </tr>
                 </thead>
                 <tbody>
@@ -844,7 +844,7 @@ const PMCVendorsPage = ({ setPage }) => {
         }}
       />
 
-      <div className="kpi-row">
+      <div className="kpi-row" style={{gridTemplateColumns:'repeat(5, minmax(0, 1fr))'}}>
         <div className="kpi-card"><div className="label">{t('vendors.kpi.total')}</div><div className="value">{counts.total}</div></div>
         <div className="kpi-card"><div className="label">{t('vendors.kpi.active')}</div><div className="value" style={{color:'#5a6b4f'}}>{counts.active}</div></div>
         <div className="kpi-card"><div className="label">{t('vendors.kpi.expiringSoon')}</div><div className="value" style={{color:'#a07d3c'}}>{counts.expiring}</div></div>
@@ -893,13 +893,13 @@ const PMCVendorsPage = ({ setPage }) => {
           <table className="data-table">
             <thead>
               <tr>
-                <th>{t('vendors.th.vendor')}</th>
-                <th>{t('vendors.th.category')}</th>
-                <th>{t('vendors.th.contact')}</th>
-                <th>{t('vendors.th.contract')}</th>
-                <th style={{textAlign:'right'}}>{t('vendors.th.value')}</th>
-                <th style={{textAlign:'right'}}>{t('vendors.th.outstanding')}</th>
-                <th>{t('vendors.th.status')}</th>
+                <th style={{width:'22%'}}>{t('vendors.th.vendor')}</th>
+                <th style={{width:'12%'}}>{t('vendors.th.category')}</th>
+                <th style={{width:'18%'}}>{t('vendors.th.contact')}</th>
+                <th style={{width:'16%'}}>{t('vendors.th.contract')}</th>
+                <th style={{width:'10%',textAlign:'right'}}>{t('vendors.th.value')}</th>
+                <th style={{width:'12%',textAlign:'right'}}>{t('vendors.th.outstanding')}</th>
+                <th style={{width:'10%'}}>{t('vendors.th.status')}</th>
               </tr>
             </thead>
             <tbody>
