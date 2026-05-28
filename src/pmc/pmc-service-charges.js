@@ -310,20 +310,19 @@ const PMCServiceChargesPage = () => {
               <div style={{fontSize:13,fontWeight:600}}>Aging — Receivables by Days Overdue</div>
               <div style={{fontSize:11,color:'var(--text-secondary)',marginTop:2}}>Only unpaid invoices (Pending + Upcoming). Older buckets = redder. Total: <strong style={{color:'var(--text-dark)'}}>{fmt(total)}</strong></div>
             </div>
-            {/* One big card per bucket — bucket name on top, AED amount
-                as the dominant headline number, percentage of total
-                unpaid as a secondary line. Coloured top stripe instead
-                of the old swatch so each card carries its bucket colour
-                without taking centre stage from the amount. */}
-            <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit, minmax(180px, 1fr))',gap:12}}>
+            {/* Match the headline KPI row style at the top of the page —
+                each bucket is now a kpi-card with bucket name as the
+                .label, AED amount as the tinted .value, and the
+                percentage on a small subtitle line. */}
+            <div className="kpi-row" style={{gridTemplateColumns:'repeat(5, minmax(0, 1fr))',marginBottom:0}}>
               {rows.map((r, i) => {
                 const pct = Math.round(r.amt / total * 100);
+                const valueColor = r.color === '#D0D6D5' ? 'var(--text-dark)' : r.color;
                 return (
-                  <div key={i} style={{position:'relative',padding:'18px 18px 20px',background:'#fff',borderRadius:8,border:'1px solid var(--border-light)',overflow:'hidden'}}>
-                    <div style={{position:'absolute',top:0,left:0,right:0,height:5,background:r.color}}/>
-                    <div style={{fontSize:11,letterSpacing:'0.06em',textTransform:'uppercase',color:'var(--text-secondary)',fontWeight:600,marginBottom:10}}>{r.label}</div>
-                    <div style={{fontSize:26,fontWeight:700,color:'var(--text-dark)',letterSpacing:'-0.03em',lineHeight:1.05}}>{fmt(r.amt)}</div>
-                    <div style={{fontSize:14,fontWeight:600,color: r.color === '#D0D6D5' ? 'var(--text-secondary)' : r.color,marginTop:8}}>{pct}% of unpaid</div>
+                  <div key={i} className="kpi-card">
+                    <div className="label">{r.label}</div>
+                    <div className="value" style={{color: valueColor}}>{fmt(r.amt)}</div>
+                    <div style={{fontSize:11,color:'var(--text-muted)',marginTop:6}}>{pct}% of unpaid</div>
                   </div>
                 );
               })}
