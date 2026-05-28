@@ -696,3 +696,109 @@ const exportReportExcel = ({ title, subtitle, description, sheetName, columns, r
   X.utils.book_append_sheet(wb, ws, (sheetName || title || 'Sheet1').slice(0, 31));
   X.writeFile(wb, _safeFilename(filename) + '.xlsx');
 };
+
+// ---------- Word export ----------
+// Generates an HTML document saved with a .doc extension and the
+// application/msword MIME type. Word opens this as a regular document
+// (and offers to save-as .docx). Reliable, dependency-free, and uses
+// the same REPORT_BRAND palette as the PDF and Excel exporters.
+const _escapeHtml = (s) => String(s == null ? '' : s)
+  .replace(/&/g, '&amp;')
+  .replace(/</g, '&lt;')
+  .replace(/>/g, '&gt;')
+  .replace(/"/g, '&quot;')
+  .replace(/'/g, '&#39;');
+
+const exportReportWord = ({ title, subtitle, description, columns, rows, metadata, filename }) => {
+  const metaPairs = _buildMetaPairs(title, rows, metadata);
+  const descText  = _buildDescription(title, rows, metadata, description);
+  const aoa       = _rowsToAOA(rows, columns);
+
+  const headerHtml = columns.map(c => {
+    const align = c.halign === 'right' ? 'right' : (c.halign === 'center' ? 'center' : 'left');
+    return '<th style="text-align:' + align + '">' + _escapeHtml(c.header) + '</th>';
+  }).join('');
+  const bodyHtml = aoa.map((row, ri) => {
+    const cells = row.map((cell, ci) => {
+      const c = columns[ci];
+      const align = c.halign === 'right' ? 'right' : (c.halign === 'center' ? 'center' : 'left');
+      const v = (c.numeric && typeof cell === 'number') ? _formatNumber(cell) : cell;
+      return '<td style="text-align:' + align + '">' + _escapeHtml(v) + '</td>';
+    }).join('');
+    const stripe = (ri % 2 === 1) ? ' class="zebra"' : '';
+    return '<tr' + stripe + '>' + cells + '</tr>';
+  }).join('');
+
+  const metaRowsHtml = (() => {
+    let out = '';
+    for (let i = 0; i < metaPairs.length; i += 2) {
+      const [k1, v1] = metaPairs[i];
+      const pair2    = metaPairs[i + 1];
+      out += '<tr>';
+      out += '<td class="meta-key">'   + _escapeHtml(k1) + '</td>';
+      out += '<td class="meta-value">' + _escapeHtml(v1) + '</td>';
+      if (pair2) {
+        out += '<td class="meta-key">'   + _escapeHtml(pair2[0]) + '</td>';
+        out += '<td class="meta-value">' + _escapeHtml(pair2[1]) + '</td>';
+      } else {
+        out += '<td></td><td></td>';
+      }
+      out += '</tr>';
+    }
+    return out;
+  })();
+
+  const css = [
+    'body{font-family:"Calibri","Segoe UI",Arial,sans-serif;color:' + REPORT_BRAND.textDarkHex + ';margin:0;padding:0;}',
+    '.page{padding:36pt;}',
+    '.brand{display:flex;align-items:center;gap:14pt;margin-bottom:8pt;}',
+    '.shield{width:32pt;height:32pt;background:' + REPORT_BRAND.primaryHex + ';color:#fff;font-weight:600;font-size:18pt;display:inline-block;text-align:center;line-height:32pt;border-radius:3pt;}',
+    '.wordmark{font-size:22pt;font-weight:600;letter-spacing:-0.01em;color:' + REPORT_BRAND.textDarkHex + ';}',
+    '.subtitle{font-size:8pt;font-weight:700;color:#5a5a5a;letter-spacing:0.08em;text-transform:uppercase;margin-top:2pt;}',
+    '.divider{border-bottom:1.5pt solid ' + REPORT_BRAND.primaryHex + ';margin:10pt 0 14pt;}',
+    'h1{font-size:16pt;margin:0 0 4pt;color:' + REPORT_BRAND.textDarkHex + ';}',
+    '.meta{background:' + REPORT_BRAND.surfaceHex + ';border:0.5pt solid ' + REPORT_BRAND.borderHex + ';border-radius:4pt;margin:0 0 14pt;width:100%;}',
+    '.meta td{padding:5pt 10pt;font-size:9pt;vertical-align:top;}',
+    '.meta .meta-key{font-size:7pt;font-weight:700;color:' + REPORT_BRAND.textMuteHex + ';text-transform:uppercase;letter-spacing:0.06em;width:18%;}',
+    '.meta .meta-value{color:' + REPORT_BRAND.textDarkHex + ';width:32%;}',
+    '.about-label{font-size:7pt;font-weight:700;color:' + REPORT_BRAND.textMuteHex + ';text-transform:uppercase;letter-spacing:0.06em;margin-bottom:4pt;}',
+    '.about-text{font-size:9pt;color:' + REPORT_BRAND.textDarkHex + ';margin:0 0 14pt;line-height:1.4;}',
+    'table.data{border-collapse:collapse;width:100%;font-size:9pt;}',
+    'table.data th{background:' + REPORT_BRAND.primaryHex + ';color:#fff;font-weight:700;padding:6pt 8pt;border:0.5pt solid ' + REPORT_BRAND.primaryHex + ';}',
+    'table.data td{padding:5pt 8pt;border:0.5pt solid ' + REPORT_BRAND.borderHex + ';color:' + REPORT_BRAND.textDarkHex + ';}',
+    'table.data tr.zebra td{background:' + REPORT_BRAND.surfaceHex + ';}',
+    '.footer{margin-top:18pt;padding-top:8pt;border-top:0.5pt solid ' + REPORT_BRAND.borderHex + ';font-size:7pt;color:' + REPORT_BRAND.textMuteHex + ';}',
+  ].join('\n');
+
+  const html = ''
+    + '<!DOCTYPE html>\n'
+    + '<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40">\n'
+    + '<head>\n'
+    + '<meta charset="utf-8"/>\n'
+    + '<title>' + _escapeHtml(title || 'Report') + '</title>\n'
+    + '<!--[if gte mso 9]><xml><w:WordDocument><w:View>Print</w:View><w:Zoom>100</w:Zoom><w:DoNotPromptForConvert/></w:WordDocument></xml><![endif]-->\n'
+    + '<style>' + css + '</style>\n'
+    + '</head>\n'
+    + '<body><div class="page">\n'
+    + '<div class="brand"><span class="shield">V</span>'
+    + '<div><div class="wordmark">' + _escapeHtml(REPORT_BRAND.title) + '</div>'
+    + '<div class="subtitle">' + _escapeHtml((subtitle || REPORT_BRAND.subtitle).toUpperCase()) + '</div></div></div>\n'
+    + '<div class="divider"></div>\n'
+    + '<h1>' + _escapeHtml(title || 'Report') + '</h1>\n'
+    + '<table class="meta" cellpadding="0" cellspacing="0"><tbody>' + metaRowsHtml + '</tbody></table>\n'
+    + '<div class="about-label">ABOUT THIS REPORT</div>\n'
+    + '<p class="about-text">' + _escapeHtml(descText) + '</p>\n'
+    + '<table class="data" cellpadding="0" cellspacing="0"><thead><tr>' + headerHtml + '</tr></thead><tbody>' + bodyHtml + '</tbody></table>\n'
+    + '<div class="footer">' + _escapeHtml(REPORT_BRAND.footerText) + '</div>\n'
+    + '</div></body></html>';
+
+  // The BOM ensures Word opens the file as UTF-8 (otherwise it can mis-detect
+  // encoding and garble Arabic / accented characters).
+  const blob = new Blob(['﻿', html], { type: 'application/msword' });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href = url;
+  a.download = _safeFilename(filename || (title || 'export')) + '.doc';
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  setTimeout(() => URL.revokeObjectURL(url), 500);
+};

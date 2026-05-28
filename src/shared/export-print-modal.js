@@ -153,6 +153,7 @@ const ExportPrintModal = ({
     try {
       if      (format === 'pdf')   exportReportPDF(opts);
       else if (format === 'csv')   exportReportCSV(opts);
+      else if (format === 'word')  exportReportWord(opts);
       else                          exportReportExcel(opts);   // 'excel' (default)
       onClose();
     } catch (e) {
@@ -226,11 +227,9 @@ const ExportPrintModal = ({
               CSV
             </button>
             <button
-              className="type-btn"
-              disabled
-              title="Coming soon"
-              style={{opacity: 0.5, cursor: 'not-allowed'}}>
-              Word (.docx) · Coming soon
+              className={'type-btn ' + (format === 'word' ? 'active' : '')}
+              onClick={() => setFormat('word')}>
+              Word (.doc)
             </button>
           </div>
         </div>

@@ -112,11 +112,16 @@ const PMCRemindersPage = ({ setPage }) => {
   const [vendorsList, setVendorsList] = useState([]);
   const [contractsList, setContractsList] = useState([]);
   const [dismissals, setDismissals] = useState([]);
+  const [unitsList, setUnitsList] = useState([]);
+  const [buildingsList, setBuildingsList] = useState([]);
   const [error, setError]         = useState(null);
   const [typeFilter, setTypeFilter] = useState('all');
   const [leadFilter, setLeadFilter] = useState('all');
   const [dismissTarget, setDismissTarget] = useState(null); // reminder being dismissed
   const [dismissNote, setDismissNote] = useState('');
+  // Drill-down state — opening a reminder mounts the matching detail modal.
+  const [openUnit, setOpenUnit] = useState(null);         // { unit, building } for lease
+  const [openContract, setOpenContract] = useState(null); // contract row for contract
 
   const reload = async () => {
     setError(null);
@@ -144,6 +149,8 @@ const PMCRemindersPage = ({ setPage }) => {
       setVendorsList(vs || []);
       setContractsList(cs || []);
       setDismissals(ds || []);
+      setUnitsList(us || []);
+      setBuildingsList(bs || []);
     } catch (e) { setError(e.message || String(e)); }
   };
   useEffect(() => { reload(); }, []);
@@ -167,11 +174,32 @@ const PMCRemindersPage = ({ setPage }) => {
   };
 
   const openSource = (r) => {
-    // Deep-link to the page that surfaces this record. The user can then
-    // open the per-record modal to renew / extend.
-    if (r.source_type === 'lease')    setPage && setPage('properties');
-    if (r.source_type === 'vendor')   setPage && setPage('vendors');
-    if (r.source_type === 'contract') setPage && setPage('profileCreation');
+    // Drill straight into the matching record so the user can renew / extend
+    // without hunting for it.
+    if (r.source_type === 'lease') {
+      // source_id is the unit_id. Mount UnitDetailModal scoped to that unit.
+      const unit     = (unitsList || []).find(u => u.id === r.source_id);
+      const building = unit && (buildingsList || []).find(b => b.id === unit.building_id);
+      if (unit && building) {
+        setOpenUnit({ unit, building });
+        return;
+      }
+    }
+    if (r.source_type === 'contract') {
+      const contract = (contractsList || []).find(c => c.id === r.source_id);
+      if (contract) {
+        setOpenContract(contract);
+        return;
+      }
+    }
+    if (r.source_type === 'vendor' && setPage) {
+      // No global vendor modal — fall back to the Vendors page with a hint
+      // pinned to localStorage so the page can highlight the row when it mounts
+      // (read by vendors.js).
+      try { localStorage.setItem('varspm_open_vendor', r.source_id); } catch (_) {}
+      setPage('vendors');
+      return;
+    }
   };
 
   const submitDismiss = async () => {
@@ -191,7 +219,9 @@ const PMCRemindersPage = ({ setPage }) => {
     reload();
   };
 
-  const fmtRemain = (d) => d < 0 ? Math.abs(d) + ' days overdue' : d + (d === 1 ? ' day' : ' days');
+  const fmtRemain = (d) => d < 0
+    ? Math.abs(d) + ' days overdue'
+    : d === 0 ? 'Due today' : d + ' day' + (d === 1 ? '' : 's') + ' remaining';
 
   return (
     <div>
@@ -253,13 +283,13 @@ const PMCRemindersPage = ({ setPage }) => {
           <table className="data-table" style={{fontSize:13}}>
             <thead>
               <tr>
-                <th style={{width:'10%'}}>Type</th>
-                <th style={{width:'30%'}}>What</th>
-                <th style={{width:'20%'}}>Context</th>
-                <th style={{width:'12%'}}>Expires</th>
-                <th style={{width:'12%'}}>Remaining</th>
-                <th style={{width:'8%'}}>Window</th>
-                <th style={{width:'8%',textAlign:'right'}}>Actions</th>
+                <th style={{width:'8%'}}>Type</th>
+                <th style={{width:'26%'}}>What</th>
+                <th style={{width:'18%'}}>Context</th>
+                <th style={{width:'10%'}}>Expires</th>
+                <th style={{width:'14%'}}>Remaining</th>
+                <th style={{width:'10%'}}>Window</th>
+                <th style={{width:'14%',textAlign:'right'}}>Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -276,8 +306,8 @@ const PMCRemindersPage = ({ setPage }) => {
                     <td style={{whiteSpace:'nowrap',color:remColor,fontWeight:500}}>{fmtRemain(r.days_until)}</td>
                     <td style={{whiteSpace:'nowrap'}}><span style={{display:'inline-block',padding:'2px 8px',borderRadius:4,fontSize:10,fontWeight:500,background:lb.bg,color:lb.fg}}>{lb.label}</span></td>
                     <td style={{textAlign:'right',whiteSpace:'nowrap'}}>
-                      <button className="btn btn-sm" onClick={() => openSource(r)} title="Open the source record">Open</button>
-                      <button className="btn btn-sm" style={{marginLeft:6}} onClick={() => setDismissTarget(r)} title="Mark this reminder as handled">Handled</button>
+                      <button className="btn btn-sm" style={{padding:'4px 10px',fontSize:11}} onClick={() => openSource(r)} title="Open the source record">Open</button>
+                      <button className="btn btn-sm" style={{marginLeft:6,padding:'4px 10px',fontSize:11}} onClick={() => setDismissTarget(r)} title="Mark this reminder as handled">Handled</button>
                     </td>
                   </tr>
                 );
@@ -286,6 +316,13 @@ const PMCRemindersPage = ({ setPage }) => {
           </table>
         )}
       </div>
+
+      {openUnit && (
+        <UnitDetailModal unit={openUnit.unit} building={openUnit.building} onClose={() => setOpenUnit(null)}/>
+      )}
+      {openContract && (
+        <ContractDetailModal contract={openContract} onClose={() => setOpenContract(null)}/>
+      )}
 
       {dismissTarget && (
         <div className="modal-overlay" onClick={() => setDismissTarget(null)}>
