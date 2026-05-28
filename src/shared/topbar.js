@@ -164,12 +164,10 @@ const TopBar = ({ onCreateClick, onMenuToggle, onLogout, onNavigate }) => {
       <div style={{flex:1}}/>
       <div className="topbar-right">
         <div style={{position:'relative'}}>
-          <div className="topbar-icon" onClick={() => setShowNotifications(!showNotifications)} style={{borderRadius:'50%',width:34,height:34,position:'relative',cursor:'pointer'}}>
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#61707D" strokeWidth="1.5"><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 01-3.46 0"/></svg>
+          <div className="topbar-icon" onClick={() => setShowNotifications(!showNotifications)} style={{borderRadius:'50%',width:34,height:34,position:'relative',cursor:'pointer'}} title={notifTotal > 0 ? `${notifTotal} item${notifTotal === 1 ? '' : 's'} need attention` : 'Notifications'}>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#61707D" strokeWidth="1.5"><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 01-3.46 0"/></svg>
             {notifTotal > 0 && (
-              <span style={{position:'absolute',top:6,right:7,minWidth:14,height:14,padding:'0 4px',borderRadius:7,background:'#c62828',color:'#fff',fontSize:9,fontWeight:600,display:'flex',alignItems:'center',justifyContent:'center',border:'2px solid #F4EEE4',lineHeight:1}}>
-                {notifTotal > 99 ? '99+' : notifTotal}
-              </span>
+              <span style={{position:'absolute',top:8,right:9,width:8,height:8,borderRadius:'50%',background:'#c62828',border:'2px solid #F4EEE4',boxSizing:'content-box'}}/>
             )}
           </div>
           {showNotifications && (
@@ -269,8 +267,6 @@ const TopBar = ({ onCreateClick, onMenuToggle, onLogout, onNavigate }) => {
                   <span style={{fontSize:22,fontWeight:500,letterSpacing:'-0.01em',color:'#131F23',lineHeight:1}}>VARS</span>
                 </div>
                 <div style={{fontSize:15,fontWeight:600,color:'#131F23'}}>Hassan Al-PM</div>
-                <div style={{fontSize:12,color:'#61707D'}}>Property Manager</div>
-                <div style={{fontSize:11,color:'#D0D6D5'}}>The Pinnacle Residences</div>
               </div>
               <div style={{padding:'8px 12px'}}>
                 <div onClick={()=>{setShowPmProfile(false);setShowMyProfileModal(true);}} style={{display:'flex',alignItems:'center',gap:10,padding:'10px 4px',cursor:'pointer',fontSize:13,color:'#131F23'}}>
