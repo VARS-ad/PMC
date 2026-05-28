@@ -82,11 +82,12 @@ const PC_TEMPLATES = {
       'After the metadata upload completes, an optional "Bulk attach documents" section appears where you can drag-drop multiple files at once.',
     ],
   },
-  contracts:        { label: 'Contracts',      singlePane: true },
-  reminderSettings: { label: 'Reminder Email', singlePane: true },
-  amenities:        { label: 'Amenities',      readOnly: true },
-  maintenance: { label: 'Maintenance', readOnly: true },
-  payments:    { label: 'Payments',    readOnly: true },
+  contracts:        { label: 'Contracts',        singlePane: true },
+  reminderSettings: { label: 'Reminder Email',   singlePane: true },
+  invoiceDocuments: { label: 'Invoice Docs',     singlePane: true },
+  amenities:        { label: 'Amenities',        readOnly: true },
+  maintenance:      { label: 'Maintenance',      readOnly: true },
+  payments:         { label: 'Payments',         readOnly: true },
 };
 
 function downloadAsXlsx(filename, headers, rows) {
@@ -235,6 +236,7 @@ const ProfileCreationPage = () => {
 
       {isSinglePane && section === 'contracts'        && <ContractsSection/>}
       {isSinglePane && section === 'reminderSettings' && <ReminderSettingsSection/>}
+      {isSinglePane && section === 'invoiceDocuments' && <InvoiceDocumentsBulkSection/>}
       {!isSinglePane && effectiveInner === 'summary' && <PCSummary section={section}/>}
       {!isSinglePane && effectiveInner === 'bulk'    && <PCBulkUpload section={section}/>}
       {!isSinglePane && effectiveInner === 'manual'  && <PCManualUpload section={section}/>}
@@ -2334,6 +2336,250 @@ const ReminderSettingsSection = () => {
           )}
         </div>
       </div>
+    </div>
+  );
+};
+
+// ==================== INVOICE DOCUMENTS — BULK UPLOAD ====================
+// Drop a folder of PDFs / images named {invoice_number}_{kind}.{ext}
+// where {kind} is one of: invoice, payment, payment_proof, proof, receipt, bill.
+// The system parses each filename, batch-looks-up invoice ids by
+// invoice_number, then uploads each file into the `invoice-attachments`
+// bucket and inserts a row into public.invoice_attachments. If a slot
+// already has a file the old object is deleted first (same behaviour as
+// the per-row "Replace" button).
+
+function parseInvoiceDocFilename(name) {
+  const dot  = name.lastIndexOf('.');
+  const base = dot > 0 ? name.slice(0, dot) : name;
+  const u    = base.lastIndexOf('_');
+  if (u <= 0) return null;
+  const invoice_number = base.slice(0, u).trim();
+  const hint           = base.slice(u + 1).trim().toLowerCase();
+  let kind = null;
+  if (['invoice','bill'].includes(hint))                                 kind = 'invoice';
+  else if (['payment','payment_proof','proof','receipt'].includes(hint)) kind = 'payment_proof';
+  if (!kind || !invoice_number) return null;
+  return { invoice_number, kind };
+}
+
+const InvoiceDocumentsBulkSection = () => {
+  const [files,   setFiles]   = useState([]);   // [{ file, parsed, status, message }]
+  const [busy,    setBusy]    = useState(false);
+  const [results, setResults] = useState(null); // { ok, replaced, skipped, errored, rows: [...] }
+  const inputRef = useRef(null);
+
+  const handlePick = async (fileList) => {
+    setResults(null);
+    const arr = Array.from(fileList || []);
+    if (arr.length === 0) { setFiles([]); return; }
+
+    // 1. Parse filenames locally.
+    const parsedRows = arr.map(file => {
+      const parsed = parseInvoiceDocFilename(file.name);
+      if (!parsed) return { file, parsed: null, status: 'skip-unparseable', message: 'Filename must be {invoice_number}_{kind}.pdf' };
+      return { file, parsed, status: 'parsed', message: null };
+    });
+
+    // 2. Batch-lookup invoice ids for everything that parsed.
+    const numbers = Array.from(new Set(parsedRows.filter(r => r.parsed).map(r => r.parsed.invoice_number)));
+    let idByNumber = {};
+    if (numbers.length > 0 && supabaseClient) {
+      const { data, error } = await supabaseClient
+        .from('invoices')
+        .select('id,invoice_number')
+        .in('invoice_number', numbers);
+      if (error) {
+        setFiles(parsedRows.map(r => ({ ...r, status: 'error', message: 'Lookup failed: ' + error.message })));
+        return;
+      }
+      (data || []).forEach(row => { idByNumber[row.invoice_number] = row.id; });
+    }
+
+    // 3. Annotate each row with what we'll do.
+    const withMatches = parsedRows.map(r => {
+      if (!r.parsed) return r;
+      const invoice_id = idByNumber[r.parsed.invoice_number];
+      if (!invoice_id) return { ...r, status: 'skip-no-invoice', message: 'No invoice with number ' + r.parsed.invoice_number };
+      return { ...r, status: 'ready', invoice_id, message: 'Will upload to ' + r.parsed.kind + ' slot' };
+    });
+    setFiles(withMatches);
+  };
+
+  const handleUpload = async () => {
+    if (!supabaseClient) { alert('Supabase client not configured.'); return; }
+    const ready = files.filter(r => r.status === 'ready');
+    if (ready.length === 0) { alert('No files ready to upload.'); return; }
+    setBusy(true);
+
+    // For each ready file, check if a slot already has an attachment; if so,
+    // delete it first. Then upload + insert. We do them sequentially so we
+    // can show progress and so we don't blow the rate limit.
+    const rows = [];
+    for (let i = 0; i < ready.length; i++) {
+      const r = ready[i];
+      const { file, parsed, invoice_id } = r;
+      try {
+        // a) Check existing slot.
+        const { data: existing } = await supabaseClient
+          .from('invoice_attachments')
+          .select('id,storage_path')
+          .eq('invoice_id', invoice_id)
+          .eq('kind', parsed.kind)
+          .maybeSingle();
+        let replaced = false;
+        if (existing) {
+          await supabaseClient.storage.from('invoice-attachments').remove([existing.storage_path]);
+          await supabaseClient.from('invoice_attachments').delete().eq('id', existing.id);
+          replaced = true;
+        }
+        // b) Upload to storage.
+        const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+        const path = invoice_id + '/' + parsed.kind + '/' + Date.now() + '-' + safeName;
+        const { error: upErr } = await supabaseClient.storage
+          .from('invoice-attachments')
+          .upload(path, file, { contentType: file.type || undefined });
+        if (upErr) throw new Error(upErr.message);
+        // c) Insert metadata.
+        const { error: insErr } = await supabaseClient.from('invoice_attachments').insert({
+          invoice_id,
+          kind:         parsed.kind,
+          storage_path: path,
+          file_name:    file.name,
+          mime_type:    file.type || null,
+          size_bytes:   file.size || null,
+        });
+        if (insErr) throw new Error(insErr.message);
+        rows.push({ name: file.name, invoice_number: parsed.invoice_number, kind: parsed.kind, ok: true, replaced });
+      } catch (e) {
+        rows.push({ name: file.name, invoice_number: parsed.invoice_number, kind: parsed.kind, ok: false, error: e.message || String(e) });
+      }
+    }
+
+    const ok       = rows.filter(r => r.ok).length;
+    const replaced = rows.filter(r => r.ok && r.replaced).length;
+    const skipped  = files.filter(r => r.status !== 'ready').length;
+    const errored  = rows.filter(r => !r.ok).length;
+    setResults({ ok, replaced, skipped, errored, rows });
+    setBusy(false);
+  };
+
+  const reset = () => { setFiles([]); setResults(null); if (inputRef.current) inputRef.current.value = ''; };
+
+  const statusPill = (status) => {
+    const colours = {
+      ready:             { bg:'#e6efe1', fg:'#5a6b4f', label:'Ready' },
+      'skip-unparseable':{ bg:'#fdf2dc', fg:'#7a5a1f', label:'Filename unrecognized' },
+      'skip-no-invoice': { bg:'#fdf2f1', fg:'#8b4a42', label:'No matching invoice' },
+      error:             { bg:'#fdf2f1', fg:'#8b4a42', label:'Error' },
+      parsed:            { bg:'#E6EAE9', fg:'#61707D', label:'Parsing…' },
+    };
+    const c = colours[status] || colours.parsed;
+    return <span style={{padding:'2px 8px',borderRadius:4,fontSize:10,fontWeight:500,background:c.bg,color:c.fg,whiteSpace:'nowrap'}}>{c.label}</span>;
+  };
+
+  const readyCount     = files.filter(r => r.status === 'ready').length;
+  const unparseable    = files.filter(r => r.status === 'skip-unparseable').length;
+  const noInvoice      = files.filter(r => r.status === 'skip-no-invoice').length;
+
+  return (
+    <div className="card">
+      <div style={{fontSize:13,fontWeight:600,marginBottom:6}}>Bulk upload invoice documents</div>
+      <div style={{fontSize:12,color:'var(--text-secondary)',marginBottom:14}}>
+        Use this to backfill historical invoice PDFs and payment proofs in one batch. The system reads each filename, matches it to an existing invoice, and uploads the file into the matching slot. Re-uploading the same slot replaces the previous file.
+      </div>
+
+      <div style={{padding:14,background:'var(--bg-surface)',border:'1px solid var(--border-light)',borderRadius:8,marginBottom:18}}>
+        <div style={{fontSize:12,fontWeight:600,marginBottom:8}}>Filename convention</div>
+        <div style={{fontSize:12,color:'var(--text-secondary)',marginBottom:10}}>
+          Each file must be named <code style={{padding:'1px 6px',background:'#fff',borderRadius:4,border:'1px solid var(--border-light)'}}>{'{invoice_number}_{kind}.{ext}'}</code>. Kind is one of:
+        </div>
+        <ul style={{fontSize:12,color:'var(--text-secondary)',margin:0,paddingLeft:18,lineHeight:1.7}}>
+          <li><strong>invoice</strong> (or <em>bill</em>) — the issued bill itself</li>
+          <li><strong>payment_proof</strong> (or <em>payment</em>, <em>proof</em>, <em>receipt</em>) — bank slip, cheque image, receipt</li>
+        </ul>
+        <div style={{fontSize:12,color:'var(--text-secondary)',marginTop:10}}>
+          Examples: <code>RNT-2026-00431_invoice.pdf</code>, <code>RNT-2026-00431_payment.pdf</code>, <code>INV-MD-202605-cc08f0_receipt.jpg</code>
+        </div>
+      </div>
+
+      <div style={{display:'flex',gap:10,alignItems:'center',marginBottom:14}}>
+        <input
+          ref={inputRef}
+          type="file"
+          multiple
+          accept=".pdf,image/*"
+          style={{display:'none'}}
+          onChange={e => handlePick(e.target.files)}
+        />
+        <button className="btn" onClick={() => inputRef.current && inputRef.current.click()} disabled={busy}>
+          Choose files…
+        </button>
+        {files.length > 0 && (
+          <button className="btn" onClick={reset} disabled={busy} style={{color:'var(--text-secondary)'}}>Clear</button>
+        )}
+        {files.length > 0 && (
+          <div style={{fontSize:12,color:'var(--text-muted)'}}>
+            {files.length} file{files.length===1?'':'s'} picked
+            {readyCount     > 0 && ' · ' + readyCount + ' ready'}
+            {unparseable    > 0 && ' · ' + unparseable + ' unrecognized'}
+            {noInvoice      > 0 && ' · ' + noInvoice + ' unmatched'}
+          </div>
+        )}
+      </div>
+
+      {files.length > 0 && (
+        <div style={{marginBottom:14,maxHeight:320,overflowY:'auto',border:'1px solid var(--border-light)',borderRadius:8}}>
+          <table className="data-table" style={{fontSize:12}}>
+            <thead>
+              <tr>
+                <th style={{width:'34%'}}>File</th>
+                <th style={{width:'24%'}}>Invoice #</th>
+                <th style={{width:'14%'}}>Slot</th>
+                <th style={{width:'28%'}}>Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {files.map((r, i) => (
+                <tr key={i}>
+                  <td style={{wordBreak:'break-all'}}>{r.file.name}</td>
+                  <td>{r.parsed ? r.parsed.invoice_number : '—'}</td>
+                  <td>{r.parsed ? r.parsed.kind : '—'}</td>
+                  <td>
+                    {statusPill(r.status)}
+                    {r.message && <div style={{fontSize:10,color:'var(--text-muted)',marginTop:2}}>{r.message}</div>}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {readyCount > 0 && !results && (
+        <button className="btn btn-primary" disabled={busy} onClick={handleUpload}>
+          {busy ? 'Uploading…' : 'Upload ' + readyCount + ' file' + (readyCount===1?'':'s')}
+        </button>
+      )}
+
+      {results && (
+        <div style={{padding:14,background:'var(--bg-surface)',border:'1px solid var(--border-light)',borderRadius:8,marginTop:6}}>
+          <div style={{fontSize:13,fontWeight:600,marginBottom:8}}>Done</div>
+          <div style={{fontSize:12,display:'flex',gap:18,flexWrap:'wrap',marginBottom:10}}>
+            <span style={{color:'#5a6b4f',fontWeight:500}}>✓ {results.ok} uploaded{results.replaced > 0 ? ' (' + results.replaced + ' replaced existing)' : ''}</span>
+            {results.errored > 0 && <span style={{color:'#8b4a42',fontWeight:500}}>✗ {results.errored} failed</span>}
+            {results.skipped > 0 && <span style={{color:'#7a5a1f'}}>{results.skipped} skipped (see table above)</span>}
+          </div>
+          {results.errored > 0 && (
+            <div style={{fontSize:11,color:'var(--text-secondary)',maxHeight:140,overflowY:'auto'}}>
+              {results.rows.filter(r => !r.ok).map((r, i) => (
+                <div key={i} style={{marginBottom:4}}><strong>{r.name}</strong> — {r.error}</div>
+              ))}
+            </div>
+          )}
+          <button className="btn btn-sm" style={{marginTop:10}} onClick={reset}>Upload another batch</button>
+        </div>
+      )}
     </div>
   );
 };
