@@ -248,7 +248,7 @@ const PMCServiceChargesPage = () => {
           <div style={{padding:32,color:'var(--text-muted)',fontSize:13,textAlign:'center'}}>No invoices match these filters.</div>
         ) : (
           <table className="data-table">
-            <thead><tr><th>Invoice #</th><th style={{width:'100%'}}>Description</th><th>Resident</th><th>Building / Unit</th><th style={{textAlign:'right'}}>Amount</th><th>Due</th><th>Status</th></tr></thead>
+            <thead><tr><th style={{width:'10%'}}>Invoice #</th><th style={{width:'30%'}}>Description</th><th style={{width:'14%'}}>Resident</th><th style={{width:'16%'}}>Building / Unit</th><th style={{width:'10%',textAlign:'right'}}>Amount</th><th style={{width:'10%'}}>Due</th><th style={{width:'10%'}}>Status</th></tr></thead>
             <tbody>
               {filtered.slice(0, 200).map(i => (
                 <tr key={i.id}>

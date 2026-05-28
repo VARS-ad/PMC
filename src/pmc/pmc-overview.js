@@ -211,7 +211,7 @@ const PMCOverviewPage = ({ setPage }) => {
                 <div style={{color:'var(--text-muted)',fontSize:13,padding:24,textAlign:'center'}}>Nothing waiting on you. ✓</div>
               ) : (
                 <table className="data-table">
-                  <thead><tr><th>Category</th><th style={{width:'100%'}}>Description</th><th>Priority</th><th>Status</th><th>Created</th></tr></thead>
+                  <thead><tr><th style={{width:'16%'}}>Category</th><th style={{width:'44%'}}>Description</th><th style={{width:'12%'}}>Priority</th><th style={{width:'16%'}}>Status</th><th style={{width:'12%'}}>Created</th></tr></thead>
                   <tbody>
                     {stats.srNeedingAction.map(s => (
                       <tr key={s.id} style={{cursor:'pointer'}} onClick={() => setPage && setPage('service')}>

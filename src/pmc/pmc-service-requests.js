@@ -216,7 +216,7 @@ const PMCServiceRequestsPage = () => {
           <div style={{padding:32,color:'var(--text-muted)',fontSize:13,textAlign:'center'}}>No service requests match these filters.</div>
         ) : (
           <table className="data-table">
-            <thead><tr><th>Category</th><th style={{width:'100%'}}>Description</th><th>Resident</th><th>Building / Unit</th><th>Priority</th><th>Status</th><th>Created</th></tr></thead>
+            <thead><tr><th style={{width:'12%'}}>Category</th><th style={{width:'30%'}}>Description</th><th style={{width:'14%'}}>Resident</th><th style={{width:'16%'}}>Building / Unit</th><th style={{width:'8%'}}>Priority</th><th style={{width:'12%'}}>Status</th><th style={{width:'8%'}}>Created</th></tr></thead>
             <tbody>
               {filtered.slice(0, 200).map(s => (
                 <tr key={s.id} style={{cursor:'pointer'}} onClick={() => setSelectedSR(s)}>
