@@ -197,6 +197,26 @@ const PMCOverviewPage = ({ setPage }) => {
       ? monthLabel
       : 'Last ' + monthsBack + ' Months';
 
+  // Spelled-out month range, e.g. "April – May 2026" for 2M ending this month.
+  // Shown as a small caption under the dropdown so the user always sees which
+  // calendar months the numbers above are actually pulling from.
+  const rangeBreakdown = (() => {
+    if (timeRange === 'custom') {
+      return customStart && customEnd ? customStart + ' → ' + customEnd : 'Pick start and end dates';
+    }
+    const _now = new Date();
+    if (monthsBack === 1) {
+      return _now.toLocaleString('en-GB', { month: 'long', year: 'numeric' });
+    }
+    const start = new Date(_now.getFullYear(), _now.getMonth() - monthsBack + 1, 1);
+    const startName = start.toLocaleString('en-GB', { month: 'long' });
+    const endName   = _now.toLocaleString('en-GB', { month: 'long' });
+    if (start.getFullYear() === _now.getFullYear()) {
+      return startName + ' – ' + endName + ' ' + _now.getFullYear();
+    }
+    return startName + ' ' + start.getFullYear() + ' – ' + endName + ' ' + _now.getFullYear();
+  })();
+
   if (error) return (<div><div className="page-header"><h1>Overview</h1></div><div className="card"><div style={{color:'#8b4a42',fontSize:13}}>{error}</div></div></div>);
 
   const statusBadge = (s) => {
@@ -232,25 +252,28 @@ const PMCOverviewPage = ({ setPage }) => {
     <div>
       <div className="page-header">
         <div><h1>Overview</h1></div>
-        <div style={{display:'flex',gap:10,alignItems:'center',flexWrap:'wrap'}}>
-          <label style={{fontSize:11,letterSpacing:'0.06em',textTransform:'uppercase',color:'var(--text-secondary)',fontWeight:600}}>Selected time range</label>
-          <select value={timeRange} onChange={e => setTimeRange(e.target.value)}
-            style={{padding:'8px 14px',fontSize:13,fontWeight:500,borderRadius:6,background:'#fff',border:'1px solid var(--border-light)',color:'var(--text-dark)',cursor:'pointer',fontFamily:'inherit',outline:'none'}}>
-            <option value="1m">1 Month (this month)</option>
-            <option value="2m">2 Months</option>
-            <option value="3m">3 Months</option>
-            <option value="12m">12 Months</option>
-            <option value="custom">Custom range…</option>
-          </select>
-          {timeRange === 'custom' && (
-            <>
-              <input type="date" value={customStart} onChange={e => setCustomStart(e.target.value)}
-                style={{padding:'8px 12px',fontSize:13,borderRadius:6,background:'#fff',border:'1px solid var(--border-light)',color:'var(--text-dark)',fontFamily:'inherit',outline:'none'}}/>
-              <span style={{color:'var(--text-muted)',fontSize:13}}>→</span>
-              <input type="date" value={customEnd} onChange={e => setCustomEnd(e.target.value)}
-                style={{padding:'8px 12px',fontSize:13,borderRadius:6,background:'#fff',border:'1px solid var(--border-light)',color:'var(--text-dark)',fontFamily:'inherit',outline:'none'}}/>
-            </>
-          )}
+        <div style={{display:'flex',flexDirection:'column',alignItems:'flex-end',gap:6}}>
+          <div style={{display:'flex',gap:10,alignItems:'center',flexWrap:'wrap'}}>
+            <label style={{fontSize:11,letterSpacing:'0.06em',textTransform:'uppercase',color:'var(--text-secondary)',fontWeight:600}}>Selected time range</label>
+            <select value={timeRange} onChange={e => setTimeRange(e.target.value)}
+              style={{padding:'8px 14px',fontSize:13,fontWeight:500,borderRadius:6,background:'#fff',border:'1px solid var(--border-light)',color:'var(--text-dark)',cursor:'pointer',fontFamily:'inherit',outline:'none'}}>
+              <option value="1m">1 Month (this month)</option>
+              <option value="2m">2 Months</option>
+              <option value="3m">3 Months</option>
+              <option value="12m">12 Months</option>
+              <option value="custom">Custom range…</option>
+            </select>
+            {timeRange === 'custom' && (
+              <>
+                <input type="date" value={customStart} onChange={e => setCustomStart(e.target.value)}
+                  style={{padding:'8px 12px',fontSize:13,borderRadius:6,background:'#fff',border:'1px solid var(--border-light)',color:'var(--text-dark)',fontFamily:'inherit',outline:'none'}}/>
+                <span style={{color:'var(--text-muted)',fontSize:13}}>→</span>
+                <input type="date" value={customEnd} onChange={e => setCustomEnd(e.target.value)}
+                  style={{padding:'8px 12px',fontSize:13,borderRadius:6,background:'#fff',border:'1px solid var(--border-light)',color:'var(--text-dark)',fontFamily:'inherit',outline:'none'}}/>
+              </>
+            )}
+          </div>
+          <div style={{fontSize:11,color:'var(--text-muted)',fontStyle:'italic'}}>{rangeBreakdown}</div>
         </div>
       </div>
 
