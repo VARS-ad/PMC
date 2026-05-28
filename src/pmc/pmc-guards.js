@@ -143,7 +143,7 @@ const PMCGuardsPage = () => {
         ) : filtered.length === 0 ? (
           <div style={{padding:32,color:'var(--text-muted)',fontSize:13,textAlign:'center'}}>No guards match these filters. Add some via <strong>Profile Creation → Security</strong>.</div>
         ) : (
-          <table className="data-table" style={{tableLayout:'auto'}}>
+          <table className="data-table">
             <thead><tr><th style={{width:'24%'}}>Guard</th><th style={{width:'14%'}}>Phone</th><th style={{width:'18%'}}>Building</th><th style={{width:'9%'}}>Shift</th><th style={{width:'12%'}}>Status</th><th style={{width:'10%'}}>Onboarded</th><th style={{width:'13%',textAlign:'right'}}>Actions</th></tr></thead>
             <tbody>
               {filtered.map(g => {
