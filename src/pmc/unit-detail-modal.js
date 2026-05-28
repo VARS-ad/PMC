@@ -230,6 +230,7 @@ const UnitDetailModal = ({ unit, building, assignment: passedAssignment, profile
                         {i.effective_status}
                       </span>
                     </td>
+                    <InvoiceDocsCell invoice={i}/>
                     <td style={{textAlign:'right',color:accentColor,fontWeight:600,whiteSpace:'nowrap'}}>{fmt(i.amount_aed)}</td>
                   </tr>
                 );
@@ -237,12 +238,13 @@ const UnitDetailModal = ({ unit, building, assignment: passedAssignment, profile
               const InvoiceTableHeader = () => (
                 <thead>
                   <tr>
-                    <th style={{width:'13%'}}>Invoice</th>
-                    <th style={{width:'17%'}}>Description</th>
-                    <th style={{width:'17%'}}>Billed to</th>
-                    <th style={{width:'16%'}}>Due</th>
-                    <th style={{width:'16%'}}>Status</th>
-                    <th style={{width:'21%',textAlign:'right'}}>Amount</th>
+                    <th style={{width:'12%'}}>Invoice</th>
+                    <th style={{width:'15%'}}>Description</th>
+                    <th style={{width:'15%'}}>Billed to</th>
+                    <th style={{width:'13%'}}>Due</th>
+                    <th style={{width:'13%'}}>Status</th>
+                    <th style={{width:'10%',textAlign:'center'}}>Docs</th>
+                    <th style={{width:'22%',textAlign:'right'}}>Amount</th>
                   </tr>
                 </thead>
               );
