@@ -154,8 +154,8 @@ const PMCPropertiesPage = ({ setPage }) => {
         <div className="card"><div style={{padding:32,color:'var(--text-muted)',fontSize:13,textAlign:'center'}}>No buildings in your portfolio yet. Add some via <strong>Profile Creation → Buildings</strong>.</div></div>
       ) : (
         <>
-          {/* Active properties — side by side */}
-          <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit, minmax(440px, 1fr))',gap:18}}>
+          {/* Active properties — one full-width card per row */}
+          <div style={{display:'grid',gridTemplateColumns:'1fr',gap:18}}>
             {buildings.map(b => {
               const occupancyPct = b.unitCount > 0 ? Math.round((b.occupiedCount / b.unitCount) * 100) : 0;
               const totalBilled = b.collected + b.outstanding;
@@ -188,7 +188,7 @@ const PMCPropertiesPage = ({ setPage }) => {
           <div style={{marginTop:36}}>
             <div style={{fontSize:11,letterSpacing:'0.08em',textTransform:'uppercase',color:'var(--text-secondary)',marginBottom:6,fontWeight:600}}>Coming Soon</div>
             <div style={{fontSize:12,color:'var(--text-muted)',marginBottom:16}}>Asset types currently under development that will appear in this view once onboarded.</div>
-            <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit, minmax(320px, 1fr))',gap:14}}>
+            <div style={{display:'grid',gridTemplateColumns:'1fr',gap:14}}>
               {COMING_SOON_PROPERTIES.map(cs => (
                 <div key={cs.id} className="card" style={{opacity:0.85,position:'relative',background:'var(--bg-surface)'}}>
                   <div style={{position:'absolute',top:14,right:14,fontSize:10,fontWeight:600,color:'#fff',background:'#3E4C59',padding:'4px 12px',borderRadius:4,letterSpacing:'0.04em'}}>COMING SOON</div>
