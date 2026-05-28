@@ -33,6 +33,13 @@ const PMCServiceChargesPage = () => {
   const [statusFilter, setStatusFilter] = useState('all');
   const [search, setSearch] = useState('');
   const [showDownload, setShowDownload] = useState(false);
+  // Sort state for the invoice table. Default = most-recent issue date first.
+  const [sortBy, setSortBy] = useState({ column: 'created_at', dir: 'desc' });
+  const toggleSort = (col) => {
+    setSortBy(prev => prev.column === col
+      ? { column: col, dir: prev.dir === 'asc' ? 'desc' : 'asc' }
+      : { column: col, dir: col === 'invoice_number' || col === 'resident_name' || col === 'building_name' ? 'asc' : 'desc' });
+  };
   const monthsBack = ({ '1m': 1, '2m': 2, '3m': 3, '12m': 12 })[timeRange] || 1;
 
   // Compute the period bounds the same way Overview does, so the shared
@@ -296,24 +303,50 @@ const PMCServiceChargesPage = () => {
         ];
         return (
           <div className="card">
-            <div style={{marginBottom:12}}>
+            <div style={{marginBottom:14}}>
               <div style={{fontSize:13,fontWeight:600}}>Aging — Receivables by Days Overdue</div>
-              <div style={{fontSize:11,color:'var(--text-secondary)',marginTop:2}}>Only unpaid invoices (Pending + Overdue). Older buckets = redder.</div>
+              <div style={{fontSize:11,color:'var(--text-secondary)',marginTop:2}}>Only unpaid invoices (Pending + Upcoming). Older buckets = redder. Total: <strong style={{color:'var(--text-dark)'}}>{fmt(total)}</strong></div>
             </div>
-            <div style={{display:'flex',height:18,borderRadius:9,overflow:'hidden',border:'1px solid var(--border-light)',marginBottom:14}}>
-              {rows.map((r, i) => r.amt > 0 && <div key={i} title={r.label + ': ' + fmt(r.amt)} style={{flex: r.amt, background: r.color}}/>)}
-            </div>
-            <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit, minmax(150px, 1fr))',gap:10}}>
-              {rows.map((r, i) => (
-                <div key={i} style={{padding:'10px 12px',background:'var(--bg-surface)',borderRadius:6,border:'1px solid var(--border-light)'}}>
-                  <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:6}}>
-                    <span style={{width:8,height:8,borderRadius:4,background:r.color}}/>
-                    <div style={{fontSize:10,letterSpacing:'0.04em',textTransform:'uppercase',color:'var(--text-secondary)'}}>{r.label}</div>
+            {/* One tall horizontal stacked bar — each segment is sized by
+                its share of the total unpaid and labelled with its
+                percentage in-place. Segments smaller than ~6% drop the
+                label so it doesn't overflow. */}
+            <div style={{display:'flex',height:64,borderRadius:8,overflow:'hidden',border:'1px solid var(--border-light)',marginBottom:18}}>
+              {rows.map((r, i) => {
+                if (r.amt <= 0) return null;
+                const pct = Math.round(r.amt / total * 100);
+                // Text colour: light segments use dark text, dark segments use white.
+                const isLight = r.color === '#D0D6D5' || r.color === '#a07d3c';
+                return (
+                  <div key={i}
+                       title={r.label + ': ' + fmt(r.amt) + ' (' + pct + '%)'}
+                       style={{flex: r.amt, background: r.color, display:'flex',alignItems:'center',justifyContent:'center',flexDirection:'column',color: isLight ? 'var(--text-dark)' : '#fff',padding:'0 6px',minWidth:0}}>
+                    {pct >= 6 && (
+                      <>
+                        <div style={{fontSize:18,fontWeight:600,letterSpacing:'-0.02em',lineHeight:1.1}}>{pct}%</div>
+                        {pct >= 12 && <div style={{fontSize:10,opacity:0.85,marginTop:2,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis',maxWidth:'100%'}}>{r.label}</div>}
+                      </>
+                    )}
                   </div>
-                  <div style={{fontSize:14,fontWeight:600,color:'var(--text-dark)'}}>{fmt(r.amt)}</div>
-                  <div style={{fontSize:10,color:'var(--text-muted)',marginTop:2}}>{Math.round(r.amt/total*100)}% of unpaid</div>
-                </div>
-              ))}
+                );
+              })}
+            </div>
+            {/* Compact legend row underneath: colour swatch · bucket
+                name · AED amount · % of unpaid. Same five buckets, but
+                now one line each so the bar above is the headline. */}
+            <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit, minmax(160px, 1fr))',gap:10}}>
+              {rows.map((r, i) => {
+                const pct = Math.round(r.amt / total * 100);
+                return (
+                  <div key={i} style={{display:'flex',alignItems:'center',gap:10,padding:'8px 10px',background:'var(--bg-surface)',borderRadius:6,border:'1px solid var(--border-light)'}}>
+                    <span style={{width:10,height:32,borderRadius:3,background:r.color,flex:'0 0 auto'}}/>
+                    <div style={{flex:1,minWidth:0}}>
+                      <div style={{fontSize:10,letterSpacing:'0.04em',textTransform:'uppercase',color:'var(--text-secondary)',marginBottom:2}}>{r.label}</div>
+                      <div style={{fontSize:13,fontWeight:600,color:'var(--text-dark)'}}>{fmt(r.amt)} <span style={{fontSize:10,fontWeight:400,color:'var(--text-muted)'}}>· {pct}%</span></div>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           </div>
         );
@@ -341,14 +374,26 @@ const PMCServiceChargesPage = () => {
           const key = ({ monthly_dues:'Monthly Dues', amenity_booking:'Amenity', service_request:'Maintenance', manual:'Other / Manual' })[i.source_type] || 'Other';
           bySource[key] = (bySource[key] || 0) + Number(i.amount_aed);
         });
+        // Per-month totals used by the column-top labels.
+        const monthlyTotals = monthly.paid.map((_, i) =>
+          monthly.paid[i] + monthly.pending[i] + monthly.upcoming[i] + monthly.future[i]
+        );
+        const grandTotal = monthlyTotals.reduce((s, v) => s + v, 0);
+        const fmtAed = (n) => 'AED ' + Math.round(n).toLocaleString();
         return (
           <div style={{display:'grid',gridTemplateColumns:'1fr',gap:18}}>
             <div className="card">
-              <div style={{marginBottom:6}}>
-                <div style={{fontSize:13,fontWeight:600}}>Invoices by Month</div>
-                <div style={{fontSize:11,color:'var(--text-secondary)',marginTop:2}}>Stacked Paid · Pending · Upcoming · Future across last 12 months.</div>
+              <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:10,gap:14,flexWrap:'wrap'}}>
+                <div>
+                  <div style={{fontSize:13,fontWeight:600}}>Invoices by Month</div>
+                  <div style={{fontSize:11,color:'var(--text-secondary)',marginTop:2}}>Stacked Paid · Pending · Upcoming · Future across last 12 months.</div>
+                </div>
+                <div style={{textAlign:'right'}}>
+                  <div style={{fontSize:10,letterSpacing:'0.08em',textTransform:'uppercase',color:'var(--text-secondary)',fontWeight:600}}>Total billed</div>
+                  <div style={{fontSize:18,fontWeight:600,color:'var(--text-dark)',letterSpacing:'-0.02em'}}>{fmtAed(grandTotal)}</div>
+                </div>
               </div>
-              <ChartCanvas height={280} config={{
+              <ChartCanvas height={300} config={{
                 type: 'bar',
                 data: { labels: buckets.map(m => m.label), datasets: [
                   { label: 'Paid',     data: monthly.paid,     backgroundColor: '#5a6b4f' },
@@ -358,12 +403,52 @@ const PMCServiceChargesPage = () => {
                 ]},
                 options: {
                   responsive: true, maintainAspectRatio: false,
+                  // Grow the top padding so the per-bar total labels never
+                  // clip against the chart border.
+                  layout: { padding: { top: 24 } },
                   interaction: { mode: 'index', intersect: false },
                   plugins: {
                     legend: { position: 'bottom', labels: { boxWidth: 12, font: { size: 11 } } },
-                    tooltip: { callbacks: { label: (ctx) => ctx.dataset.label + ': AED ' + Math.round(ctx.parsed.y).toLocaleString() } },
+                    tooltip: {
+                      callbacks: {
+                        label: (ctx) => ctx.dataset.label + ': ' + fmtAed(ctx.parsed.y),
+                        // Footer shows the column total when you hover.
+                        footer: (items) => {
+                          const sum = items.reduce((s, it) => s + (it.parsed.y || 0), 0);
+                          return 'Total: ' + fmtAed(sum);
+                        },
+                      },
+                    },
                   },
-                  scales: { x: { stacked: true, grid: { display: false } }, y: { stacked: true, beginAtZero: true, ticks: { callback: (v) => 'AED ' + Math.round(v/1000) + 'K' } } },
+                  scales: {
+                    x: { stacked: true, grid: { display: false } },
+                    y: {
+                      stacked: true, beginAtZero: true,
+                      // Full dirham amounts with comma thousand-separators
+                      // (e.g. "AED 7,000,000"), not the old "AED 7000K".
+                      ticks: { callback: (v) => fmtAed(v) },
+                    },
+                  },
+                  // Custom plugin: draw the column total on top of each bar.
+                  animation: {
+                    onComplete: function() {
+                      const chart = this;
+                      const ctx = chart.ctx;
+                      ctx.save();
+                      ctx.font = '600 11px Inter, system-ui, sans-serif';
+                      ctx.fillStyle = '#131F23';
+                      ctx.textAlign = 'center';
+                      ctx.textBaseline = 'bottom';
+                      const lastDataset = chart.data.datasets.length - 1;
+                      const meta = chart.getDatasetMeta(lastDataset);
+                      meta.data.forEach((bar, i) => {
+                        const total = monthlyTotals[i];
+                        if (!total || total <= 0) return;
+                        ctx.fillText(fmtAed(total), bar.x, bar.y - 6);
+                      });
+                      ctx.restore();
+                    },
+                  },
                 },
               }}/>
             </div>
@@ -417,11 +502,51 @@ const PMCServiceChargesPage = () => {
           <div style={{padding:24,color:'var(--text-muted)',fontSize:13}}>Loading…</div>
         ) : filtered.length === 0 ? (
           <div style={{padding:32,color:'var(--text-muted)',fontSize:13,textAlign:'center'}}>No invoices match these filters.</div>
-        ) : (
+        ) : (() => {
+          // Apply the selected sort. String columns compare locale-aware;
+          // dates compare lexically (ISO YYYY-MM-DD); status uses a
+          // priority order from past-due to paid so visually sorting feels
+          // intuitive instead of alphabetical.
+          const statusPriority = { Pending: 0, Upcoming: 1, Future: 2, Paid: 3, Cancelled: 4 };
+          const sorted = [...filtered].sort((a, b) => {
+            const col = sortBy.column;
+            let av, bv;
+            if (col === 'invoice_number')      { av = a.invoice_number || ''; bv = b.invoice_number || ''; }
+            else if (col === 'description')    { av = a.description     || ''; bv = b.description     || ''; }
+            else if (col === 'resident_name')  { av = a.resident_name   || ''; bv = b.resident_name   || ''; }
+            else if (col === 'building_name')  { av = (a.building_name||'') + ' ' + (a.unit_number||''); bv = (b.building_name||'') + ' ' + (b.unit_number||''); }
+            else if (col === 'amount_aed')     { av = Number(a.amount_aed) || 0; bv = Number(b.amount_aed) || 0; }
+            else if (col === 'due_date')       { av = a.due_date || ''; bv = b.due_date || ''; }
+            else if (col === 'effective_status') { av = statusPriority[a.effective_status] ?? 99; bv = statusPriority[b.effective_status] ?? 99; }
+            else                                { av = a.created_at || ''; bv = b.created_at || ''; }
+            const cmp = typeof av === 'number' && typeof bv === 'number'
+              ? av - bv
+              : String(av).localeCompare(String(bv));
+            return sortBy.dir === 'asc' ? cmp : -cmp;
+          });
+          const arrow = (col) => sortBy.column !== col ? '' : (sortBy.dir === 'asc' ? ' ↑' : ' ↓');
+          const sortableTh = (col, label, extra) => (
+            <th
+              onClick={() => toggleSort(col)}
+              style={{cursor:'pointer',userSelect:'none',color: sortBy.column === col ? 'var(--text-dark)' : undefined, ...(extra || {})}}
+              title={'Sort by ' + label.toLowerCase()}
+            >{label}<span style={{fontSize:10,opacity: sortBy.column === col ? 1 : 0.3}}>{arrow(col) || ' ↕'}</span></th>
+          );
+          return (
           <table className="data-table">
-            <thead><tr><th style={{width:'9%'}}>Invoice #</th><th style={{width:'22%'}}>Description</th><th style={{width:'12%'}}>Resident</th><th style={{width:'14%'}}>Building / Unit</th><th style={{width:'10%',textAlign:'right'}}>Amount</th><th style={{width:'8%'}}>Due</th><th style={{width:'8%'}}>Status</th><th style={{width:'7%',textAlign:'center'}}>Invoice</th><th style={{width:'10%',textAlign:'center'}}>Proof of payment</th></tr></thead>
+            <thead><tr>
+              {sortableTh('invoice_number',   'Invoice #',        {width:'9%'})}
+              {sortableTh('description',      'Description',      {width:'22%'})}
+              {sortableTh('resident_name',    'Resident',         {width:'12%'})}
+              {sortableTh('building_name',    'Building / Unit',  {width:'14%'})}
+              {sortableTh('amount_aed',       'Amount',           {width:'10%',textAlign:'right'})}
+              {sortableTh('due_date',         'Due',              {width:'8%'})}
+              {sortableTh('effective_status', 'Status',           {width:'8%'})}
+              <th style={{width:'7%',textAlign:'center'}}>Invoice</th>
+              <th style={{width:'10%',textAlign:'center'}}>Proof of payment</th>
+            </tr></thead>
             <tbody>
-              {filtered.slice(0, 200).map(i => (
+              {sorted.slice(0, 200).map(i => (
                 <tr key={i.id}>
                   <td style={{fontWeight:500,fontSize:12}}>{i.invoice_number || '—'}</td>
                   <td style={{maxWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}} title={i.description}>{i.description}</td>
@@ -453,7 +578,8 @@ const PMCServiceChargesPage = () => {
               ))}
             </tbody>
           </table>
-        )}
+          );
+        })()}
       </div>
     </div>
   );
