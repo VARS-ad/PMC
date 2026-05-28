@@ -356,7 +356,6 @@ const PMCReportsPage = () => {
       <div className="page-header">
         <div>
           <h1>Reports</h1>
-          <div className="subtitle">Landlord-grade reporting. Live data from Supabase{selectedProperties.length > 0 ? ', scoped to your property selector at the top.' : '.'}</div>
         </div>
         <div style={{display:'flex',gap:10,alignItems:'center'}}>
           <select className="form-input" value={timeRange} onChange={e => setTimeRange(e.target.value)} style={{width:'auto',minWidth:170,padding:'9px 14px',fontSize:13}}>

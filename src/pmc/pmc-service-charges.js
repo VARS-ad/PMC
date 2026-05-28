@@ -65,7 +65,6 @@ const PMCServiceChargesPage = () => {
       <div className="page-header">
         <div>
           <h1>Service Charges</h1>
-          <div className="subtitle">All invoices across selected properties. Filter by status, search by invoice/resident/unit.</div>
         </div>
         <div className="btn-group">
           <button className="btn" onClick={() => setShowExport(true)} disabled={!invoices || invoices.length === 0}>Export / Print</button>

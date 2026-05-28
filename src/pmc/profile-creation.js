@@ -188,7 +188,7 @@ const ProfileCreationPage = () => {
   if (!pmcSession || authRole !== 'pmc') {
     return (
       <div>
-        <div className="page-header"><div><h1>Profile Creation</h1><div className="subtitle">Sign in with your PMC account to manage buildings, residents, and security.</div></div></div>
+        <div className="page-header"><div><h1>Profile Creation</h1></div></div>
         <div className="card" style={{padding:32,textAlign:'center'}}>
           <div style={{fontSize:13,color:'var(--text-secondary)',marginBottom:14}}>
             {pmcSession ? 'Your account does not have PMC privileges.' : 'You are not signed in to a real VARS account yet.'}
@@ -204,7 +204,6 @@ const ProfileCreationPage = () => {
       <div className="page-header">
         <div>
           <h1>Profile Creation</h1>
-          <div className="subtitle">Onboard buildings, residents, and security staff. Bulk via Excel/CSV or one by one.</div>
         </div>
       </div>
 

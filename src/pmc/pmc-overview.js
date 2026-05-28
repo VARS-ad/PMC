@@ -91,34 +91,52 @@ const PMCOverviewPage = ({ setPage }) => {
         });
 
         // -------- Service Charge Collection (THIS MONTH) --------
+        // Three buckets so the card can show Collected / Pending / Outstanding
+        // distinctly and the rate bar still has a meaningful denominator.
         const monthInvoices = (invoices || []).filter(i => i.created_at && i.created_at.slice(0,10) >= thisMonthStart);
         const monthBilled = monthInvoices.reduce((s, i) => s + Number(i.amount_aed), 0);
         const monthCollected = monthInvoices.filter(i => i.status === 'Paid').reduce((s, i) => s + Number(i.amount_aed), 0);
-        const monthOutstanding = monthBilled - monthCollected;
+        const monthPending = monthInvoices.filter(i => i.status === 'Pending').reduce((s, i) => s + Number(i.amount_aed), 0);
+        const monthOverdue = monthInvoices.filter(i => i.status === 'Overdue').reduce((s, i) => s + Number(i.amount_aed), 0);
+        const monthOutstanding = monthPending + monthOverdue;
         const monthCollectionRate = monthBilled > 0 ? Math.round((monthCollected / monthBilled) * 100) : 0;
 
-        // -------- Units in Arrears --------
-        const arrearsByUnit = {};
-        (invoices || []).filter(i => i.status === 'Overdue').forEach(i => {
-          if (!arrearsByUnit[i.unit_id]) arrearsByUnit[i.unit_id] = { unit_id: i.unit_id, amount: 0, count: 0, oldest_due: null };
-          arrearsByUnit[i.unit_id].amount += Number(i.amount_aed);
-          arrearsByUnit[i.unit_id].count++;
-          if (!arrearsByUnit[i.unit_id].oldest_due || (i.due_date && i.due_date < arrearsByUnit[i.unit_id].oldest_due)) {
-            arrearsByUnit[i.unit_id].oldest_due = i.due_date;
-          }
-        });
+        // -------- Per-unit payment activity (THIS MONTH) --------
         const uMap = Object.fromEntries(filteredUnits.map(u => [u.id, u]));
         const bMap = Object.fromEntries((buildings || []).map(b => [b.id, b]));
-        const arrearsList = Object.values(arrearsByUnit).map(a => {
-          const u = uMap[a.unit_id];
+        const enrich = (u_id, amount, count, oldest_due) => {
+          const u = uMap[u_id];
           return {
-            ...a,
-            unit_number: u ? u.unit_number : '—',
-            floor: u ? u.floor : null,
-            building_name: u && bMap[u.building_id] ? bMap[u.building_id].name : '—',
-            building_letter: u && bMap[u.building_id] ? bMap[u.building_id].name.slice(0, 1).toUpperCase() : '?',
+            unit_id: u_id, amount, count, oldest_due,
+            unit_number:    u ? u.unit_number : '—',
+            floor:          u ? u.floor : null,
+            building_name:  u && bMap[u.building_id] ? bMap[u.building_id].name : '—',
+            building_letter:u && bMap[u.building_id] ? bMap[u.building_id].name.slice(0, 1).toUpperCase() : '?',
           };
-        }).sort((a, b) => b.amount - a.amount).slice(0, 4);
+        };
+
+        const paidByUnit = {};
+        monthInvoices.filter(i => i.status === 'Paid').forEach(i => {
+          if (!paidByUnit[i.unit_id]) paidByUnit[i.unit_id] = { amount: 0, count: 0 };
+          paidByUnit[i.unit_id].amount += Number(i.amount_aed);
+          paidByUnit[i.unit_id].count++;
+        });
+        const paidList = Object.entries(paidByUnit)
+          .map(([uid, v]) => enrich(uid, v.amount, v.count, null))
+          .sort((a, b) => b.amount - a.amount).slice(0, 4);
+
+        const pendingByUnit = {};
+        (invoices || []).filter(i => i.status === 'Pending' || i.status === 'Overdue').forEach(i => {
+          if (!pendingByUnit[i.unit_id]) pendingByUnit[i.unit_id] = { amount: 0, count: 0, oldest_due: null };
+          pendingByUnit[i.unit_id].amount += Number(i.amount_aed);
+          pendingByUnit[i.unit_id].count++;
+          if (!pendingByUnit[i.unit_id].oldest_due || (i.due_date && i.due_date < pendingByUnit[i.unit_id].oldest_due)) {
+            pendingByUnit[i.unit_id].oldest_due = i.due_date;
+          }
+        });
+        const pendingList = Object.entries(pendingByUnit)
+          .map(([uid, v]) => enrich(uid, v.amount, v.count, v.oldest_due))
+          .sort((a, b) => b.amount - a.amount).slice(0, 4);
 
         // -------- Recent Service Requests (all-status) for the SR section table --------
         const srRecent = (srs || []).slice(0, 10);
@@ -131,10 +149,11 @@ const PMCOverviewPage = ({ setPage }) => {
           // Visitors KPIs
           upcomingVisits, todayVisits,
           // Financial Summary cards
-          monthBilled, monthCollected, monthOutstanding, monthCollectionRate,
-          arrearsList,
-          totalUnitsInArrears: Object.keys(arrearsByUnit).length,
-          totalArrears: Object.values(arrearsByUnit).reduce((s, a) => s + a.amount, 0),
+          monthBilled, monthCollected, monthPending, monthOverdue, monthOutstanding, monthCollectionRate,
+          paidList, pendingList,
+          totalUnitsPaid:    paidList.length    > 0 ? Object.keys(paidByUnit).length    : 0,
+          totalUnitsPending: pendingList.length > 0 ? Object.keys(pendingByUnit).length : 0,
+          totalArrears:      Object.values(pendingByUnit).reduce((s, a) => s + a.amount, 0),
           // Service Requests table
           srRecent,
         });
@@ -204,41 +223,76 @@ const PMCOverviewPage = ({ setPage }) => {
         {/* ============ FINANCIAL SUMMARY ============ */}
         <div style={groupEyebrow}>Financial Summary</div>
         <div style={{display:'grid',gridTemplateColumns:'1fr',gap:18,marginBottom:8}}>
-          {/* Service Charge Collection — THIS MONTH (Outstanding + rate bar only) */}
+          {/* Service Charge Collection — THIS MONTH: Collected / Pending / Outstanding */}
           <div className="card">
             <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:14}}>
               <div style={{fontSize:14,fontWeight:600,color:'var(--text-dark)'}}>Service Charge Collection {monthLabel}</div>
               <span onClick={() => setPage && setPage('payment')} style={{fontSize:11,color:'var(--accent-warm-dark)',cursor:'pointer'}}>View all →</span>
             </div>
-            <div style={{fontSize:10,letterSpacing:'0.08em',textTransform:'uppercase',color:'var(--text-secondary)',marginBottom:6,fontWeight:600}}>Outstanding</div>
-            <div style={{fontSize:24,fontWeight:600,color:'#8b4a42',letterSpacing:'-0.03em',marginBottom:14}}>{fmt(stats.monthOutstanding)}</div>
+            <div style={{display:'grid',gridTemplateColumns:'repeat(3, minmax(0, 1fr))',gap:18,marginBottom:14}}>
+              <div>
+                <div style={{fontSize:10,letterSpacing:'0.08em',textTransform:'uppercase',color:'var(--text-secondary)',marginBottom:6,fontWeight:600}}>Collected</div>
+                <div style={{fontSize:24,fontWeight:600,color:'#5a6b4f',letterSpacing:'-0.03em'}}>{fmt(stats.monthCollected)}</div>
+              </div>
+              <div>
+                <div style={{fontSize:10,letterSpacing:'0.08em',textTransform:'uppercase',color:'var(--text-secondary)',marginBottom:6,fontWeight:600}}>Pending</div>
+                <div style={{fontSize:24,fontWeight:600,color:'#a07d3c',letterSpacing:'-0.03em'}}>{fmt(stats.monthPending)}</div>
+              </div>
+              <div>
+                <div style={{fontSize:10,letterSpacing:'0.08em',textTransform:'uppercase',color:'var(--text-secondary)',marginBottom:6,fontWeight:600}}>Outstanding</div>
+                <div style={{fontSize:24,fontWeight:600,color:'#8b4a42',letterSpacing:'-0.03em'}}>{fmt(stats.monthOverdue)}</div>
+              </div>
+            </div>
             <div style={{fontSize:11,color:'var(--text-muted)',marginBottom:8}}>Collection rate this month · {stats.monthCollectionRate}%</div>
             <div style={{height:8,background:'var(--bg-surface)',borderRadius:4,overflow:'hidden'}}>
               <div style={{height:'100%',width:stats.monthCollectionRate+'%',background:'linear-gradient(90deg, var(--accent-warm) 0%, var(--bg-warm-dark) 100%)'}}/>
             </div>
           </div>
 
-          {/* Units in Arrears — who owes us money */}
+          {/* Unit Payment Activity — Paid (this month) | Pending (all unpaid) */}
           <div className="card">
             <div style={{marginBottom:14}}>
-              <div style={{fontSize:14,fontWeight:600,color:'var(--text-dark)'}}>Units in Arrears</div>
-              <div style={{fontSize:11,color:'var(--text-muted)',marginTop:2}}>{stats.totalUnitsInArrears} unit{stats.totalUnitsInArrears===1?'':'s'} · Total {fmt(stats.totalArrears)}</div>
+              <div style={{fontSize:14,fontWeight:600,color:'var(--text-dark)'}}>Unit Payment Activity {monthLabel}</div>
+              <div style={{fontSize:11,color:'var(--text-muted)',marginTop:2}}>Top paying units this month · Top units with pending or overdue invoices</div>
             </div>
-            {stats.arrearsList.length === 0 ? (
-              <div style={{color:'var(--text-muted)',fontSize:13,padding:18,textAlign:'center'}}>No overdue invoices ✓</div>
-            ) : stats.arrearsList.map((a, i) => (
-              <div key={i} style={{display:'flex',alignItems:'center',gap:10,padding:'10px 0',borderBottom: i < stats.arrearsList.length - 1 ? '1px solid var(--border-light)' : 'none'}}>
-                <div style={{width:32,height:32,borderRadius:'50%',background:'var(--bg-surface)',border:'1px solid var(--border-light)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:13,fontWeight:600,color:'var(--text-secondary)'}}>{a.building_letter}</div>
-                <div style={{flex:1,minWidth:0}}>
-                  <div style={{fontSize:13,fontWeight:500,color:'var(--text-dark)'}}>{a.unit_number}</div>
-                  <div style={{fontSize:11,color:'var(--text-muted)'}}>{a.building_name}{a.floor != null ? ' · Floor ' + a.floor : ''}</div>
-                </div>
-                <div style={{textAlign:'right'}}>
-                  <div style={{fontSize:13,fontWeight:600,color:'#8b4a42'}}>{fmt(a.amount)}</div>
-                  <div style={{fontSize:10,color:'var(--text-muted)'}}>Due {daysOverdue(a.oldest_due)}d ago</div>
-                </div>
+            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:28}}>
+              <div>
+                <div style={{fontSize:10,letterSpacing:'0.08em',textTransform:'uppercase',color:'#5a6b4f',fontWeight:600,marginBottom:10}}>Paid</div>
+                {stats.paidList.length === 0 ? (
+                  <div style={{color:'var(--text-muted)',fontSize:12,padding:'14px 0'}}>No paid invoices this month yet.</div>
+                ) : stats.paidList.map((a, i) => (
+                  <div key={i} style={{display:'flex',alignItems:'center',gap:10,padding:'10px 0',borderBottom: i < stats.paidList.length - 1 ? '1px solid var(--border-light)' : 'none'}}>
+                    <div style={{width:30,height:30,borderRadius:'50%',background:'var(--bg-surface)',border:'1px solid var(--border-light)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:12,fontWeight:600,color:'var(--text-secondary)'}}>{a.building_letter}</div>
+                    <div style={{flex:1,minWidth:0}}>
+                      <div style={{fontSize:13,fontWeight:500,color:'var(--text-dark)'}}>{a.unit_number}</div>
+                      <div style={{fontSize:11,color:'var(--text-muted)',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{a.building_name}{a.floor != null ? ' · Fl ' + a.floor : ''}</div>
+                    </div>
+                    <div style={{textAlign:'right'}}>
+                      <div style={{fontSize:13,fontWeight:600,color:'#5a6b4f'}}>{fmt(a.amount)}</div>
+                      <div style={{fontSize:10,color:'var(--text-muted)'}}>{a.count} invoice{a.count===1?'':'s'}</div>
+                    </div>
+                  </div>
+                ))}
               </div>
-            ))}
+              <div>
+                <div style={{fontSize:10,letterSpacing:'0.08em',textTransform:'uppercase',color:'#8b4a42',fontWeight:600,marginBottom:10}}>Pending</div>
+                {stats.pendingList.length === 0 ? (
+                  <div style={{color:'var(--text-muted)',fontSize:12,padding:'14px 0'}}>No pending or overdue invoices ✓</div>
+                ) : stats.pendingList.map((a, i) => (
+                  <div key={i} style={{display:'flex',alignItems:'center',gap:10,padding:'10px 0',borderBottom: i < stats.pendingList.length - 1 ? '1px solid var(--border-light)' : 'none'}}>
+                    <div style={{width:30,height:30,borderRadius:'50%',background:'var(--bg-surface)',border:'1px solid var(--border-light)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:12,fontWeight:600,color:'var(--text-secondary)'}}>{a.building_letter}</div>
+                    <div style={{flex:1,minWidth:0}}>
+                      <div style={{fontSize:13,fontWeight:500,color:'var(--text-dark)'}}>{a.unit_number}</div>
+                      <div style={{fontSize:11,color:'var(--text-muted)',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{a.building_name}{a.floor != null ? ' · Fl ' + a.floor : ''}</div>
+                    </div>
+                    <div style={{textAlign:'right'}}>
+                      <div style={{fontSize:13,fontWeight:600,color:'#8b4a42'}}>{fmt(a.amount)}</div>
+                      <div style={{fontSize:10,color:'var(--text-muted)'}}>{a.oldest_due ? 'Due ' + daysOverdue(a.oldest_due) + 'd ago' : a.count + ' invoice' + (a.count===1?'':'s')}</div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
           </div>
         </div>
 

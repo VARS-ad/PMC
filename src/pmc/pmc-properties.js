@@ -83,7 +83,6 @@ const PMCPropertiesPage = ({ setPage }) => {
       <div className="page-header">
         <div>
           <h1>Properties</h1>
-          <div className="subtitle">Buildings under management. Use the top-bar property selector to focus on specific assets.</div>
         </div>
         <div className="btn-group">
           <button className="btn" onClick={() => setShowExportTenants(true)} disabled={!buildings || buildings.length === 0}>Export / Print — Tenants</button>

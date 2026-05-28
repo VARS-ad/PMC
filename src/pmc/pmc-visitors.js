@@ -88,7 +88,6 @@ const PMCVisitorsPage = () => {
       <div className="page-header">
         <div>
           <h1>Visitors</h1>
-          <div className="subtitle">All visitor activity across managed buildings — past, today, and scheduled.</div>
         </div>
         <div className="btn-group">
           <button className="btn" onClick={() => setShowExport(true)} disabled={!visits || visits.length === 0}>Export / Print</button>

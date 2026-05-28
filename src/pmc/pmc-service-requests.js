@@ -123,7 +123,6 @@ const PMCServiceRequestsPage = () => {
       <div className="page-header">
         <div>
           <h1>Service Requests</h1>
-          <div className="subtitle">All maintenance + service tickets across selected properties. Click a row for details.</div>
         </div>
         <div className="btn-group">
           <button className="btn" onClick={() => setShowExport(true)} disabled={!rows || rows.length === 0}>Export / Print</button>

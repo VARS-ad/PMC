@@ -795,7 +795,6 @@ const PMCVendorsPage = ({ setPage }) => {
       <div className="page-header">
         <div>
           <h1>{t('vendors.title')}</h1>
-          <div className="subtitle">{t('vendors.subtitle')}</div>
         </div>
         <div className="btn-group">
           <button className="btn" onClick={() => setShowExport(true)} disabled={!vendors || vendors.length === 0}>{t('vendors.exportBtn')}</button>

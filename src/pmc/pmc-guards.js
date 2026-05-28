@@ -68,7 +68,6 @@ const PMCGuardsPage = () => {
       <div className="page-header">
         <div>
           <h1>Guards</h1>
-          <div className="subtitle">Security staff across managed buildings — duty status, contact, and oversight actions.</div>
         </div>
         <div className="btn-group">
           <button className="btn" onClick={() => setShowExport(true)} disabled={!guards || guards.length === 0}>Export / Print</button>
