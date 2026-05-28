@@ -22,6 +22,8 @@ const UnitDetailModal = ({ unit, building, assignment: passedAssignment, profile
   // can show who it was billed to (covers both current and former tenants).
   const [invoiceResidents, setInvoiceResidents] = useState({});
   const [showAttachments, setShowAttachments] = useState(false);
+  // Clicking the resident's name opens the full ResidentDetailModal.
+  const [showResidentDetail, setShowResidentDetail] = useState(false);
 
   useEffect(() => {
     let mounted = true;
@@ -33,7 +35,7 @@ const UnitDetailModal = ({ unit, building, assignment: passedAssignment, profile
       if (!a) {
         const { data } = await supabaseClient
           .from('resident_assignments')
-          .select('profile_id,unit_id,tenure,monthly_payment_aed,lease_start,lease_end,ownership_start')
+          .select('profile_id,unit_id,tenure,monthly_payment_aed,lease_start,lease_end,ownership_start,cheques_per_year,contract_number')
           .eq('unit_id', unit.id)
           .maybeSingle();
         a = data || null;
@@ -144,7 +146,17 @@ const UnitDetailModal = ({ unit, building, assignment: passedAssignment, profile
             <Section label={profile ? 'Resident' : (formerResident ? 'Former Resident' : 'Resident')}>
               {profile ? (
                 <>
-                  <Field label="Name">{profile.full_name}</Field>
+                  <Field label="Name">
+                    <span
+                      onClick={() => setShowResidentDetail(true)}
+                      style={{color:'#3E4C59',cursor:'pointer',textDecoration:'underline',textDecorationColor:'#E6EAE9',textDecorationThickness:1,textUnderlineOffset:3}}
+                      onMouseEnter={e => { e.currentTarget.style.textDecorationColor = '#3E4C59'; }}
+                      onMouseLeave={e => { e.currentTarget.style.textDecorationColor = '#E6EAE9'; }}
+                      title="Open full resident profile"
+                    >
+                      {profile.full_name}
+                    </span>
+                  </Field>
                   <Field label="Phone">{profile.phone}</Field>
                   <Field label="Tenure">{assignment && assignment.tenure}</Field>
                 </>
@@ -162,16 +174,28 @@ const UnitDetailModal = ({ unit, building, assignment: passedAssignment, profile
             </Section>
 
             {assignment && (
-              <Section label={assignment.tenure === 'Owner' ? 'Ownership' : 'Lease'}>
+              <Section label={assignment.tenure === 'Owner' ? 'Ownership' : 'Annual Contract'}>
                 {assignment.tenure === 'Owner' ? (
                   <Field label="Ownership start">{assignment.ownership_start}</Field>
-                ) : (
-                  <>
-                    <Field label="Monthly payment">{assignment.monthly_payment_aed ? fmt(assignment.monthly_payment_aed) : '—'}</Field>
-                    <Field label="Lease start">{assignment.lease_start}</Field>
-                    <Field label="Lease end">{assignment.lease_end}</Field>
-                  </>
-                )}
+                ) : (() => {
+                  const monthly = Number(assignment.monthly_payment_aed) || 0;
+                  const cheques = Number(assignment.cheques_per_year) || 1;
+                  const annual  = monthly * 12;
+                  const perCheque = cheques > 0 ? Math.round(annual / cheques) : annual;
+                  return (
+                    <>
+                      <Field label="Annual rent">{annual ? fmt(annual) : '—'}</Field>
+                      <Field label="Cheques per year">{cheques}</Field>
+                      <Field label="Per cheque">{annual ? fmt(perCheque) : '—'}</Field>
+                      <Field label="Contract #">{assignment.contract_number || '—'}</Field>
+                      <Field label="Lease start">{assignment.lease_start}</Field>
+                      <Field label="Lease end">{assignment.lease_end}</Field>
+                      <div style={{marginTop:6,fontSize:11,color:'#61707D',fontStyle:'italic'}}>
+                        Contract document is stored under Attachments below.
+                      </div>
+                    </>
+                  );
+                })()}
               </Section>
             )}
 
@@ -202,25 +226,25 @@ const UnitDetailModal = ({ unit, building, assignment: passedAssignment, profile
                         </span>
                       ) : '—'}
                     </td>
-                    <td>{i.due_date || '—'}</td>
-                    <td>
-                      <span style={{padding:'2px 8px',borderRadius:4,fontSize:10,fontWeight:500,background:statusStyle.bg,color:statusStyle.fg}}>
+                    <td style={{whiteSpace:'nowrap'}}>{i.due_date || '—'}</td>
+                    <td style={{whiteSpace:'nowrap'}}>
+                      <span style={{display:'inline-block',padding:'2px 8px',borderRadius:4,fontSize:10,fontWeight:500,background:statusStyle.bg,color:statusStyle.fg,whiteSpace:'nowrap'}}>
                         {i.effective_status}
                       </span>
                     </td>
-                    <td style={{textAlign:'right',color:accentColor,fontWeight:600}}>{fmt(i.amount_aed)}</td>
+                    <td style={{textAlign:'right',color:accentColor,fontWeight:600,whiteSpace:'nowrap'}}>{fmt(i.amount_aed)}</td>
                   </tr>
                 );
               };
               const InvoiceTableHeader = () => (
                 <thead>
                   <tr>
-                    <th style={{width:'16%'}}>Invoice</th>
-                    <th style={{width:'28%'}}>Description</th>
-                    <th style={{width:'22%'}}>Billed to</th>
+                    <th style={{width:'14%'}}>Invoice</th>
+                    <th style={{width:'22%'}}>Description</th>
+                    <th style={{width:'20%'}}>Billed to</th>
                     <th style={{width:'12%'}}>Due</th>
-                    <th style={{width:'10%'}}>Status</th>
-                    <th style={{width:'12%',textAlign:'right'}}>Amount</th>
+                    <th style={{width:'14%'}}>Status</th>
+                    <th style={{width:'18%',textAlign:'right'}}>Amount</th>
                   </tr>
                 </thead>
               );
@@ -272,6 +296,24 @@ const UnitDetailModal = ({ unit, building, assignment: passedAssignment, profile
       </div>
     </div>
     {showAttachments && <UnitAttachmentsModal unit={unit} buildingName={building.name} onClose={() => setShowAttachments(false)}/>}
+    {showResidentDetail && profile && (
+      <ResidentDetailModal
+        onClose={() => setShowResidentDetail(false)}
+        resident={{
+          id:                  profile.id,
+          full_name:           profile.full_name,
+          phone:               profile.phone,
+          building_name:       building.name,
+          unit_number:         unit.unit_number,
+          floor:               unit.floor,
+          tenure:              assignment ? assignment.tenure              : null,
+          lease_start:         assignment ? assignment.lease_start         : null,
+          lease_end:           assignment ? assignment.lease_end           : null,
+          monthly_payment_aed: assignment ? assignment.monthly_payment_aed : null,
+          ownership_start:     assignment ? assignment.ownership_start     : null,
+        }}
+      />
+    )}
     </>
   );
 };
