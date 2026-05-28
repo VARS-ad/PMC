@@ -1,31 +1,75 @@
-// ==================== EXPORT / PRINT MODAL ====================
-// Reusable modal mounted by per-page "Export / Print" buttons. Caller passes:
-//   isOpen, onClose
-//   title          — what's being exported, e.g. "Residents", "Invoices"
-//   columns        — [{ key, header, width?, halign?, value?(row) }]
-//   rows           — array of plain row objects (already scoped to the page)
-//   dateField      — optional. Key on each row used for time-range filtering.
-//                    Accepts ISO date strings ("2026-04-05") or epoch numbers.
-//                    Omit to disable range filtering.
-//   sheetName      — Excel sheet tab name (defaults to title)
-//   filenameBase   — defaults to title.toLowerCase()
-//   extraMetadata  — optional object of extra label→value pairs to surface in
-//                    the metadata block of the rendered report.
+// ==================== DOWNLOAD DATA MODAL ====================
+// Reusable modal mounted by per-page "Download Data" buttons. Callers can use
+// it in one of two modes:
 //
-// The modal owns the format (PDF/Excel) + range selectors. The Export button
-// filters rows by range, then hands off to exportReportPDF / exportReportExcel.
+// (a) SINGLE-DATASET (legacy, backward-compatible). Pass:
+//       isOpen, onClose
+//       title          — what's being exported, e.g. "Residents", "Invoices"
+//       columns        — [{ key, header, width?, halign?, value?(row) }]
+//       rows           — array of plain row objects (already scoped to the page)
+//       dateField      — optional. Key on each row used for time-range filtering.
+//                        Accepts ISO date strings ("2026-04-05") or epoch numbers.
+//                        Omit to disable range filtering.
+//       sheetName      — Excel sheet tab name (defaults to title)
+//       filenameBase   — defaults to title.toLowerCase()
+//       extraMetadata  — optional object of extra label→value pairs to surface in
+//                        the metadata block of the rendered report.
+//       description    — optional override for the "About this report" paragraph.
+//
+// (b) MULTI-DATASET (new). Pass `dataTypes` as an array of entries shaped like:
+//       {
+//         id:           'tenants',           // unique id
+//         label:        'Tenants',           // shown in the Type dropdown
+//         title:        'Tenants',           // passed to the export functions
+//         sheetName:    'Tenants',
+//         filenameBase: 'tenants',
+//         columns:      [...],               // same shape as single-mode
+//         rows:         [...],
+//         dateField:    'lease_start',       // optional, per-dataset
+//         extraMetadata:{...},               // optional, per-dataset
+//         description:  '...'                // optional, per-dataset
+//       }
+//     The modal then shows a Type dropdown above the time-range/format pickers
+//     and switches the underlying dataset when the user changes it.
+//
+// Field order in the modal: Type (if multi) → Time range → Format → Download.
+// Format options: PDF, Excel (.xlsx), CSV, Word (.docx — "Coming soon", disabled).
 
-const ExportPrintModal = ({ isOpen, onClose, title, columns, rows, dateField, sheetName, filenameBase, extraMetadata }) => {
+const ExportPrintModal = ({
+  isOpen, onClose,
+  // single-dataset props
+  title, columns, rows, dateField, sheetName, filenameBase, extraMetadata, description,
+  // multi-dataset prop
+  dataTypes,
+}) => {
   if (!isOpen) return null;
 
-  const [format, setFormat]           = React.useState('pdf');
+  const isMulti = Array.isArray(dataTypes) && dataTypes.length > 0;
+
+  // Active dataset id (only used in multi mode). Default to first entry.
+  const [activeTypeId, setActiveTypeId] = React.useState(isMulti ? dataTypes[0].id : null);
+
+  // Resolve the "current" dataset config — either the matching multi entry
+  // or the flat single-mode props bundled into the same shape.
+  const active = isMulti
+    ? (dataTypes.find(d => d.id === activeTypeId) || dataTypes[0])
+    : { title, columns, rows, dateField, sheetName, filenameBase, extraMetadata, description };
+
+  const [format, setFormat]           = React.useState('excel');
   const [range, setRange]             = React.useState('all');
   const [customStart, setCustomStart] = React.useState('');
   const [customEnd, setCustomEnd]     = React.useState('');
 
+  // If the active dataset has no dateField, force range back to "all" so we
+  // don't silently filter rows out when switching from a time-bound dataset
+  // (e.g. Tenants with lease_start) to a non-time-bound one (e.g. Buildings).
+  React.useEffect(() => {
+    if (!active.dateField && range !== 'all') setRange('all');
+  }, [active.dateField]);
+
   // --- Range → [start, end] (start inclusive, end exclusive) ---
   const computeRange = () => {
-    if (!dateField || range === 'all') return [null, null];
+    if (!active.dateField || range === 'all') return [null, null];
     const now = new Date();
     const startOfDay = (d) => { const x = new Date(d); x.setHours(0,0,0,0); return x; };
     if (range === 'today') {
@@ -64,12 +108,13 @@ const ExportPrintModal = ({ isOpen, onClose, title, columns, rows, dateField, sh
 
   // --- Filter rows by date range ---
   const filteredRows = React.useMemo(() => {
-    if (!rows) return [];
-    if (!dateField || range === 'all') return rows;
+    const dsRows = active.rows;
+    if (!dsRows) return [];
+    if (!active.dateField || range === 'all') return dsRows;
     const [s, e] = computeRange();
-    if (!s && !e) return rows;
-    return rows.filter(r => {
-      const raw = r[dateField];
+    if (!s && !e) return dsRows;
+    return dsRows.filter(r => {
+      const raw = r[active.dateField];
       if (!raw) return false;
       const d = typeof raw === 'number' ? new Date(raw) : new Date(raw);
       if (isNaN(d.getTime())) return false;
@@ -77,11 +122,11 @@ const ExportPrintModal = ({ isOpen, onClose, title, columns, rows, dateField, sh
       if (e && d >= e) return false;
       return true;
     });
-  }, [rows, dateField, range, customStart, customEnd]);
+  }, [active.rows, active.dateField, range, customStart, customEnd]);
 
   // --- Build human-readable range label for the report metadata block ---
   const rangeLabel = (() => {
-    if (!dateField) return null;
+    if (!active.dateField) return null;
     if (range === 'all')       return 'All time';
     if (range === 'today')     return 'Today';
     if (range === 'last7')     return 'Last 7 days';
@@ -94,19 +139,21 @@ const ExportPrintModal = ({ isOpen, onClose, title, columns, rows, dateField, sh
 
   const handleExport = () => {
     const opts = {
-      title,
-      columns,
-      rows: filteredRows,
+      title:       active.title,
+      columns:     active.columns,
+      rows:        filteredRows,
+      description: active.description,
       metadata: {
         ...(rangeLabel ? { 'Date Range': rangeLabel } : {}),
-        ...(extraMetadata || {}),
+        ...(active.extraMetadata || {}),
       },
-      filename: filenameBase || (title ? title.toLowerCase().replace(/\s+/g, '_') : 'export'),
-      sheetName: sheetName || title,
+      filename:  active.filenameBase || (active.title ? active.title.toLowerCase().replace(/\s+/g, '_') : 'export'),
+      sheetName: active.sheetName || active.title,
     };
     try {
-      if (format === 'pdf') exportReportPDF(opts);
-      else                  exportReportExcel(opts);
+      if      (format === 'pdf')   exportReportPDF(opts);
+      else if (format === 'csv')   exportReportCSV(opts);
+      else                          exportReportExcel(opts);   // 'excel' (default)
       onClose();
     } catch (e) {
       console.error('Export failed:', e);
@@ -114,34 +161,31 @@ const ExportPrintModal = ({ isOpen, onClose, title, columns, rows, dateField, sh
     }
   };
 
+  const totalRows = active.rows ? active.rows.length : 0;
+
   return (
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal" onClick={e => e.stopPropagation()} style={{maxWidth: 520}}>
         <div className="modal-header">
           <div>
-            <h2>Export / Print</h2>
-            <div className="modal-sub">{title} — {rows ? rows.length : 0} records available</div>
+            <h2>Download Data</h2>
+            <div className="modal-sub">{active.title} — {totalRows} records available</div>
           </div>
           <button className="modal-close" onClick={onClose} aria-label="Close">×</button>
         </div>
 
-        <div className="form-group">
-          <label>Format</label>
-          <div className="type-selector">
-            <button
-              className={'type-btn ' + (format === 'pdf' ? 'active' : '')}
-              onClick={() => setFormat('pdf')}>
-              PDF
-            </button>
-            <button
-              className={'type-btn ' + (format === 'excel' ? 'active' : '')}
-              onClick={() => setFormat('excel')}>
-              Excel (.xlsx)
-            </button>
+        {isMulti && (
+          <div className="form-group">
+            <label>Type</label>
+            <select className="form-input" value={activeTypeId} onChange={e => setActiveTypeId(e.target.value)}>
+              {dataTypes.map(d => (
+                <option key={d.id} value={d.id}>{d.label || d.title}</option>
+              ))}
+            </select>
           </div>
-        </div>
+        )}
 
-        {dateField && (
+        {active.dateField && (
           <div className="form-group">
             <label>Time range</label>
             <select className="form-input" value={range} onChange={e => setRange(e.target.value)}>
@@ -156,21 +200,49 @@ const ExportPrintModal = ({ isOpen, onClose, title, columns, rows, dateField, sh
           </div>
         )}
 
-        {dateField && range === 'custom' && (
+        {active.dateField && range === 'custom' && (
           <div className="form-group" style={{display:'flex', gap: 8}}>
             <input type="date" className="form-input" value={customStart} onChange={e => setCustomStart(e.target.value)} style={{flex:1}}/>
             <input type="date" className="form-input" value={customEnd}   onChange={e => setCustomEnd(e.target.value)}   style={{flex:1}}/>
           </div>
         )}
 
+        <div className="form-group">
+          <label>Format</label>
+          <div className="type-selector">
+            <button
+              className={'type-btn ' + (format === 'pdf' ? 'active' : '')}
+              onClick={() => setFormat('pdf')}>
+              PDF
+            </button>
+            <button
+              className={'type-btn ' + (format === 'excel' ? 'active' : '')}
+              onClick={() => setFormat('excel')}>
+              Excel (.xlsx)
+            </button>
+            <button
+              className={'type-btn ' + (format === 'csv' ? 'active' : '')}
+              onClick={() => setFormat('csv')}>
+              CSV
+            </button>
+            <button
+              className="type-btn"
+              disabled
+              title="Coming soon"
+              style={{opacity: 0.5, cursor: 'not-allowed'}}>
+              Word (.docx) · Coming soon
+            </button>
+          </div>
+        </div>
+
         <div style={{marginTop: 12, fontSize: 12, color: '#61707D'}}>
-          {filteredRows.length} of {rows ? rows.length : 0} records will be included.
+          {filteredRows.length} of {totalRows} records will be included.
         </div>
 
         <div className="btn-group" style={{marginTop: 20, justifyContent: 'flex-end'}}>
           <button className="btn" onClick={onClose}>Cancel</button>
           <button className="btn btn-primary" onClick={handleExport} disabled={filteredRows.length === 0}>
-            Export
+            Download
           </button>
         </div>
       </div>

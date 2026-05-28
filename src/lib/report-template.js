@@ -517,6 +517,33 @@ const exportTenantStatementPDF = async ({ tenant, contract, payments, filename }
 
 // ---------- Excel export ----------
 
+// ---------- CSV export (plain RFC-4180) ----------
+const exportReportCSV = ({ title, description, columns, rows, metadata, filename }) => {
+  const esc = (v) => {
+    if (v == null) return '';
+    const s = String(v);
+    return /[",\n\r]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+  };
+  const lines = [];
+  // Metadata header block at the top (commented with #)
+  const metaPairs = _buildMetaPairs(title, rows, metadata);
+  metaPairs.forEach(([k, v]) => lines.push('# ' + esc(k) + ',' + esc(v)));
+  lines.push('# ABOUT,' + esc(_buildDescription(title, rows, metadata, description)));
+  lines.push(''); // blank spacer
+  // Header row
+  lines.push(columns.map(c => esc(c.header)).join(','));
+  // Data
+  _rowsToAOA(rows, columns).forEach(row => lines.push(row.map(esc).join(',')));
+  const csv = lines.join('\r\n') + '\r\n';
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href = url;
+  a.download = _safeFilename(filename || (title || 'export')) + '.csv';
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  setTimeout(() => URL.revokeObjectURL(url), 500);
+};
+
 const exportReportExcel = ({ title, subtitle, description, sheetName, columns, rows, metadata, filename }) => {
   if (!window.XLSX) { alert('Excel library failed to load — please reload the page'); return; }
   const X = window.XLSX;

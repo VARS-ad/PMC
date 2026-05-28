@@ -3,14 +3,42 @@
 // units count · occupancy · residents · monthly revenue · collected · outstanding · open SRs.
 // Click a card → BuildingDetailModal (reused from Profile Creation).
 
+// Infer the property type from the building name. We don't have a
+// `property_type` column in Supabase yet, so this is a heuristic that
+// covers the names actually in use ("Tower", "View", "Residences",
+// "Villa", "Land", "Plot"). Defaults to "Residential" since most
+// of the portfolio is apartment buildings.
+const _inferPropertyType = (name) => {
+  const n = (name || '').toLowerCase();
+  if (n.includes('villa') || n.includes('compound')) return 'Villa Compound';
+  if (n.includes('land') || n.includes('plot'))      return 'Commercial Land';
+  if (n.includes('office') || n.includes('retail'))  return 'Commercial';
+  return 'Residential';
+};
+
+// Colored chip rendered next to the building name. Distinct background
+// per type so the user can spot the type at a glance.
+const _PropertyTypeChip = ({ type }) => {
+  const palette = ({
+    'Residential':     { bg: '#CFDFEF', fg: '#1f3a5a' }, // water-blue
+    'Villa Compound':  { bg: '#DBC5AE', fg: '#5a4530' }, // sand
+    'Commercial Land': { bg: '#D2C7CF', fg: '#4a3a48' }, // mauve
+    'Commercial':      { bg: '#D2E4E5', fg: '#2d4a4d' }, // sky-mint
+  })[type] || { bg: '#E6EAE9', fg: '#61707D' };
+  return (
+    <span style={{display:'inline-block',padding:'3px 10px',fontSize:11,fontWeight:600,letterSpacing:'0.04em',textTransform:'uppercase',background:palette.bg,color:palette.fg,borderRadius:4,verticalAlign:'middle',marginLeft:10}}>
+      {type}
+    </span>
+  );
+};
+
 const PMCPropertiesPage = ({ setPage }) => {
   const { selectedProperties = [] } = useApp();
   const [buildings, setBuildings] = useState(null);
   const [error, setError] = useState(null);
   const [selectedBuilding, setSelectedBuilding] = useState(null);
   const [drill, setDrill] = useState(null); // { building, view }
-  const [showExportBuildings, setShowExportBuildings] = useState(false);
-  const [showExportTenants, setShowExportTenants] = useState(false);
+  const [showDownload, setShowDownload] = useState(false);
 
   useEffect(() => {
     let mounted = true;
@@ -85,65 +113,69 @@ const PMCPropertiesPage = ({ setPage }) => {
           <h1>Properties</h1>
         </div>
         <div className="btn-group">
-          <button className="btn" onClick={() => setShowExportTenants(true)} disabled={!buildings || buildings.length === 0}>Export / Print — Tenants</button>
-          <button className="btn" onClick={() => setShowExportBuildings(true)} disabled={!buildings || buildings.length === 0}>Export / Print — Buildings</button>
+          <button className="btn" onClick={() => setShowDownload(true)} disabled={!buildings || buildings.length === 0}>Download Data</button>
         </div>
       </div>
 
       <ExportPrintModal
-        isOpen={showExportBuildings}
-        onClose={() => setShowExportBuildings(false)}
-        title="Buildings"
-        sheetName="Buildings"
-        filenameBase="buildings"
-        rows={buildings || []}
-        columns={[
-          { key: 'name',           header: 'Building',      width: 28 },
-          { key: 'address',        header: 'Address',       width: 36 },
-          { key: 'unitCount',      header: 'Units',         width: 8,  halign: 'right', numeric: true },
-          { key: 'occupiedCount',  header: 'Occupied',      width: 10, halign: 'right', numeric: true },
-          { key: 'monthlyRev',     header: 'Monthly Rev (AED)',  width: 16, halign: 'right', numeric: true,
-            value: (r) => Math.round(r.monthlyRev || 0) },
-          { key: 'collected',      header: 'Collected (AED)',    width: 16, halign: 'right', numeric: true,
-            value: (r) => Math.round(r.collected || 0) },
-          { key: 'outstanding',    header: 'Outstanding (AED)',  width: 16, halign: 'right', numeric: true,
-            value: (r) => Math.round(r.outstanding || 0) },
-          { key: 'openSRs',        header: 'Open SRs',      width: 10, halign: 'right', numeric: true },
-          { key: 'totalSRs',       header: 'Total SRs',     width: 10, halign: 'right', numeric: true },
-          { key: 'notes',          header: 'Notes',         width: 30 },
+        isOpen={showDownload}
+        onClose={() => setShowDownload(false)}
+        dataTypes={[
+          {
+            id:           'buildings',
+            label:        'Buildings',
+            title:        'Buildings',
+            sheetName:    'Buildings',
+            filenameBase: 'buildings',
+            rows:         buildings || [],
+            columns: [
+              { key: 'name',           header: 'Building',      width: 28 },
+              { key: 'address',        header: 'Address',       width: 36 },
+              { key: 'unitCount',      header: 'Units',         width: 8,  halign: 'right', numeric: true },
+              { key: 'occupiedCount',  header: 'Occupied',      width: 10, halign: 'right', numeric: true },
+              { key: 'monthlyRev',     header: 'Monthly Rev (AED)',  width: 16, halign: 'right', numeric: true,
+                value: (r) => Math.round(r.monthlyRev || 0) },
+              { key: 'collected',      header: 'Collected (AED)',    width: 16, halign: 'right', numeric: true,
+                value: (r) => Math.round(r.collected || 0) },
+              { key: 'outstanding',    header: 'Outstanding (AED)',  width: 16, halign: 'right', numeric: true,
+                value: (r) => Math.round(r.outstanding || 0) },
+              { key: 'openSRs',        header: 'Open SRs',      width: 10, halign: 'right', numeric: true },
+              { key: 'totalSRs',       header: 'Total SRs',     width: 10, halign: 'right', numeric: true },
+              { key: 'notes',          header: 'Notes',         width: 30 },
+            ],
+            extraMetadata: {
+              'Property Filter': selectedProperties.length === 0 ? 'All buildings' : (selectedProperties.length + ' selected'),
+              'Total Buildings': String((buildings || []).length),
+            },
+          },
+          {
+            id:           'tenants',
+            label:        'Tenants',
+            title:        'Tenants',
+            sheetName:    'Tenants',
+            filenameBase: 'tenants',
+            dateField:    'lease_start',
+            rows: (buildings || []).flatMap(b => (b.assignments || []).map(a => ({
+              ...a,
+              building_name: b.name,
+            }))),
+            columns: [
+              { key: 'resident_name',       header: 'Resident',          width: 26 },
+              { key: 'resident_phone',      header: 'Phone',             width: 18 },
+              { key: 'building_name',       header: 'Building',          width: 24 },
+              { key: 'unit_number',         header: 'Unit',              width: 10 },
+              { key: 'floor',               header: 'Floor',             width: 8,  halign: 'right', numeric: true },
+              { key: 'tenure',              header: 'Tenure',            width: 10 },
+              { key: 'monthly_payment_aed', header: 'Monthly (AED)',     width: 14, halign: 'right', numeric: true },
+              { key: 'lease_start',         header: 'Lease Start',       width: 12 },
+              { key: 'lease_end',           header: 'Lease End',         width: 12 },
+              { key: 'ownership_start',     header: 'Ownership Start',   width: 14 },
+            ],
+            extraMetadata: {
+              'Property Filter':  selectedProperties.length === 0 ? 'All buildings' : (selectedProperties.length + ' selected'),
+            },
+          },
         ]}
-        extraMetadata={{
-          'Property Filter': selectedProperties.length === 0 ? 'All buildings' : (selectedProperties.length + ' selected'),
-          'Total Buildings': String((buildings || []).length),
-        }}
-      />
-
-      <ExportPrintModal
-        isOpen={showExportTenants}
-        onClose={() => setShowExportTenants(false)}
-        title="Tenants"
-        sheetName="Tenants"
-        filenameBase="tenants"
-        rows={(buildings || []).flatMap(b => (b.assignments || []).map(a => ({
-          ...a,
-          building_name: b.name,
-        })))}
-        dateField="lease_start"
-        columns={[
-          { key: 'resident_name',       header: 'Resident',          width: 26 },
-          { key: 'resident_phone',      header: 'Phone',             width: 18 },
-          { key: 'building_name',       header: 'Building',          width: 24 },
-          { key: 'unit_number',         header: 'Unit',              width: 10 },
-          { key: 'floor',               header: 'Floor',             width: 8,  halign: 'right', numeric: true },
-          { key: 'tenure',              header: 'Tenure',            width: 10 },
-          { key: 'monthly_payment_aed', header: 'Monthly (AED)',     width: 14, halign: 'right', numeric: true },
-          { key: 'lease_start',         header: 'Lease Start',       width: 12 },
-          { key: 'lease_end',           header: 'Lease End',         width: 12 },
-          { key: 'ownership_start',     header: 'Ownership Start',   width: 14 },
-        ]}
-        extraMetadata={{
-          'Property Filter':  selectedProperties.length === 0 ? 'All buildings' : (selectedProperties.length + ' selected'),
-        }}
       />
 
       {error && <div className="card"><div style={{color:'#8b4a42',fontSize:13}}>{error}</div></div>}
@@ -163,7 +195,10 @@ const PMCPropertiesPage = ({ setPage }) => {
                 <div key={b.id} className="card">
                   <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:10}}>
                     <div style={{flex:1,minWidth:0,cursor:'pointer'}} onClick={open}>
-                      <div style={{fontSize:18,fontWeight:600,color:'var(--text-dark)'}}>{b.name}</div>
+                      <div style={{fontSize:18,fontWeight:600,color:'var(--text-dark)'}}>
+                        {b.name}
+                        <_PropertyTypeChip type={_inferPropertyType(b.name)}/>
+                      </div>
                       <div style={{fontSize:12,color:'var(--text-muted)',marginTop:2}}>{b.address || '—'}</div>
                     </div>
                     <div onClick={open} style={{cursor:'pointer',fontSize:12,fontWeight:500,color:occupancyPct >= 80 ? '#5a6b4f' : occupancyPct >= 50 ? 'var(--text-secondary)' : '#8b4a42',padding:'6px 14px',background:'var(--bg-surface)',borderRadius:4,whiteSpace:'nowrap',marginLeft:10,border:'1px solid var(--border-light)'}}>{occupancyPct}% occupied</div>
@@ -190,7 +225,10 @@ const PMCPropertiesPage = ({ setPage }) => {
               {COMING_SOON_PROPERTIES.map(cs => (
                 <div key={cs.id} className="card" style={{opacity:0.85,position:'relative',background:'var(--bg-surface)'}}>
                   <div style={{position:'absolute',top:14,right:14,fontSize:10,fontWeight:600,color:'#fff',background:'#3E4C59',padding:'4px 12px',borderRadius:4,letterSpacing:'0.04em'}}>COMING SOON</div>
-                  <div style={{fontSize:16,fontWeight:600,color:'var(--text-secondary)',marginBottom:4}}>{cs.name}</div>
+                  <div style={{fontSize:16,fontWeight:600,color:'var(--text-secondary)',marginBottom:4}}>
+                    {cs.name}
+                    <_PropertyTypeChip type={_inferPropertyType(cs.name)}/>
+                  </div>
                   <div style={{fontSize:12,color:'var(--text-muted)',marginBottom:14}}>{cs.location}</div>
                   <div style={{fontSize:11,color:'var(--text-muted)',lineHeight:1.5,padding:'10px 12px',background:'#fff',borderRadius:6,border:'1px dashed var(--border-light)'}}>
                     {cs.id === 'soon-commercial'
