@@ -6,26 +6,30 @@
 // Click the building header → BuildingDetailModal (reused from Profile Creation).
 // Click a KPI tile → BuildingDrillModal scoped to that data type.
 
+// Same Pending/Upcoming/Overdue rule used in Unit modal + Service Charges.
+// Hoisted to module scope so the property-card aggregates can use it too,
+// not just the drill modal.
+const _PROPERTIES_DAY_MS = 24 * 60 * 60 * 1000;
+const propertiesEffectiveStatus = (i, nowMs) => {
+  if (!i) return 'Pending';
+  if (i.status === 'Paid' || i.status === 'Cancelled') return i.status;
+  if (!i.due_date) return i.status;
+  const due = new Date(i.due_date);
+  if (isNaN(due.getTime())) return i.status;
+  const daysUntilDue = Math.floor((due.getTime() - nowMs) / _PROPERTIES_DAY_MS);
+  if (daysUntilDue < 0)  return 'Overdue';
+  if (daysUntilDue > 30) return 'Upcoming';
+  return 'Pending';
+};
+
 // ---- BuildingDrillModal ----------------------------------------------------
 // Opens when a KPI tile on a building card is clicked. Shows the underlying
 // rows (invoices or service requests) filtered by the picked status, with a
 // link out to the full Service Charges / Service Requests page if the user
 // needs more controls.
 const BuildingDrillModal = ({ building, view, onClose, setPage }) => {
-  // Apply the same Pending/Upcoming/Overdue rule we use everywhere else.
-  const now = new Date();
-  const dayMs = 24 * 60 * 60 * 1000;
-  const effectiveStatusOf = (i) => {
-    if (!i) return 'Pending';
-    if (i.status === 'Paid' || i.status === 'Cancelled') return i.status;
-    if (!i.due_date) return i.status;
-    const due = new Date(i.due_date);
-    if (isNaN(due.getTime())) return i.status;
-    const daysUntilDue = Math.floor((due.getTime() - now.getTime()) / dayMs);
-    if (daysUntilDue < 0)  return 'Overdue';
-    if (daysUntilDue > 30) return 'Upcoming';
-    return 'Pending';
-  };
+  const now = Date.now();
+  const effectiveStatusOf = (i) => propertiesEffectiveStatus(i, now);
   const fmt = (n) => 'AED ' + Math.round(Number(n) || 0).toLocaleString();
 
   const VIEWS = {
@@ -64,7 +68,7 @@ const BuildingDrillModal = ({ building, view, onClose, setPage }) => {
 
   return (
     <div className="modal-overlay" onClick={onClose}>
-      <div className="modal modal-wide" onClick={e => e.stopPropagation()} style={{maxWidth:920,maxHeight:'88vh',overflowY:'auto'}}>
+      <div className="modal modal-wide" onClick={e => e.stopPropagation()} style={{maxWidth:1100,maxHeight:'88vh',overflowY:'auto'}}>
         <div className="modal-header">
           <div>
             <div style={{fontSize:11,letterSpacing:'0.08em',textTransform:'uppercase',color:'var(--text-muted)',marginBottom:4}}>{v.label}</div>
@@ -144,12 +148,14 @@ const BuildingDrillModal = ({ building, view, onClose, setPage }) => {
           <table className="data-table" style={{fontSize:12}}>
             <thead>
               <tr>
-                <th style={{width:'14%'}}>Invoice #</th>
-                <th style={{width:'28%'}}>Description</th>
-                <th style={{width:'18%'}}>Resident</th>
-                <th style={{width:'10%'}}>Unit</th>
-                <th style={{width:'12%'}}>Due</th>
-                <th style={{width:'10%'}}>Status</th>
+                <th style={{width:'12%'}}>Invoice #</th>
+                <th style={{width:'22%'}}>Description</th>
+                <th style={{width:'15%'}}>Resident</th>
+                <th style={{width:'8%'}}>Unit</th>
+                <th style={{width:'10%'}}>Due</th>
+                <th style={{width:'9%'}}>Status</th>
+                <th style={{width:'7%',textAlign:'center'}}>Invoice</th>
+                <th style={{width:'10%',textAlign:'center'}}>Proof of payment</th>
                 <th style={{width:'12%',textAlign:'right'}}>Amount</th>
               </tr>
             </thead>
@@ -168,6 +174,8 @@ const BuildingDrillModal = ({ building, view, onClose, setPage }) => {
                         {i.effective_status}
                       </span>
                     </td>
+                    <InvoiceSlotCell invoice={i} slot="invoice"/>
+                    <InvoiceSlotCell invoice={i} slot="payment_proof"/>
                     <td style={{textAlign:'right',fontWeight:600,whiteSpace:'nowrap'}}>{fmt(i.amount_aed)}</td>
                   </tr>
                 );
@@ -220,15 +228,18 @@ const PMCPropertiesPage = ({ setPage }) => {
             }));
           const tenants = occupied.filter(o => o.tenure === 'Tenant');
           const monthlyRev = tenants.reduce((s, t) => s + Number(t.monthly_payment_aed || 0), 0);
+          const _nowMs = Date.now();
           const bInvoices = (invoices || [])
             .filter(i => unitIds.includes(i.unit_id))
             .map(i => ({
               ...i,
               resident_name: i.resident_profile_id && profileMap[i.resident_profile_id] ? profileMap[i.resident_profile_id].full_name : '—',
               unit_number: unitMap[i.unit_id]?.unit_number || '—',
+              effective_status: propertiesEffectiveStatus(i, _nowMs),
             }));
-          const collected = bInvoices.filter(i => i.status === 'Paid').reduce((s, i) => s + Number(i.amount_aed), 0);
-          const outstanding = bInvoices.filter(i => i.status === 'Pending' || i.status === 'Overdue').reduce((s, i) => s + Number(i.amount_aed), 0);
+          const collected   = bInvoices.filter(i => i.effective_status === 'Paid').reduce((s, i) => s + Number(i.amount_aed), 0);
+          const outstanding = bInvoices.filter(i => i.effective_status === 'Pending' || i.effective_status === 'Overdue').reduce((s, i) => s + Number(i.amount_aed), 0);
+          const upcoming    = bInvoices.filter(i => i.effective_status === 'Upcoming').reduce((s, i) => s + Number(i.amount_aed), 0);
           const bSRs = (srs || [])
             .filter(s => unitIds.includes(s.unit_id))
             .map(s => ({
@@ -245,7 +256,7 @@ const PMCPropertiesPage = ({ setPage }) => {
             invoices: bInvoices,
             srs: bSRs,
             unitCount: bUnits.length, occupiedCount: occupied.length,
-            monthlyRev, collected, outstanding, openSRs, totalSRs: bSRs.length,
+            monthlyRev, collected, outstanding, upcoming, openSRs, totalSRs: bSRs.length,
           };
         });
         setBuildings(result);
@@ -341,7 +352,7 @@ const PMCPropertiesPage = ({ setPage }) => {
           // instead of 5).
           const renderBuildingCard = (b, kind) => {
             const occupancyPct = b.unitCount > 0 ? Math.round((b.occupiedCount / b.unitCount) * 100) : 0;
-            const totalBilled = b.collected + b.outstanding;
+            const totalBilled = b.collected + b.outstanding + b.upcoming;
             const open = () => setSelectedBuilding(b);
             const isCommercial = kind === 'Commercial';
             const cols = isCommercial ? 6 : 5;
@@ -373,6 +384,7 @@ const PMCPropertiesPage = ({ setPage }) => {
                   <PMCStat label="Total Billed"      value={'AED ' + Math.round(totalBilled).toLocaleString()}           onClick={() => setDrill({ building: b, view: 'invoices' })}       hint="All invoices for this building"/>
                   <PMCStat label="Collected"         value={'AED ' + Math.round(b.collected).toLocaleString()}           onClick={() => setDrill({ building: b, view: 'collected' })}      color="#5a6b4f" hint="Paid invoices only"/>
                   <PMCStat label="Outstanding"       value={'AED ' + Math.round(b.outstanding).toLocaleString()}         onClick={() => setDrill({ building: b, view: 'outstanding' })}    color={b.outstanding > 0 ? '#8b4a42' : null} hint="Pending + Overdue"/>
+                  <PMCStat label="Upcoming"          value={'AED ' + Math.round(b.upcoming).toLocaleString()}            onClick={() => setDrill({ building: b, view: 'upcoming' })}       color={b.upcoming > 0 ? '#a07d3c' : null} hint="Due more than 30 days out"/>
                   <PMCStat label="Open SRs"          value={b.openSRs + ' open · ' + b.totalSRs + ' total'}              onClick={() => setDrill({ building: b, view: 'srs' })}            hint="Service requests for this building"/>
                 </div>
               </div>
