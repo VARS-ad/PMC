@@ -295,7 +295,7 @@ const App = () => {
       case 'vendors': return <PMCVendorsPage setPage={setPage}/>;
       // Escalations page removed — page no longer routed.
       case 'reports': return <PMCReportsPage/>;
-      default: return <OverviewPage setPage={setPage}/>;
+      default: return <PMCOverviewPage setPage={setPage}/>;
     }
   };
 

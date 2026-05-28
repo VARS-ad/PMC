@@ -1,3 +1,19 @@
+// Lazy-load Tesseract.js (~1MB) only when the ID scanner is first used.
+// Keeps the initial PMC/resident page load fast since OCR is security-only.
+let _tesseractLoaded = null;
+function ensureTesseract() {
+  if (typeof Tesseract !== 'undefined') return Promise.resolve();
+  if (_tesseractLoaded) return _tesseractLoaded;
+  _tesseractLoaded = new Promise((resolve, reject) => {
+    const s = document.createElement('script');
+    s.src = 'https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js';
+    s.onload = () => resolve();
+    s.onerror = () => { _tesseractLoaded = null; reject(new Error('Tesseract failed to load')); };
+    document.head.appendChild(s);
+  });
+  return _tesseractLoaded;
+}
+
 const SecurityApp = ({ onLogout }) => {
   const { data, setData, showToast, t } = useApp();
 
@@ -207,7 +223,7 @@ const SecurityApp = ({ onLogout }) => {
         });
       }
       if (!idScanWorkerRef.current) {
-        Tesseract.createWorker('eng').then(w => { idScanWorkerRef.current = w; }).catch(() => {});
+        ensureTesseract().then(() => Tesseract.createWorker('eng')).then(w => { idScanWorkerRef.current = w; }).catch(() => {});
       }
       idScanStreamRef.current = stream;
       if (idScanVideoRef.current) {
@@ -280,7 +296,7 @@ const SecurityApp = ({ onLogout }) => {
     try {
       // Reuse pre-loaded worker, or create one if not ready yet
       let worker = idScanWorkerRef.current;
-      if (!worker) worker = await Tesseract.createWorker('eng');
+      if (!worker) { await ensureTesseract(); worker = await Tesseract.createWorker('eng'); }
       idScanWorkerRef.current = worker;
       const { data: { text } } = await worker.recognize(canvas);
       console.log('[EID OCR]', text);
