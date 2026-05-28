@@ -2,3 +2,7 @@
 
 # Real client data — never push this folder
 client database/
+
+# Build artefacts (CI produces these; never commit)
+dist/
+node_modules/
