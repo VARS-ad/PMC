@@ -1,17 +1,24 @@
 // ==================== SIDEBAR ====================
 const Sidebar = ({ page, setPage, isOpen, onClose, onLogout }) => {
   const { t } = useApp();
-  const items = [
-    { id: 'overview', label: t('nav.overview'), icon: 'overview' },
-    { id: 'service', label: t('nav.service'), icon: 'service' },
-    { id: 'properties', label: t('nav.properties'), icon: 'properties' },
-    { id: 'vendors', label: t('nav.vendors'), icon: 'vendors' },
-    { id: 'payment', label: t('nav.payment'), icon: 'payment' },
-    { id: 'announcements', label: t('nav.announcements'), icon: 'announcements' },
-    { id: 'visitors', label: t('nav.visitors'), icon: 'visitors' },
-    { id: 'guards', label: t('nav.guards'), icon: 'guards' },
-    { id: 'reports', label: t('nav.reports'), icon: 'reports' },
-    { id: 'profileCreation', label: 'Profile Creation', icon: 'reports' },
+
+  // Two-group sidebar: Dashboard (analytical surfaces) and Operational
+  // (day-to-day workflow surfaces). Mirrors the supervisor app pattern.
+  const groups = [
+    { label: 'Dashboard', items: [
+      { id: 'overview',    label: t('nav.overview'),   icon: 'overview' },
+      { id: 'properties',  label: t('nav.properties'), icon: 'properties' },
+      { id: 'payment',     label: t('nav.payment'),    icon: 'payment' },
+      { id: 'reports',     label: t('nav.reports'),    icon: 'reports' },
+    ]},
+    { label: 'Operational', items: [
+      { id: 'service',         label: t('nav.service'),       icon: 'service' },
+      { id: 'announcements',   label: t('nav.announcements'), icon: 'announcements' },
+      { id: 'visitors',        label: t('nav.visitors'),      icon: 'visitors' },
+      { id: 'vendors',         label: t('nav.vendors'),       icon: 'vendors' },
+      { id: 'guards',          label: t('nav.guards'),        icon: 'guards' },
+      { id: 'profileCreation', label: 'Profile Creation',     icon: 'reports' },
+    ]},
   ];
 
   const handleNav = (id) => {
@@ -29,15 +36,21 @@ const Sidebar = ({ page, setPage, isOpen, onClose, onLogout }) => {
         <span>VARS PM</span>
       </div>
       <nav className="sidebar-nav">
-        {items.map(item => (
-          <div key={item.id} className={`sidebar-item ${page===item.id?'active':''}`} onClick={()=>handleNav(item.id)}>
-            <Icon name={item.icon} size={16}/>
-            <span>{item.label}</span>
-            {item.badge ? <span className="badge">{item.badge}</span> : null}
+        {groups.map((group, gi) => (
+          <div key={group.label} style={{marginTop: gi === 0 ? 0 : 16}}>
+            <div style={{padding:'8px 20px 6px',fontSize:10,letterSpacing:'0.1em',textTransform:'uppercase',color:'var(--text-muted)',fontWeight:600}}>
+              {group.label}
+            </div>
+            {group.items.map(item => (
+              <div key={item.id} className={`sidebar-item ${page===item.id?'active':''}`} onClick={()=>handleNav(item.id)}>
+                <Icon name={item.icon} size={16}/>
+                <span>{item.label}</span>
+                {item.badge ? <span className="badge">{item.badge}</span> : null}
+              </div>
+            ))}
           </div>
         ))}
       </nav>
     </div>
   );
 };
-
