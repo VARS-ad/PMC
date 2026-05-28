@@ -263,8 +263,8 @@ const PMCOverviewPage = ({ setPage }) => {
           <KpiCard label="Total Properties Selected" value={stats.selectedPropsCount + ' ' + (stats.selectedPropsCount === 1 ? 'property' : 'properties')} page="properties"/>
           <KpiCard label="Units Occupied"            value={stats.occupied + ' / ' + stats.totalUnits}        page="properties"/>
           <KpiCard label="Occupancy Rate"            value={stats.occupancyRate + '%'}                         page="properties"/>
-          <KpiCard label={'Collected ' + periodLabel}             value={fmt(stats.monthCollected)}    color="#5a6b4f" page="payment"/>
-          <KpiCard label={'Pending Service Charges ' + periodLabel} value={fmt(stats.monthOutstanding)} color="#8b4a42" page="payment"/>
+          <KpiCard label="Collected Service Charges" value={fmt(stats.monthCollected)}    color="#5a6b4f" page="payment"/>
+          <KpiCard label="Pending Service Charges"   value={fmt(stats.monthOutstanding)} color="#8b4a42" page="payment"/>
         </div>
 
         {/* ============ FINANCIAL SUMMARY ============ */}
@@ -273,7 +273,7 @@ const PMCOverviewPage = ({ setPage }) => {
           {/* Service Charge Collection — Collection / Pending / Outstanding for selected period */}
           <div className="card">
             <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:14}}>
-              <div style={{fontSize:14,fontWeight:600,color:'var(--text-dark)'}}>Service Charge Collection {periodLabel}</div>
+              <div style={{fontSize:14,fontWeight:600,color:'var(--text-dark)'}}>Service Charge Collection</div>
               <span onClick={() => setPage && setPage('payment')} style={{fontSize:11,color:'var(--accent-warm-dark)',cursor:'pointer'}}>View all →</span>
             </div>
             <div style={{display:'grid',gridTemplateColumns:'repeat(3, minmax(0, 1fr))',gap:18}}>
@@ -295,7 +295,7 @@ const PMCOverviewPage = ({ setPage }) => {
           {/* Unit Payment Activity — Paid (this month) | Pending (all unpaid) */}
           <div className="card">
             <div style={{marginBottom:14}}>
-              <div style={{fontSize:14,fontWeight:600,color:'var(--text-dark)'}}>Unit Payment Activity {periodLabel}</div>
+              <div style={{fontSize:14,fontWeight:600,color:'var(--text-dark)'}}>Unit Payment Activity</div>
               <div style={{fontSize:11,color:'var(--text-muted)',marginTop:2}}>Top paying units this month · Top units with pending or overdue invoices</div>
             </div>
             <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:28}}>
