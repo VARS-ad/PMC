@@ -11,7 +11,7 @@ const PMCVisitorsPage = () => {
   const [dateFromFilter, setDateFromFilter] = useState('');
   const [dateToFilter, setDateToFilter] = useState('');
   const [search, setSearch] = useState('');
-  const [showExport, setShowExport] = useState(false);
+  const [showDownload, setShowDownload] = useState(false);
 
   const load = async () => {
     setError(null);
@@ -90,39 +90,82 @@ const PMCVisitorsPage = () => {
           <h1>Visitors</h1>
         </div>
         <div className="btn-group">
-          <button className="btn" onClick={() => setShowExport(true)} disabled={!visits || visits.length === 0}>Export / Print</button>
+          <button className="btn" onClick={() => setShowDownload(true)} disabled={!visits || visits.length === 0}>Download Data</button>
           <button className="btn btn-sm" onClick={load}>Refresh</button>
         </div>
       </div>
 
       <ExportPrintModal
-        isOpen={showExport}
-        onClose={() => setShowExport(false)}
-        title="Visitors"
-        sheetName="Visitors"
-        filenameBase="visitors"
-        rows={filtered}
-        dateField="visit_date"
-        columns={[
-          { key: 'permit_ref',    header: 'Permit Ref', width: 14 },
-          { key: 'visitor_name',  header: 'Visitor',    width: 26 },
-          { key: 'visitor_phone', header: 'Phone',      width: 18 },
-          { key: 'type',          header: 'Type',       width: 16 },
-          { key: 'unit_number',   header: 'Unit',       width: 10 },
-          { key: 'building_name', header: 'Building',   width: 24 },
-          { key: 'visit_date',    header: 'Visit Date', width: 12 },
-          { key: 'visit_time',    header: 'Visit Time', width: 12 },
-          { key: 'purpose',       header: 'Purpose',    width: 24 },
-          { key: 'vehicle',       header: 'Vehicle',    width: 14 },
-          { key: 'status',        header: 'Status',     width: 14 },
+        isOpen={showDownload}
+        onClose={() => setShowDownload(false)}
+        dataTypes={[
+          {
+            id:           'visits',
+            label:        'Visits',
+            title:        'Visitors',
+            sheetName:    'Visitors',
+            filenameBase: 'visitors',
+            dateField:    'visit_date',
+            rows:         filtered,
+            columns: [
+              { key: 'permit_ref',    header: 'Permit Ref', width: 14 },
+              { key: 'visitor_name',  header: 'Visitor',    width: 26 },
+              { key: 'visitor_phone', header: 'Phone',      width: 18 },
+              { key: 'type',          header: 'Type',       width: 16 },
+              { key: 'unit_number',   header: 'Unit',       width: 10 },
+              { key: 'building_name', header: 'Building',   width: 24 },
+              { key: 'visit_date',    header: 'Visit Date', width: 12 },
+              { key: 'visit_time',    header: 'Visit Time', width: 12 },
+              { key: 'purpose',       header: 'Purpose',    width: 24 },
+              { key: 'vehicle',       header: 'Vehicle',    width: 14 },
+              { key: 'status',        header: 'Status',     width: 14 },
+            ],
+            extraMetadata: {
+              'Property Filter': selectedProperties.length === 0 ? 'All buildings' : (selectedProperties.length + ' selected'),
+              'Status Filter':   statusFilter === 'all' ? 'All'  : statusFilter,
+              'Type Filter':     typeFilter   === 'all' ? 'All'  : typeFilter,
+              'Date Range':      (dateFromFilter || dateToFilter) ? ((dateFromFilter || '…') + ' → ' + (dateToFilter || '…')) : 'All',
+              'Search':          search || '—',
+              'On-Premise Now':  String(counts.onPremise),
+              'Upcoming':        String(counts.upcoming),
+            },
+          },
+          {
+            id:           'daily_counts',
+            label:        'Daily Counts',
+            title:        'Visitors — Daily Counts',
+            sheetName:    'Daily Counts',
+            filenameBase: 'visitors-daily_counts',
+            rows: (() => {
+              const byDay = {};
+              (filtered || []).forEach(v => {
+                if (!v.visit_date) return;
+                byDay[v.visit_date] = byDay[v.visit_date] || { date: v.visit_date, total: 0, preApproved: 0, walkIn: 0, delivery: 0, onPremise: 0, checkedOut: 0 };
+                byDay[v.visit_date].total++;
+                if (v.type === 'Pre-Approved') byDay[v.visit_date].preApproved++;
+                if (v.type === 'Walk-In')      byDay[v.visit_date].walkIn++;
+                if (v.type === 'Delivery')     byDay[v.visit_date].delivery++;
+                if (v.status === 'On-Premise') byDay[v.visit_date].onPremise++;
+                if (v.status === 'Checked-Out')byDay[v.visit_date].checkedOut++;
+              });
+              return Object.values(byDay).sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+            })(),
+            columns: [
+              { key: 'date',        header: 'Date',         width: 14 },
+              { key: 'total',       header: 'Total',        width: 10, halign: 'right', numeric: true },
+              { key: 'preApproved', header: 'Pre-Approved', width: 14, halign: 'right', numeric: true },
+              { key: 'walkIn',      header: 'Walk-In',      width: 12, halign: 'right', numeric: true },
+              { key: 'delivery',    header: 'Delivery',     width: 12, halign: 'right', numeric: true },
+              { key: 'onPremise',   header: 'On-Premise',   width: 12, halign: 'right', numeric: true },
+              { key: 'checkedOut',  header: 'Checked-Out',  width: 14, halign: 'right', numeric: true },
+            ],
+            extraMetadata: {
+              'Property Filter': selectedProperties.length === 0 ? 'All buildings' : (selectedProperties.length + ' selected'),
+              'Date Range':      (dateFromFilter || dateToFilter) ? ((dateFromFilter || '…') + ' → ' + (dateToFilter || '…')) : 'All',
+              'Total Visits':    String((filtered || []).length),
+            },
+          },
         ]}
-        extraMetadata={{
-          'Status Filter': statusFilter === 'all' ? 'All'  : statusFilter,
-          'Type Filter':   typeFilter   === 'all' ? 'All'  : typeFilter,
-          'Search':        search || '—',
-          'On-Premise Now':String(counts.onPremise),
-          'Upcoming':      String(counts.upcoming),
-        }}
       />
 
       <div className="kpi-row" style={{gridTemplateColumns:'repeat(5, minmax(0, 1fr))'}}>

@@ -1,12 +1,33 @@
 // ==================== PMC SERVICE CHARGES PAGE (replaces Payment placeholder) ====================
 
+// Display-only status derived from DB status + due_date. The invoices.status
+// check constraint accepts only Pending/Paid/Overdue/Cancelled, so we keep the
+// DB value as-is but split "Pending" into:
+//   - "Upcoming"  → due_date is more than 30 days in the future
+//   - "Pending"   → due within the next 30 days (current portion of receivables)
+//   - "Overdue"   → due_date already passed (covers stale Pending rows too)
+// Outstanding receivables = Pending + Overdue; Upcoming is scheduled cash that
+// has not been billed-out yet by accounting convention.
+const SC_UPCOMING_THRESHOLD_DAYS = 30;
+const effectiveInvoiceStatus = (inv, today = new Date()) => {
+  if (!inv) return 'Pending';
+  if (inv.status === 'Paid' || inv.status === 'Cancelled') return inv.status;
+  const due = inv.due_date ? new Date(inv.due_date) : null;
+  if (!due || isNaN(due.getTime())) return inv.status;
+  const dayMs = 24 * 60 * 60 * 1000;
+  const daysUntilDue = Math.floor((due.getTime() - today.getTime()) / dayMs);
+  if (daysUntilDue < 0) return 'Overdue';
+  if (daysUntilDue > SC_UPCOMING_THRESHOLD_DAYS) return 'Upcoming';
+  return 'Pending';
+};
+
 const PMCServiceChargesPage = () => {
   const { selectedProperties = [] } = useApp();
   const [invoices, setInvoices] = useState(null);
   const [error, setError] = useState(null);
   const [statusFilter, setStatusFilter] = useState('all');
   const [search, setSearch] = useState('');
-  const [showExport, setShowExport] = useState(false);
+  const [showDownload, setShowDownload] = useState(false);
 
   useEffect(() => {
     let mounted = true;
@@ -19,15 +40,23 @@ const PMCServiceChargesPage = () => {
         const filteredUnits = (units || []).filter(u => !filterB || filterB.includes(u.building_id));
         const fIds = filteredUnits.map(u => u.id);
         const probe = fIds.length ? fIds : ['00000000-0000-0000-0000-000000000000'];
-        const [{ data: invs }, { data: bs }, { data: profs }] = await Promise.all([
+        const [{ data: invs }, { data: bs }] = await Promise.all([
           supabaseClient.from('invoices').select('id,invoice_number,description,amount_aed,due_date,status,source_type,unit_id,resident_profile_id,created_at').in('unit_id', probe).order('created_at', { ascending: false }),
           supabaseClient.from('buildings').select('id,name'),
-          supabaseClient.from('profiles').select('id,full_name').eq('role', 'resident'),
         ]);
         if (!mounted) return;
+        // Resolve every resident referenced on the loaded invoices, ignoring
+        // role tags so seeded / re-classified tenants always appear.
+        const residentIds = Array.from(new Set((invs || []).map(r => r.resident_profile_id).filter(Boolean)));
+        let profs = [];
+        if (residentIds.length) {
+          const { data } = await supabaseClient.from('profiles').select('id,full_name').in('id', residentIds);
+          profs = data || [];
+        }
         const uMap = Object.fromEntries(filteredUnits.map(u => [u.id, u]));
         const bMap = Object.fromEntries((bs || []).map(b => [b.id, b]));
-        const pMap = Object.fromEntries((profs || []).map(p => [p.id, p]));
+        const pMap = Object.fromEntries(profs.map(p => [p.id, p]));
+        const today = new Date();
         setInvoices((invs || []).map(i => {
           const u = uMap[i.unit_id];
           return {
@@ -36,6 +65,7 @@ const PMCServiceChargesPage = () => {
             floor: u ? u.floor : null,
             building_name: u && bMap[u.building_id] ? bMap[u.building_id].name : '—',
             resident_name: i.resident_profile_id && pMap[i.resident_profile_id] ? pMap[i.resident_profile_id].full_name : '—',
+            effective_status: effectiveInvoiceStatus(i, today),
           };
         }));
       } catch (e) { if (mounted) setError(String(e.message || e)); }
@@ -44,7 +74,7 @@ const PMCServiceChargesPage = () => {
   }, [selectedProperties.join(',')]);
 
   const filtered = (invoices || []).filter(i => {
-    if (statusFilter !== 'all' && i.status !== statusFilter) return false;
+    if (statusFilter !== 'all' && i.effective_status !== statusFilter) return false;
     if (search) {
       const hay = ((i.invoice_number || '') + ' ' + i.description + ' ' + i.resident_name + ' ' + i.unit_number).toLowerCase();
       if (!hay.includes(search.toLowerCase())) return false;
@@ -52,12 +82,15 @@ const PMCServiceChargesPage = () => {
     return true;
   });
 
+  const sumWhere = (pred) => filtered.filter(pred).reduce((s, i) => s + Number(i.amount_aed), 0);
   const totals = {
-    total: filtered.reduce((s, i) => s + Number(i.amount_aed), 0),
-    paid:    filtered.filter(i => i.status === 'Paid').reduce((s, i) => s + Number(i.amount_aed), 0),
-    pending: filtered.filter(i => i.status === 'Pending').reduce((s, i) => s + Number(i.amount_aed), 0),
-    overdue: filtered.filter(i => i.status === 'Overdue').reduce((s, i) => s + Number(i.amount_aed), 0),
+    total:    filtered.reduce((s, i) => s + Number(i.amount_aed), 0),
+    paid:     sumWhere(i => i.effective_status === 'Paid'),
+    pending:  sumWhere(i => i.effective_status === 'Pending'),   // due within next 30 days
+    overdue:  sumWhere(i => i.effective_status === 'Overdue'),
+    upcoming: sumWhere(i => i.effective_status === 'Upcoming'),  // scheduled, beyond 30 days
   };
+  totals.outstanding = totals.pending + totals.overdue;
   const fmt = (n) => 'AED ' + Math.round(n).toLocaleString();
 
   return (
@@ -67,52 +100,104 @@ const PMCServiceChargesPage = () => {
           <h1>Service Charges</h1>
         </div>
         <div className="btn-group">
-          <button className="btn" onClick={() => setShowExport(true)} disabled={!invoices || invoices.length === 0}>Export / Print</button>
+          <button className="btn" onClick={() => setShowDownload(true)} disabled={!invoices || invoices.length === 0}>Download Data</button>
         </div>
       </div>
 
       <ExportPrintModal
-        isOpen={showExport}
-        onClose={() => setShowExport(false)}
-        title="Invoices"
-        sheetName="Invoices"
-        filenameBase="invoices"
-        rows={filtered}
-        dateField="created_at"
-        columns={[
-          { key: 'invoice_number', header: 'Invoice #',    width: 14 },
-          { key: 'resident_name',  header: 'Resident',     width: 24 },
-          { key: 'unit_number',    header: 'Unit',         width: 10 },
-          { key: 'building_name',  header: 'Building',     width: 24 },
-          { key: 'description',    header: 'Description',  width: 30 },
-          { key: 'amount_aed',     header: 'Amount (AED)', width: 14, halign: 'right', numeric: true },
-          { key: 'status',         header: 'Status',       width: 12 },
-          { key: 'due_date',       header: 'Due Date',     width: 12 },
-          { key: 'created_at',     header: 'Issued',       width: 18,
-            value: (r) => r.created_at ? new Date(r.created_at).toLocaleDateString() : '' },
+        isOpen={showDownload}
+        onClose={() => setShowDownload(false)}
+        dataTypes={[
+          {
+            id:           'invoices',
+            label:        'Invoices',
+            title:        'Invoices',
+            sheetName:    'Invoices',
+            filenameBase: 'invoices',
+            dateField:    'created_at',
+            rows:         filtered,
+            columns: [
+              { key: 'invoice_number',   header: 'Invoice #',    width: 14 },
+              { key: 'resident_name',    header: 'Resident',     width: 24 },
+              { key: 'unit_number',      header: 'Unit',         width: 10 },
+              { key: 'building_name',    header: 'Building',     width: 24 },
+              { key: 'description',      header: 'Description',  width: 30 },
+              { key: 'amount_aed',       header: 'Amount (AED)', width: 14, halign: 'right', numeric: true },
+              { key: 'effective_status', header: 'Status',       width: 12 },
+              { key: 'due_date',         header: 'Due Date',     width: 12 },
+              { key: 'created_at',       header: 'Issued',       width: 18,
+                value: (r) => r.created_at ? new Date(r.created_at).toLocaleDateString() : '' },
+            ],
+            extraMetadata: {
+              'Status Filter':   statusFilter === 'all' ? 'All' : statusFilter,
+              'Search':          search || '—',
+              'Property Filter': selectedProperties.length === 0 ? 'All buildings' : (selectedProperties.length + ' selected'),
+              'Total Billed':    'AED ' + Math.round(totals.total).toLocaleString(),
+              'Collected':       'AED ' + Math.round(totals.paid).toLocaleString(),
+              'Pending':         'AED ' + Math.round(totals.pending).toLocaleString(),
+              'Overdue':         'AED ' + Math.round(totals.overdue).toLocaleString(),
+              'Upcoming':        'AED ' + Math.round(totals.upcoming).toLocaleString(),
+              'Outstanding':     'AED ' + Math.round(totals.outstanding).toLocaleString(),
+            },
+          },
+          {
+            id:           'aging',
+            label:        'Aging Summary',
+            title:        'Aging — Receivables by Days Overdue',
+            sheetName:    'Aging',
+            filenameBase: 'receivables-aging',
+            rows: (() => {
+              const today = new Date();
+              const buckets = { current: 0, b30: 0, b60: 0, b90: 0, b91: 0 };
+              (filtered || []).filter(i => i.effective_status === 'Pending' || i.effective_status === 'Overdue').forEach(i => {
+                if (!i.due_date) { buckets.current += Number(i.amount_aed); return; }
+                const days = Math.floor((today.getTime() - new Date(i.due_date).getTime()) / (1000 * 60 * 60 * 24));
+                if (days <= 0) buckets.current += Number(i.amount_aed);
+                else if (days <= 30) buckets.b30 += Number(i.amount_aed);
+                else if (days <= 60) buckets.b60 += Number(i.amount_aed);
+                else if (days <= 90) buckets.b90 += Number(i.amount_aed);
+                else buckets.b91 += Number(i.amount_aed);
+              });
+              const total = buckets.current + buckets.b30 + buckets.b60 + buckets.b90 + buckets.b91;
+              const safe = Math.max(total, 1);
+              return [
+                { bucket: 'Not yet due', amount: buckets.current, pct: Math.round(buckets.current / safe * 100) },
+                { bucket: '1–30 days',    amount: buckets.b30,    pct: Math.round(buckets.b30    / safe * 100) },
+                { bucket: '31–60 days',   amount: buckets.b60,    pct: Math.round(buckets.b60    / safe * 100) },
+                { bucket: '61–90 days',   amount: buckets.b90,    pct: Math.round(buckets.b90    / safe * 100) },
+                { bucket: '90+ days',     amount: buckets.b91,    pct: Math.round(buckets.b91    / safe * 100) },
+              ];
+            })(),
+            columns: [
+              { key: 'bucket', header: 'Bucket',           width: 18 },
+              { key: 'amount', header: 'Amount (AED)',     width: 16, halign: 'right', numeric: true,
+                value: (r) => Math.round(r.amount || 0) },
+              { key: 'pct',    header: '% of Outstanding', width: 16, halign: 'right', numeric: true,
+                value: (r) => (r.pct || 0) + '%' },
+            ],
+            extraMetadata: {
+              'Property Filter':   selectedProperties.length === 0 ? 'All buildings' : (selectedProperties.length + ' selected'),
+              'Status Filter':     statusFilter === 'all' ? 'All' : statusFilter,
+              'Total Outstanding': 'AED ' + Math.round(totals.outstanding).toLocaleString(),
+              'Upcoming (>30 d)':  'AED ' + Math.round(totals.upcoming).toLocaleString(),
+            },
+          },
         ]}
-        extraMetadata={{
-          'Status Filter': statusFilter === 'all' ? 'All' : statusFilter,
-          'Search':        search || '—',
-          'Total Billed':  'AED ' + Math.round(totals.total).toLocaleString(),
-          'Collected':     'AED ' + Math.round(totals.paid).toLocaleString(),
-          'Pending':       'AED ' + Math.round(totals.pending).toLocaleString(),
-          'Overdue':       'AED ' + Math.round(totals.overdue).toLocaleString(),
-        }}
       />
 
-      <div className="kpi-row" style={{gridTemplateColumns:'repeat(4, minmax(0, 1fr))'}}>
+      <div className="kpi-row" style={{gridTemplateColumns:'repeat(5, minmax(0, 1fr))'}}>
         <div className="kpi-card"><div className="label">Total Billed</div><div className="value">{fmt(totals.total)}</div></div>
         <div className="kpi-card"><div className="label">Collected</div><div className="value" style={{color:'#5a6b4f'}}>{fmt(totals.paid)}</div></div>
-        <div className="kpi-card"><div className="label">Pending</div><div className="value" style={{color:'#a07d3c'}}>{fmt(totals.pending)}</div></div>
+        <div className="kpi-card" title="Due within the next 30 days"><div className="label">Pending</div><div className="value" style={{color:'#a07d3c'}}>{fmt(totals.pending)}</div></div>
         <div className="kpi-card"><div className="label">Overdue</div><div className="value" style={{color:'#8b4a42'}}>{fmt(totals.overdue)}</div></div>
+        <div className="kpi-card" title="Scheduled cheques due more than 30 days out — not yet outstanding"><div className="label">Upcoming</div><div className="value" style={{color:'#61707D'}}>{fmt(totals.upcoming)}</div></div>
       </div>
 
-      {/* Aging buckets — receivables by days overdue */}
+      {/* Aging buckets — receivables by days overdue. Excludes Upcoming (scheduled future cheques). */}
       {invoices !== null && filtered.length > 0 && (() => {
         const today = new Date();
         const buckets = { current: 0, b30: 0, b60: 0, b90: 0, b91: 0 };
-        filtered.filter(i => i.status === 'Pending' || i.status === 'Overdue').forEach(i => {
+        filtered.filter(i => i.effective_status === 'Pending' || i.effective_status === 'Overdue').forEach(i => {
           if (!i.due_date) { buckets.current += Number(i.amount_aed); return; }
           const days = Math.floor((today.getTime() - new Date(i.due_date).getTime()) / (1000 * 60 * 60 * 24));
           if (days <= 0) buckets.current += Number(i.amount_aed);
@@ -159,14 +244,16 @@ const PMCServiceChargesPage = () => {
         // monthly bucket totals for last 12 months
         const buckets = buildMonthlyBuckets(12);
         const idxMap = Object.fromEntries(buckets.map((m, i) => [m.key, i]));
-        const monthly = { paid: new Array(12).fill(0), pending: new Array(12).fill(0), overdue: new Array(12).fill(0) };
+        const monthly = { paid: new Array(12).fill(0), pending: new Array(12).fill(0), overdue: new Array(12).fill(0), upcoming: new Array(12).fill(0) };
         filtered.forEach(i => {
           const k = (i.created_at || i.due_date || '').slice(0, 7);
           const idx = idxMap[k]; if (idx == null) return;
           const amt = Number(i.amount_aed) || 0;
-          if (i.status === 'Paid') monthly.paid[idx] += amt;
-          else if (i.status === 'Pending') monthly.pending[idx] += amt;
-          else if (i.status === 'Overdue') monthly.overdue[idx] += amt;
+          const s = i.effective_status;
+          if (s === 'Paid') monthly.paid[idx] += amt;
+          else if (s === 'Pending') monthly.pending[idx] += amt;
+          else if (s === 'Overdue') monthly.overdue[idx] += amt;
+          else if (s === 'Upcoming') monthly.upcoming[idx] += amt;
         });
         // by source type
         const bySource = {};
@@ -179,14 +266,15 @@ const PMCServiceChargesPage = () => {
             <div className="card">
               <div style={{marginBottom:6}}>
                 <div style={{fontSize:13,fontWeight:600}}>Invoices by Month</div>
-                <div style={{fontSize:11,color:'var(--text-secondary)',marginTop:2}}>Stacked Paid · Pending · Overdue across last 12 months.</div>
+                <div style={{fontSize:11,color:'var(--text-secondary)',marginTop:2}}>Stacked Paid · Pending · Overdue · Upcoming across last 12 months.</div>
               </div>
               <ChartCanvas height={280} config={{
                 type: 'bar',
                 data: { labels: buckets.map(m => m.label), datasets: [
-                  { label: 'Paid', data: monthly.paid, backgroundColor: '#5a6b4f' },
-                  { label: 'Pending', data: monthly.pending, backgroundColor: '#D0D6D5' },
-                  { label: 'Overdue', data: monthly.overdue, backgroundColor: '#8b4a42' },
+                  { label: 'Paid',     data: monthly.paid,     backgroundColor: '#5a6b4f' },
+                  { label: 'Pending',  data: monthly.pending,  backgroundColor: '#a07d3c' },
+                  { label: 'Overdue',  data: monthly.overdue,  backgroundColor: '#8b4a42' },
+                  { label: 'Upcoming', data: monthly.upcoming, backgroundColor: '#D0D6D5' },
                 ]},
                 options: {
                   responsive: true, maintainAspectRatio: false,
@@ -230,7 +318,11 @@ const PMCServiceChargesPage = () => {
             <label style={{fontSize:10,letterSpacing:'0.06em',textTransform:'uppercase',color:'var(--text-secondary)',marginBottom:6,display:'block',fontWeight:500}}>Status</label>
             <select className="form-input" value={statusFilter} onChange={e => setStatusFilter(e.target.value)}>
               <option value="all">All statuses</option>
-              <option>Paid</option><option>Pending</option><option>Overdue</option><option>Cancelled</option>
+              <option>Paid</option>
+              <option>Pending</option>
+              <option>Overdue</option>
+              <option>Upcoming</option>
+              <option>Cancelled</option>
             </select>
           </div>
           <div style={{flex:'2 1 200px'}}>
@@ -258,10 +350,22 @@ const PMCServiceChargesPage = () => {
                   <td style={{textAlign:'right',fontWeight:500}}>{fmt(i.amount_aed)}</td>
                   <td>{i.due_date || '—'}</td>
                   <td>
-                    <span style={{padding:'3px 10px',borderRadius:4,fontSize:11,fontWeight:500,
-                      background: i.status === 'Paid' ? '#e6efe1' : i.status === 'Overdue' ? '#fdf2f1' : '#E6EAE9',
-                      color: i.status === 'Paid' ? '#5a6b4f' : i.status === 'Overdue' ? '#8b4a42' : '#61707D',
-                    }}>{i.status}</span>
+                    {(() => {
+                      const s = i.effective_status;
+                      const c = ({
+                        'Paid':      { bg: '#e6efe1', fg: '#5a6b4f' },
+                        'Pending':   { bg: '#fdf2dc', fg: '#7a5a1f' },
+                        'Overdue':   { bg: '#fdf2f1', fg: '#8b4a42' },
+                        'Upcoming':  { bg: '#E6EAE9', fg: '#61707D' },
+                        'Cancelled': { bg: '#E6EAE9', fg: '#61707D' },
+                      })[s] || { bg: '#E6EAE9', fg: '#61707D' };
+                      return (
+                        <span style={{padding:'3px 10px',borderRadius:4,fontSize:11,fontWeight:500,background:c.bg,color:c.fg}}
+                              title={s === 'Upcoming' ? 'Due more than 30 days out — not yet outstanding' : (s === 'Pending' ? 'Due within the next 30 days' : '')}>
+                          {s}
+                        </span>
+                      );
+                    })()}
                   </td>
                 </tr>
               ))}

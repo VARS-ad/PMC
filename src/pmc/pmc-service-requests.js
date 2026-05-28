@@ -45,7 +45,7 @@ const PMCServiceRequestsPage = () => {
   const [dateTo, setDateTo] = useState('');
   const [search, setSearch] = useState('');
   const [selectedSR, setSelectedSR] = useState(null);
-  const [showExport, setShowExport] = useState(false);
+  const [showDownload, setShowDownload] = useState(false);
 
   useEffect(() => {
     let mounted = true;
@@ -125,41 +125,76 @@ const PMCServiceRequestsPage = () => {
           <h1>Service Requests</h1>
         </div>
         <div className="btn-group">
-          <button className="btn" onClick={() => setShowExport(true)} disabled={!rows || rows.length === 0}>Export / Print</button>
+          <button className="btn" onClick={() => setShowDownload(true)} disabled={!rows || rows.length === 0}>Download Data</button>
         </div>
       </div>
 
       <ExportPrintModal
-        isOpen={showExport}
-        onClose={() => setShowExport(false)}
-        title="Service Requests"
-        sheetName="Service Requests"
-        filenameBase="service_requests"
-        rows={filtered}
-        dateField="created_at"
-        columns={[
-          { key: 'id',             header: 'ID',          width: 14 },
-          { key: 'category',       header: 'Category',    width: 18 },
-          { key: 'description',    header: 'Description', width: 36 },
-          { key: 'priority',       header: 'Priority',    width: 10 },
-          { key: 'status',         header: 'Status',      width: 14 },
-          { key: 'building_name',  header: 'Building',    width: 22 },
-          { key: 'unit_number',    header: 'Unit',        width: 10 },
-          { key: 'resident_name',  header: 'Resident',    width: 22 },
-          { key: 'preferred_date', header: 'Preferred',   width: 12 },
-          { key: 'created_at',     header: 'Created',     width: 18,
-            value: (r) => r.created_at ? new Date(r.created_at).toLocaleDateString() : '' },
-          { key: 'resolved_at',    header: 'Resolved',    width: 18,
-            value: (r) => r.resolved_at ? new Date(r.resolved_at).toLocaleDateString() : '' },
+        isOpen={showDownload}
+        onClose={() => setShowDownload(false)}
+        dataTypes={[
+          {
+            id:           'service_requests',
+            label:        'Service Requests',
+            title:        'Service Requests',
+            sheetName:    'Service Requests',
+            filenameBase: 'service_requests',
+            dateField:    'created_at',
+            rows:         filtered,
+            columns: [
+              { key: 'id',             header: 'ID',          width: 14 },
+              { key: 'category',       header: 'Category',    width: 18 },
+              { key: 'description',    header: 'Description', width: 36 },
+              { key: 'priority',       header: 'Priority',    width: 10 },
+              { key: 'status',         header: 'Status',      width: 14 },
+              { key: 'building_name',  header: 'Building',    width: 22 },
+              { key: 'unit_number',    header: 'Unit',        width: 10 },
+              { key: 'resident_name',  header: 'Resident',    width: 22 },
+              { key: 'preferred_date', header: 'Preferred',   width: 12 },
+              { key: 'created_at',     header: 'Created',     width: 18,
+                value: (r) => r.created_at ? new Date(r.created_at).toLocaleDateString() : '' },
+              { key: 'resolved_at',    header: 'Resolved',    width: 18,
+                value: (r) => r.resolved_at ? new Date(r.resolved_at).toLocaleDateString() : '' },
+            ],
+            extraMetadata: {
+              'Property Filter': selectedProperties.length === 0 ? 'All buildings' : (selectedProperties.length + ' selected'),
+              'Status Filter':   statusFilter   === 'all' ? 'All' : statusFilter,
+              'Priority Filter': priorityFilter === 'all' ? 'All' : priorityFilter,
+              'Category Filter': categoryFilter === 'all' ? 'All' : categoryFilter,
+              'Date Range':      (dateFrom || dateTo) ? ((dateFrom || '…') + ' → ' + (dateTo || '…')) : 'All',
+              'Search':          search || '—',
+              'Open Tickets':    String(counts.open),
+              'Urgent Open':     String(counts.urgent),
+            },
+          },
+          {
+            id:           'status_summary',
+            label:        'Status Summary',
+            title:        'Service Requests — Status Summary',
+            sheetName:    'Status Summary',
+            filenameBase: 'service_requests-status_summary',
+            rows: (() => {
+              const total = Math.max((filtered || []).length, 1);
+              const statuses = ['New','Acknowledged','In Progress','Done','Closed','Rejected'];
+              return statuses.map(s => {
+                const count = (filtered || []).filter(r => r.status === s).length;
+                return { status: s, count, pct: Math.round(count / total * 100) };
+              });
+            })(),
+            columns: [
+              { key: 'status', header: 'Status',     width: 18 },
+              { key: 'count',  header: 'Count',      width: 12, halign: 'right', numeric: true },
+              { key: 'pct',    header: '% of Total', width: 14, halign: 'right', numeric: true,
+                value: (r) => (r.pct || 0) + '%' },
+            ],
+            extraMetadata: {
+              'Property Filter': selectedProperties.length === 0 ? 'All buildings' : (selectedProperties.length + ' selected'),
+              'Total Tickets':   String((filtered || []).length),
+              'Open Tickets':    String(counts.open),
+              'Urgent Open':     String(counts.urgent),
+            },
+          },
         ]}
-        extraMetadata={{
-          'Status Filter':   statusFilter   === 'all' ? 'All' : statusFilter,
-          'Priority Filter': priorityFilter === 'all' ? 'All' : priorityFilter,
-          'Category Filter': categoryFilter === 'all' ? 'All' : categoryFilter,
-          'Search':          search || '—',
-          'Open Tickets':    String(counts.open),
-          'Urgent Open':     String(counts.urgent),
-        }}
       />
 
       <div className="kpi-row" style={{gridTemplateColumns:'repeat(5, minmax(0, 1fr))'}}>

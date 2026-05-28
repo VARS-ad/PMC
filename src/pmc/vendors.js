@@ -727,17 +727,19 @@ const PMCVendorsPage = ({ setPage }) => {
   const [outstandingOnly, setOutstandingOnly] = useState(false);
   const [editingVendor, setEditingVendor] = useState(null);
   const [detailVendor, setDetailVendor] = useState(null);
-  const [showExport, setShowExport] = useState(false);
+  const [showDownload, setShowDownload] = useState(false);
+  const [paymentsAll, setPaymentsAll] = useState([]);
 
   const load = async () => {
     setError(null);
     if (!supabaseClient) { setError('Supabase not initialized'); return; }
     try {
-      const [{ data: vs, error: e1 }, { data: bs }, { data: vbs }, { data: vpays }] = await Promise.all([
+      const [{ data: vs, error: e1 }, { data: bs }, { data: vbs }, { data: vpays }, { data: vpaysFull }] = await Promise.all([
         supabaseClient.from('vendors').select('*').order('name'),
         supabaseClient.from('buildings').select('id,name').order('name'),
         supabaseClient.from('vendor_buildings').select('vendor_id,building_id'),
         supabaseClient.from('vendor_payments').select('vendor_id,amount_aed,payment_status'),
+        supabaseClient.from('vendor_payments').select('id,vendor_id,invoice_number,description,amount_aed,payment_status,payment_date,due_date,payment_method,reference,created_at').order('payment_date', { ascending: false }),
       ]);
       if (e1) throw e1;
       const vbMap = {};
@@ -756,6 +758,7 @@ const PMCVendorsPage = ({ setPage }) => {
       setBuildings(bs || []);
       setVendorBuildings(vbMap);
       setPaymentTotalsByVendor(totMap);
+      setPaymentsAll(vpaysFull || []);
     } catch (e) { setError(e.message || String(e)); }
   };
   useEffect(() => { load(); }, []);
@@ -797,7 +800,7 @@ const PMCVendorsPage = ({ setPage }) => {
           <h1>{t('vendors.title')}</h1>
         </div>
         <div className="btn-group">
-          <button className="btn" onClick={() => setShowExport(true)} disabled={!vendors || vendors.length === 0}>{t('vendors.exportBtn')}</button>
+          <button className="btn" onClick={() => setShowDownload(true)} disabled={!vendors || vendors.length === 0}>Download Data</button>
           {setPage && (
             <button className="btn" onClick={() => { try { window._profileCreationInitialSection = 'vendors'; } catch(e) {} setPage('profileCreation'); }}>
               Bulk Upload…
@@ -808,39 +811,105 @@ const PMCVendorsPage = ({ setPage }) => {
       </div>
 
       <ExportPrintModal
-        isOpen={showExport}
-        onClose={() => setShowExport(false)}
-        title="Vendors"
-        sheetName="Vendors"
-        filenameBase="vendors"
-        rows={exportRows}
-        dateField="contract_start"
-        columns={[
-          { key: 'name',                header: 'Vendor',           width: 24 },
-          { key: 'service_category',    header: 'Category',         width: 14 },
-          { key: 'contact_person',      header: 'Contact',          width: 18 },
-          { key: 'contact_phone',       header: 'Phone',            width: 16 },
-          { key: 'contact_email',       header: 'Email',            width: 22 },
-          { key: 'buildings_covered',   header: 'Buildings',        width: 24 },
-          { key: 'contract_start',      header: 'Start',            width: 12 },
-          { key: 'contract_end',        header: 'End',              width: 12 },
-          { key: 'contract_value_aed',  header: 'Contract (AED)',   width: 14, halign: 'right', numeric: true },
-          { key: 'paid_total',          header: 'Paid (AED)',       width: 14, halign: 'right', numeric: true },
-          { key: 'outstanding_total',   header: 'Outstanding (AED)',width: 16, halign: 'right', numeric: true },
-          { key: 'trade_license',       header: 'License',          width: 14 },
-          { key: 'trn_number',          header: 'TRN',              width: 14 },
-          { key: 'effective_status',    header: 'Status',           width: 12 },
+        isOpen={showDownload}
+        onClose={() => setShowDownload(false)}
+        dataTypes={[
+          {
+            id:           'vendors',
+            label:        'Vendors',
+            title:        'Vendors',
+            sheetName:    'Vendors',
+            filenameBase: 'vendors',
+            dateField:    'contract_start',
+            rows:         exportRows,
+            columns: [
+              { key: 'name',                header: 'Vendor',           width: 24 },
+              { key: 'service_category',    header: 'Category',         width: 14 },
+              { key: 'contact_person',      header: 'Contact',          width: 18 },
+              { key: 'contact_phone',       header: 'Phone',            width: 16 },
+              { key: 'contact_email',       header: 'Email',            width: 22 },
+              { key: 'buildings_covered',   header: 'Buildings',        width: 24 },
+              { key: 'contract_start',      header: 'Start',            width: 12 },
+              { key: 'contract_end',        header: 'End',              width: 12 },
+              { key: 'contract_value_aed',  header: 'Contract (AED)',   width: 14, halign: 'right', numeric: true },
+              { key: 'paid_total',          header: 'Paid (AED)',       width: 14, halign: 'right', numeric: true },
+              { key: 'outstanding_total',   header: 'Outstanding (AED)',width: 16, halign: 'right', numeric: true },
+              { key: 'trade_license',       header: 'License',          width: 14 },
+              { key: 'trn_number',          header: 'TRN',              width: 14 },
+              { key: 'effective_status',    header: 'Status',           width: 12 },
+            ],
+            extraMetadata: {
+              'Category Filter':   categoryFilter === 'all' ? 'All' : categoryFilter,
+              'Status Filter':     statusFilter   === 'all' ? 'All' : statusFilter,
+              'Outstanding Only':  outstandingOnly ? 'Yes' : 'No',
+              'Search':            search || '—',
+              'Active':            String(counts.active),
+              'Expiring Soon':     String(counts.expiring),
+              'Expired':           String(counts.expired),
+              'With Outstanding':  String(counts.withOutstanding),
+            },
+          },
+          {
+            id:           'contracts',
+            label:        'Maintenance Contracts',
+            title:        'Maintenance Contracts',
+            sheetName:    'Contracts',
+            filenameBase: 'maintenance-contracts',
+            dateField:    'contract_start',
+            rows: exportRows.filter(v => v.contract_start || v.contract_end || v.contract_value_aed),
+            columns: [
+              { key: 'name',               header: 'Vendor',          width: 24 },
+              { key: 'service_category',   header: 'Category',        width: 14 },
+              { key: 'buildings_covered',  header: 'Buildings',       width: 28 },
+              { key: 'contract_start',     header: 'Start',           width: 12 },
+              { key: 'contract_end',       header: 'End',             width: 12 },
+              { key: 'contract_value_aed', header: 'Value (AED)',     width: 14, halign: 'right', numeric: true },
+              { key: 'effective_status',   header: 'Status',          width: 14 },
+              { key: 'trade_license',      header: 'License',         width: 14 },
+              { key: 'trn_number',         header: 'TRN',             width: 14 },
+            ],
+            extraMetadata: {
+              'Category Filter':  categoryFilter === 'all' ? 'All' : categoryFilter,
+              'Status Filter':    statusFilter   === 'all' ? 'All' : statusFilter,
+              'Search':           search || '—',
+              'Active Contracts': String(counts.active),
+              'Expiring Soon':    String(counts.expiring),
+              'Expired':          String(counts.expired),
+            },
+          },
+          {
+            id:           'payments',
+            label:        'Payments',
+            title:        'Vendor Payments',
+            sheetName:    'Payments',
+            filenameBase: 'vendor-payments',
+            dateField:    'payment_date',
+            rows: (() => {
+              const visibleVendorIds = new Set((filtered || []).map(v => v.id));
+              const nameMap = Object.fromEntries((vendors || []).map(v => [v.id, v.name]));
+              return (paymentsAll || [])
+                .filter(p => visibleVendorIds.has(p.vendor_id))
+                .map(p => ({ ...p, vendor_name: nameMap[p.vendor_id] || '—' }));
+            })(),
+            columns: [
+              { key: 'invoice_number',  header: 'Invoice #',       width: 14 },
+              { key: 'vendor_name',     header: 'Vendor',          width: 24 },
+              { key: 'description',     header: 'Description',     width: 30 },
+              { key: 'amount_aed',      header: 'Amount (AED)',    width: 14, halign: 'right', numeric: true },
+              { key: 'payment_status',  header: 'Status',          width: 12 },
+              { key: 'payment_date',    header: 'Paid On',         width: 12 },
+              { key: 'due_date',        header: 'Due Date',        width: 12 },
+              { key: 'payment_method',  header: 'Method',          width: 14 },
+              { key: 'reference',       header: 'Reference',       width: 16 },
+            ],
+            extraMetadata: {
+              'Category Filter':  categoryFilter === 'all' ? 'All' : categoryFilter,
+              'Status Filter':    statusFilter   === 'all' ? 'All' : statusFilter,
+              'Search':           search || '—',
+              'Total Payments':   String((paymentsAll || []).length),
+            },
+          },
         ]}
-        extraMetadata={{
-          'Category Filter':   categoryFilter === 'all' ? 'All' : categoryFilter,
-          'Status Filter':     statusFilter   === 'all' ? 'All' : statusFilter,
-          'Outstanding Only':  outstandingOnly ? 'Yes' : 'No',
-          'Search':            search || '—',
-          'Active':            String(counts.active),
-          'Expiring Soon':     String(counts.expiring),
-          'Expired':           String(counts.expired),
-          'With Outstanding':  String(counts.withOutstanding),
-        }}
       />
 
       <div className="kpi-row" style={{gridTemplateColumns:'repeat(5, minmax(0, 1fr))'}}>

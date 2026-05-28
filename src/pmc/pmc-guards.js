@@ -9,7 +9,7 @@ const PMCGuardsPage = () => {
   const [buildings, setBuildings] = useState([]);
   const [shiftFilter, setShiftFilter] = useState('all');
   const [search, setSearch] = useState('');
-  const [showExport, setShowExport] = useState(false);
+  const [showDownload, setShowDownload] = useState(false);
 
   const load = async () => {
     setError(null);
@@ -70,34 +70,78 @@ const PMCGuardsPage = () => {
           <h1>Guards</h1>
         </div>
         <div className="btn-group">
-          <button className="btn" onClick={() => setShowExport(true)} disabled={!guards || guards.length === 0}>Export / Print</button>
+          <button className="btn" onClick={() => setShowDownload(true)} disabled={!guards || guards.length === 0}>Download Data</button>
           <button className="btn btn-sm" onClick={load}>Refresh</button>
         </div>
       </div>
 
       <ExportPrintModal
-        isOpen={showExport}
-        onClose={() => setShowExport(false)}
-        title="Guards"
-        sheetName="Guards"
-        filenameBase="guards"
-        rows={filtered.map(g => ({ ...g, on_duty: isOnDuty(g.shift) ? 'On Duty' : 'Off Duty' }))}
-        dateField="created_at"
-        columns={[
-          { key: 'full_name',     header: 'Name',     width: 26 },
-          { key: 'phone',         header: 'Phone',    width: 18 },
-          { key: 'building_name', header: 'Building', width: 26 },
-          { key: 'shift',         header: 'Shift',    width: 10 },
-          { key: 'on_duty',       header: 'Status',   width: 12 },
-          { key: 'created_at',    header: 'Joined',   width: 14,
-            value: (r) => r.created_at ? new Date(r.created_at).toLocaleDateString() : '' },
+        isOpen={showDownload}
+        onClose={() => setShowDownload(false)}
+        dataTypes={[
+          {
+            id:           'guards',
+            label:        'Guards',
+            title:        'Guards',
+            sheetName:    'Guards',
+            filenameBase: 'guards',
+            dateField:    'created_at',
+            rows: filtered.map(g => ({ ...g, on_duty: isOnDuty(g.shift) ? 'On Duty' : 'Off Duty' })),
+            columns: [
+              { key: 'full_name',     header: 'Name',     width: 26 },
+              { key: 'phone',         header: 'Phone',    width: 18 },
+              { key: 'building_name', header: 'Building', width: 26 },
+              { key: 'shift',         header: 'Shift',    width: 10 },
+              { key: 'on_duty',       header: 'Status',   width: 12 },
+              { key: 'created_at',    header: 'Joined',   width: 14,
+                value: (r) => r.created_at ? new Date(r.created_at).toLocaleDateString() : '' },
+            ],
+            extraMetadata: {
+              'Property Filter': selectedProperties.length === 0 ? 'All buildings' : (selectedProperties.length + ' selected'),
+              'Shift Filter':   shiftFilter === 'all' ? 'All' : shiftFilter,
+              'Search':         search || '—',
+              'On Duty Now':    String(onDutyCount),
+              'Off Duty':       String(offDutyCount),
+            },
+          },
+          {
+            id:           'shift_summary',
+            label:        'Shift Summary',
+            title:        'Guards — Shift Summary',
+            sheetName:    'Shift Summary',
+            filenameBase: 'guards-shift_summary',
+            rows: (() => {
+              const total = Math.max((filtered || []).length, 1);
+              const shifts = ['Day','Night','24h'];
+              return shifts.map(s => {
+                const onShift = (filtered || []).filter(g => g.shift === s);
+                const onDuty = onShift.filter(g => isOnDuty(g.shift)).length;
+                return {
+                  shift: s,
+                  guards: onShift.length,
+                  buildings: new Set(onShift.map(g => g.building_id).filter(Boolean)).size,
+                  on_duty: onDuty,
+                  pct: Math.round(onShift.length / total * 100),
+                };
+              });
+            })(),
+            columns: [
+              { key: 'shift',     header: 'Shift',          width: 14 },
+              { key: 'guards',    header: 'Guards',         width: 12, halign: 'right', numeric: true },
+              { key: 'buildings', header: 'Buildings',      width: 14, halign: 'right', numeric: true },
+              { key: 'on_duty',   header: 'On Duty Now',    width: 14, halign: 'right', numeric: true },
+              { key: 'pct',       header: '% of Force',     width: 14, halign: 'right', numeric: true,
+                value: (r) => (r.pct || 0) + '%' },
+            ],
+            extraMetadata: {
+              'Property Filter':   selectedProperties.length === 0 ? 'All buildings' : (selectedProperties.length + ' selected'),
+              'Total Guards':      String((filtered || []).length),
+              'On Duty Now':       String(onDutyCount),
+              'Off Duty':          String(offDutyCount),
+              'Buildings Covered': String(new Set((filtered || []).map(g => g.building_id).filter(Boolean)).size),
+            },
+          },
         ]}
-        extraMetadata={{
-          'Shift Filter':   shiftFilter === 'all' ? 'All' : shiftFilter,
-          'Search':         search || '—',
-          'On Duty Now':    String(onDutyCount),
-          'Off Duty':       String(offDutyCount),
-        }}
       />
 
       <div className="kpi-row" style={{gridTemplateColumns:'repeat(4, minmax(0, 1fr))'}}>

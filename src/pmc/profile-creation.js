@@ -641,7 +641,7 @@ const BuildingDetailModal = ({ building, onClose }) => {
       const profIds = [...new Set((as || []).map(a => a.profile_id).filter(Boolean))];
       let profs = [];
       if (profIds.length) {
-        const { data } = await supabaseClient.from('profiles').select('id,full_name,phone,email').in('id', profIds);
+        const { data } = await supabaseClient.from('profiles').select('id,full_name,phone').in('id', profIds);
         profs = data || [];
       }
       const pMap = Object.fromEntries(profs.map(p => [p.id, p]));

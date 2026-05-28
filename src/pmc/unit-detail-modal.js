@@ -18,6 +18,9 @@ const UnitDetailModal = ({ unit, building, assignment: passedAssignment, profile
   // them as the "former resident" responsible for the outstanding balance.
   const [formerResident, setFormerResident] = useState(null);
   const [invoices, setInvoices]             = useState(null);
+  // Map of resident_profile_id -> { full_name, phone } so each invoice row
+  // can show who it was billed to (covers both current and former tenants).
+  const [invoiceResidents, setInvoiceResidents] = useState({});
   const [showAttachments, setShowAttachments] = useState(false);
 
   useEffect(() => {
@@ -38,7 +41,7 @@ const UnitDetailModal = ({ unit, building, assignment: passedAssignment, profile
       if (!p && a && a.profile_id) {
         const { data } = await supabaseClient
           .from('profiles')
-          .select('id,full_name,phone,email')
+          .select('id,full_name,phone')
           .eq('id', a.profile_id)
           .maybeSingle();
         p = data || null;
@@ -58,18 +61,29 @@ const UnitDetailModal = ({ unit, building, assignment: passedAssignment, profile
       if (!mounted) return;
       setInvoices(invs || []);
 
-      // Vacant unit + outstanding balance → look up the most recent invoice's
-      // resident and present them as the former resident.
-      if (!p && (invs || []).length > 0) {
-        const sorted = [...invs].sort((x, y) => (y.created_at || '').localeCompare(x.created_at || ''));
-        const lastPid = sorted.find(i => i.resident_profile_id)?.resident_profile_id;
-        if (lastPid) {
-          const { data: fp } = await supabaseClient
-            .from('profiles')
-            .select('id,full_name,phone,email')
-            .eq('id', lastPid)
-            .maybeSingle();
-          if (mounted) setFormerResident(fp || null);
+      // Resolve every distinct resident_profile_id on these invoices so the
+      // table can show a "Billed to" name on each row — even invoices billed
+      // to a previous tenant when the unit is currently vacant or re-let.
+      const ids = Array.from(new Set((invs || [])
+        .map(i => i.resident_profile_id)
+        .filter(Boolean)));
+      if (ids.length > 0) {
+        const { data: people } = await supabaseClient
+          .from('profiles')
+          .select('id,full_name,phone')
+          .in('id', ids);
+        if (mounted) {
+          const map = {};
+          (people || []).forEach(pr => { map[pr.id] = pr; });
+          setInvoiceResidents(map);
+
+          // If the unit has no current resident, show the most recent
+          // invoice's resident as the "former resident" card.
+          if (!p && (invs || []).length > 0) {
+            const sorted = [...invs].sort((x, y) => (y.created_at || '').localeCompare(x.created_at || ''));
+            const lastPid = sorted.find(i => i.resident_profile_id)?.resident_profile_id;
+            if (lastPid && map[lastPid]) setFormerResident(map[lastPid]);
+          }
         }
       }
     })();
@@ -77,7 +91,25 @@ const UnitDetailModal = ({ unit, building, assignment: passedAssignment, profile
   }, [unit.id]);
 
   const fmt = (n) => 'AED ' + Math.round(Number(n) || 0).toLocaleString();
-  const totalOutstanding = (invoices || []).reduce((s, i) => s + Number(i.amount_aed), 0);
+  // Same rule as Service Charges: split "Pending" into Upcoming (>30 days out)
+  // and the actually-outstanding ones (due within 30 days, or already overdue).
+  const _now = new Date();
+  const _eff = (i) => {
+    if (!i) return 'Pending';
+    if (i.status === 'Paid' || i.status === 'Cancelled') return i.status;
+    if (!i.due_date) return i.status;
+    const due = new Date(i.due_date);
+    if (isNaN(due.getTime())) return i.status;
+    const daysUntilDue = Math.floor((due.getTime() - _now.getTime()) / (24*60*60*1000));
+    if (daysUntilDue < 0)  return 'Overdue';
+    if (daysUntilDue > 30) return 'Upcoming';
+    return 'Pending';
+  };
+  const annotatedInvoices = (invoices || []).map(i => ({ ...i, effective_status: _eff(i) }));
+  const outstandingInvoices = annotatedInvoices.filter(i => i.effective_status === 'Pending' || i.effective_status === 'Overdue');
+  const upcomingInvoices    = annotatedInvoices.filter(i => i.effective_status === 'Upcoming');
+  const totalOutstanding    = outstandingInvoices.reduce((s, i) => s + Number(i.amount_aed), 0);
+  const totalUpcoming       = upcomingInvoices.reduce((s, i) => s + Number(i.amount_aed), 0);
 
   const Section = ({ label, children }) => (
     <div style={{marginBottom:14}}>
@@ -114,17 +146,15 @@ const UnitDetailModal = ({ unit, building, assignment: passedAssignment, profile
                 <>
                   <Field label="Name">{profile.full_name}</Field>
                   <Field label="Phone">{profile.phone}</Field>
-                  <Field label="Email">{profile.email}</Field>
                   <Field label="Tenure">{assignment && assignment.tenure}</Field>
                 </>
               ) : formerResident ? (
                 <>
                   <div style={{padding:'8px 10px',background:'#fdf2dc',border:'1px solid #f0e2bd',borderRadius:6,fontSize:12,color:'#7a5a1f',marginBottom:12}}>
-                    ⚠ Unit is currently vacant. Outstanding balance below was billed to the previous resident.
+                    Unit is currently vacant. Outstanding balance below was billed to the previous resident.
                   </div>
                   <Field label="Name">{formerResident.full_name}</Field>
                   <Field label="Phone">{formerResident.phone}</Field>
-                  <Field label="Email">{formerResident.email}</Field>
                 </>
               ) : (
                 <div style={{fontSize:13,color:'#61707D',padding:'6px 0'}}>Vacant — no resident assigned to this unit.</div>
@@ -145,39 +175,94 @@ const UnitDetailModal = ({ unit, building, assignment: passedAssignment, profile
               </Section>
             )}
 
-            <Section label={'Outstanding Invoices' + (invoices.length ? ' · ' + invoices.length : '')}>
-              {invoices.length === 0 ? (
-                <div style={{fontSize:13,color:'#61707D',padding:'6px 0'}}>No unpaid invoices for this unit ✓</div>
-              ) : (
+            {(() => {
+              const InvoiceRow = ({ i, accentColor }) => {
+                const billedTo = i.resident_profile_id ? invoiceResidents[i.resident_profile_id] : null;
+                const currentMatch = assignment && i.resident_profile_id && i.resident_profile_id === assignment.profile_id;
+                const statusStyle = ({
+                  'Paid':     { bg: '#e6efe1', fg: '#5a6b4f' },
+                  'Pending':  { bg: '#fdf2dc', fg: '#7a5a1f' },
+                  'Overdue':  { bg: '#fdf2f1', fg: '#8b4a42' },
+                  'Upcoming': { bg: '#E6EAE9', fg: '#61707D' },
+                })[i.effective_status] || { bg: '#E6EAE9', fg: '#61707D' };
+                return (
+                  <tr key={i.id}>
+                    <td style={{fontWeight:500}}>{i.invoice_number || '—'}</td>
+                    <td style={{maxWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}} title={i.description}>{i.description}</td>
+                    <td title={billedTo ? (billedTo.full_name + (billedTo.phone ? ' · ' + billedTo.phone : '')) : ''}>
+                      {billedTo ? (
+                        <span>
+                          {billedTo.full_name}
+                          {!currentMatch && profile && (
+                            <span style={{marginLeft:6,fontSize:10,padding:'1px 6px',borderRadius:4,background:'#fdf2dc',color:'#7a5a1f',border:'1px solid #f0e2bd'}}>previous</span>
+                          )}
+                          {!currentMatch && !profile && formerResident && (
+                            <span style={{marginLeft:6,fontSize:10,padding:'1px 6px',borderRadius:4,background:'#fdf2dc',color:'#7a5a1f',border:'1px solid #f0e2bd'}}>former</span>
+                          )}
+                        </span>
+                      ) : '—'}
+                    </td>
+                    <td>{i.due_date || '—'}</td>
+                    <td>
+                      <span style={{padding:'2px 8px',borderRadius:4,fontSize:10,fontWeight:500,background:statusStyle.bg,color:statusStyle.fg}}>
+                        {i.effective_status}
+                      </span>
+                    </td>
+                    <td style={{textAlign:'right',color:accentColor,fontWeight:600}}>{fmt(i.amount_aed)}</td>
+                  </tr>
+                );
+              };
+              const InvoiceTableHeader = () => (
+                <thead>
+                  <tr>
+                    <th style={{width:'16%'}}>Invoice</th>
+                    <th style={{width:'28%'}}>Description</th>
+                    <th style={{width:'22%'}}>Billed to</th>
+                    <th style={{width:'12%'}}>Due</th>
+                    <th style={{width:'10%'}}>Status</th>
+                    <th style={{width:'12%',textAlign:'right'}}>Amount</th>
+                  </tr>
+                </thead>
+              );
+              return (
                 <>
-                  <table className="data-table" style={{fontSize:12}}>
-                    <thead>
-                      <tr>
-                        <th style={{width:'18%'}}>Invoice</th>
-                        <th style={{width:'42%'}}>Description</th>
-                        <th style={{width:'14%'}}>Due</th>
-                        <th style={{width:'12%'}}>Status</th>
-                        <th style={{width:'14%',textAlign:'right'}}>Amount</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {invoices.map(i => (
-                        <tr key={i.id}>
-                          <td style={{fontWeight:500}}>{i.invoice_number || '—'}</td>
-                          <td style={{maxWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}} title={i.description}>{i.description}</td>
-                          <td>{i.due_date || '—'}</td>
-                          <td>{i.status}</td>
-                          <td style={{textAlign:'right',color:'#8b4a42',fontWeight:600}}>{fmt(i.amount_aed)}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                  <div style={{marginTop:10,paddingTop:10,borderTop:'1px solid #E6EAE9',display:'flex',justifyContent:'flex-end',fontSize:13}}>
-                    Total outstanding:&nbsp;<strong style={{color:'#8b4a42'}}>{fmt(totalOutstanding)}</strong>
-                  </div>
+                  <Section label={'Outstanding Invoices' + (outstandingInvoices.length ? ' · ' + outstandingInvoices.length : '')}>
+                    {outstandingInvoices.length === 0 ? (
+                      <div style={{fontSize:13,color:'#61707D',padding:'6px 0'}}>No outstanding invoices for this unit ✓</div>
+                    ) : (
+                      <>
+                        <table className="data-table" style={{fontSize:12}}>
+                          <InvoiceTableHeader/>
+                          <tbody>
+                            {outstandingInvoices.map(i => <InvoiceRow key={i.id} i={i} accentColor="#8b4a42"/>)}
+                          </tbody>
+                        </table>
+                        <div style={{marginTop:10,paddingTop:10,borderTop:'1px solid #E6EAE9',display:'flex',justifyContent:'flex-end',fontSize:13}}>
+                          Total outstanding:&nbsp;<strong style={{color:'#8b4a42'}}>{fmt(totalOutstanding)}</strong>
+                        </div>
+                      </>
+                    )}
+                  </Section>
+
+                  {upcomingInvoices.length > 0 && (
+                    <Section label={'Upcoming Cheques · ' + upcomingInvoices.length}>
+                      <div style={{fontSize:11,color:'#61707D',marginBottom:8}}>
+                        Scheduled cheques due more than 30 days out — not yet outstanding.
+                      </div>
+                      <table className="data-table" style={{fontSize:12}}>
+                        <InvoiceTableHeader/>
+                        <tbody>
+                          {upcomingInvoices.map(i => <InvoiceRow key={i.id} i={i} accentColor="#131F23"/>)}
+                        </tbody>
+                      </table>
+                      <div style={{marginTop:10,paddingTop:10,borderTop:'1px solid #E6EAE9',display:'flex',justifyContent:'flex-end',fontSize:13}}>
+                        Upcoming total:&nbsp;<strong style={{color:'#131F23'}}>{fmt(totalUpcoming)}</strong>
+                      </div>
+                    </Section>
+                  )}
                 </>
-              )}
-            </Section>
+              );
+            })()}
 
             <Section label="Photos & Documents">
               <button className="btn" onClick={() => setShowAttachments(true)}>Manage attachments</button>

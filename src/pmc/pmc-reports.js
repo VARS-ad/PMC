@@ -305,28 +305,82 @@ const PMCReportsPage = () => {
 
     if (format === 'PDF') {
       await ensurePdf();
-      const { jsPDF } = window.jspdf || {};
-      if (!jsPDF) { alert('PDF library failed to load.'); return; }
-      const doc = new jsPDF();
-      doc.setFontSize(18); doc.setTextColor(26, 26, 26);
-      doc.text('VARS — Property Manager Report', 14, 18);
-      doc.setFontSize(10); doc.setTextColor(120, 120, 120);
-      doc.text('Generated ' + today + ' · Scope: ' + scope, 14, 25);
-      let y = 32;
+      const jsPDFCtor = (window.jspdf && window.jspdf.jsPDF) || window.jsPDF;
+      if (!jsPDFCtor) { alert('PDF library failed to load.'); return; }
+      const doc = new jsPDFCtor({ orientation: 'portrait', unit: 'pt', format: 'a4' });
+      const pageW = doc.internal.pageSize.getWidth();
+      const pageH = doc.internal.pageSize.getHeight();
+      const marginX = 36;
+      let y = 28;
+
+      // --- Brand header (shield + wordmark + subtitle), matches the rest of the suite ---
+      doc.setFillColor(...REPORT_BRAND.primaryRgb);
+      doc.roundedRect(marginX, y, 32, 32, 3, 3, 'F');
+      const SX = 32 / 100;
+      const glyphDeltas = [
+        [16.7 * SX, 0],
+        [ 8.1 * SX, 8.5 * SX],
+        [ 8.6 * SX, 8.1 * SX],
+        [ 0,       50.0 * SX],
+        [-16.7 * SX, 0],
+        [-16.7 * SX,-16.6 * SX],
+      ];
+      doc.setFillColor(255, 255, 255);
+      doc.lines(glyphDeltas, marginX + 33.3 * SX, y + 16.7 * SX, [1, 1], 'F', true);
+
+      doc.setTextColor(...REPORT_BRAND.textDarkRgb);
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(22);
+      doc.text(REPORT_BRAND.title, marginX + 42, y + 20);
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(8);
+      doc.setTextColor(90, 90, 90);
+      doc.text('PROPERTY MANAGER REPORT', marginX + 42, y + 32);
+
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(8);
+      doc.setTextColor(...REPORT_BRAND.textMuteRgb);
+      doc.text('Generated ' + today, pageW - marginX, y + 20, { align: 'right' });
+      doc.text('Scope · ' + scope, pageW - marginX, y + 32, { align: 'right' });
+
+      y += 44;
+      doc.setDrawColor(...REPORT_BRAND.primaryRgb);
+      doc.setLineWidth(1.2);
+      doc.line(marginX, y, pageW - marginX, y);
+      y += 14;
+
+      // --- Sections ---
       sections.forEach(([title, head, rows]) => {
-        if (y > 250) { doc.addPage(); y = 20; }
-        doc.setFontSize(12); doc.setTextColor(26, 26, 26);
-        doc.text(title, 14, y);
+        if (y > pageH - 100) { doc.addPage(); y = 36; }
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(7);
+        doc.setTextColor(...REPORT_BRAND.textMuteRgb);
+        doc.text(title.toUpperCase(), marginX, y);
         doc.autoTable({
-          startY: y + 3,
-          head: [head], body: rows.length ? rows : [['—','—']],
-          theme: 'grid',
-          headStyles: { fillColor: [146, 137, 137], textColor: 255, fontSize: 9 },
-          bodyStyles: { fontSize: 9, textColor: 30 },
-          margin: { left: 14, right: 14 },
+          startY:    y + 6,
+          head:      [head],
+          body:      rows.length ? rows : [['—','—']],
+          theme:     'grid',
+          styles:    { font: 'helvetica', fontSize: 9, lineColor: REPORT_BRAND.borderRgb, lineWidth: 0.5 },
+          headStyles:{ fillColor: REPORT_BRAND.primaryRgb, textColor: 255, fontSize: 9, fontStyle: 'bold' },
+          bodyStyles:{ fontSize: 9, textColor: REPORT_BRAND.textDarkRgb },
+          alternateRowStyles: { fillColor: REPORT_BRAND.surfaceRgb },
+          margin:    { left: marginX, right: marginX },
         });
-        y = (doc.lastAutoTable.finalY || y) + 12;
+        y = (doc.lastAutoTable.finalY || y) + 16;
       });
+
+      // --- Footer on each page ---
+      const pageCount = doc.getNumberOfPages();
+      for (let p = 1; p <= pageCount; p++) {
+        doc.setPage(p);
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(7);
+        doc.setTextColor(...REPORT_BRAND.textMuteRgb);
+        doc.text(REPORT_BRAND.footerText, marginX, pageH - 18);
+        doc.text('Page ' + p + ' of ' + pageCount, pageW - marginX, pageH - 18, { align: 'right' });
+      }
+
       doc.save(filename + '.pdf');
       return;
     }
