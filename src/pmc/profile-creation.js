@@ -623,11 +623,44 @@ const PCSummary = ({ section }) => {
 };
 
 const BuildingDetailModal = ({ building, onClose }) => {
-  const [unitForAttachments, setUnitForAttachments] = useState(null);
+  const [selectedUnit, setSelectedUnit] = useState(null);
+  // unit_id -> { assignment, profile } so the tooltip on each unit chip
+  // can show "Reem Al Maktoum · Tenant" or "Vacant" at a glance, and
+  // UnitDetailModal can be opened without a second fetch.
+  const [residentByUnit, setResidentByUnit] = useState({});
+  useEffect(() => {
+    let mounted = true;
+    if (!supabaseClient) return;
+    const unitIds = (building.units || []).map(u => u.id);
+    if (unitIds.length === 0) return;
+    (async () => {
+      const { data: as } = await supabaseClient
+        .from('resident_assignments')
+        .select('profile_id,unit_id,tenure,monthly_payment_aed,lease_start,lease_end,ownership_start')
+        .in('unit_id', unitIds);
+      const profIds = [...new Set((as || []).map(a => a.profile_id).filter(Boolean))];
+      let profs = [];
+      if (profIds.length) {
+        const { data } = await supabaseClient.from('profiles').select('id,full_name,phone,email').in('id', profIds);
+        profs = data || [];
+      }
+      const pMap = Object.fromEntries(profs.map(p => [p.id, p]));
+      const out = {};
+      (as || []).forEach(a => { out[a.unit_id] = { assignment: a, profile: pMap[a.profile_id] || null }; });
+      if (mounted) setResidentByUnit(out);
+    })();
+    return () => { mounted = false; };
+  }, [building.id]);
+
   const byFloor = {};
   (building.units || []).forEach(u => { (byFloor[u.floor] = byFloor[u.floor] || []).push(u); });
   Object.keys(byFloor).forEach(f => byFloor[f].sort((a,b) => String(a.unit_number).localeCompare(String(b.unit_number))));
   const floors = Object.keys(byFloor).map(Number).sort((a,b) => a-b);
+  const unitChipTitle = (u) => {
+    const r = residentByUnit[u.id];
+    if (r && r.profile) return r.profile.full_name + (r.assignment ? ' · ' + r.assignment.tenure : '');
+    return 'Vacant';
+  };
   return (
     <>
     <div className="modal-overlay" onClick={onClose}>
@@ -650,7 +683,7 @@ const BuildingDetailModal = ({ building, onClose }) => {
               </div>
               <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill, minmax(110px, 1fr))',gap:6}}>
                 {byFloor[f].map(u => (
-                  <div key={u.id} onClick={() => setUnitForAttachments(u)} style={{padding:'8px 10px',border:'1px solid var(--border-light)',borderRadius:6,fontSize:12,background:'var(--bg-surface)',textAlign:'center',cursor:'pointer',transition:'background 0.15s'}} onMouseEnter={e => e.currentTarget.style.background='var(--accent-warm-light)'} onMouseLeave={e => e.currentTarget.style.background='var(--bg-surface)'} title="Click to manage attachments">{u.unit_number}</div>
+                  <div key={u.id} onClick={() => setSelectedUnit(u)} style={{padding:'8px 10px',border:'1px solid var(--border-light)',borderRadius:6,fontSize:12,background: residentByUnit[u.id] ? 'var(--bg-surface)' : '#fff',textAlign:'center',cursor:'pointer',transition:'background 0.15s'}} onMouseEnter={e => e.currentTarget.style.background='var(--accent-warm-light)'} onMouseLeave={e => e.currentTarget.style.background = residentByUnit[u.id] ? 'var(--bg-surface)' : '#fff'} title={unitChipTitle(u)}>{u.unit_number}</div>
                 ))}
               </div>
             </div>
@@ -658,7 +691,15 @@ const BuildingDetailModal = ({ building, onClose }) => {
         </div>
       </div>
     </div>
-    {unitForAttachments && <UnitAttachmentsModal unit={unitForAttachments} buildingName={building.name} onClose={() => setUnitForAttachments(null)}/>}
+    {selectedUnit && (
+      <UnitDetailModal
+        unit={selectedUnit}
+        building={building}
+        assignment={residentByUnit[selectedUnit.id]?.assignment || null}
+        profile={residentByUnit[selectedUnit.id]?.profile || null}
+        onClose={() => setSelectedUnit(null)}
+      />
+    )}
     </>
   );
 };
