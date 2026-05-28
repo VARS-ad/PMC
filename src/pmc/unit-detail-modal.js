@@ -103,12 +103,12 @@ const UnitDetailModal = ({ unit, building, assignment: passedAssignment, profile
     const due = new Date(i.due_date);
     if (isNaN(due.getTime())) return i.status;
     const daysUntilDue = Math.floor((due.getTime() - _now.getTime()) / (24*60*60*1000));
-    if (daysUntilDue < 0)  return 'Overdue';
+    if (daysUntilDue < 0)  return 'Due';
     if (daysUntilDue > 30) return 'Upcoming';
-    return 'Pending';
+    return 'Ongoing';
   };
   const annotatedInvoices = (invoices || []).map(i => ({ ...i, effective_status: _eff(i) }));
-  const outstandingInvoices = annotatedInvoices.filter(i => i.effective_status === 'Pending' || i.effective_status === 'Overdue');
+  const outstandingInvoices = annotatedInvoices.filter(i => i.effective_status === 'Ongoing' || i.effective_status === 'Due');
   const upcomingInvoices    = annotatedInvoices.filter(i => i.effective_status === 'Upcoming');
   const totalOutstanding    = outstandingInvoices.reduce((s, i) => s + Number(i.amount_aed), 0);
   const totalUpcoming       = upcomingInvoices.reduce((s, i) => s + Number(i.amount_aed), 0);
@@ -190,9 +190,6 @@ const UnitDetailModal = ({ unit, building, assignment: passedAssignment, profile
                       <Field label="Contract #">{assignment.contract_number || '—'}</Field>
                       <Field label="Lease start">{assignment.lease_start}</Field>
                       <Field label="Lease end">{assignment.lease_end}</Field>
-                      <div style={{marginTop:6,fontSize:11,color:'#61707D',fontStyle:'italic'}}>
-                        Contract document is stored under Attachments below.
-                      </div>
                     </>
                   );
                 })()}
@@ -205,8 +202,8 @@ const UnitDetailModal = ({ unit, building, assignment: passedAssignment, profile
                 const currentMatch = assignment && i.resident_profile_id && i.resident_profile_id === assignment.profile_id;
                 const statusStyle = ({
                   'Paid':     { bg: '#e6efe1', fg: '#5a6b4f' },
-                  'Pending':  { bg: '#fdf2dc', fg: '#7a5a1f' },
-                  'Overdue':  { bg: '#fdf2f1', fg: '#8b4a42' },
+                  'Ongoing':  { bg: '#fdf2dc', fg: '#7a5a1f' },
+                  'Due':      { bg: '#fdf2f1', fg: '#8b4a42' },
                   'Upcoming': { bg: '#E6EAE9', fg: '#61707D' },
                 })[i.effective_status] || { bg: '#E6EAE9', fg: '#61707D' };
                 return (
@@ -226,8 +223,8 @@ const UnitDetailModal = ({ unit, building, assignment: passedAssignment, profile
                         </span>
                       ) : '—'}
                     </td>
-                    <td style={{whiteSpace:'nowrap'}}>{i.due_date || '—'}</td>
-                    <td style={{whiteSpace:'nowrap'}}>
+                    <td style={{whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{i.due_date || '—'}</td>
+                    <td style={{whiteSpace:'nowrap',overflow:'hidden'}}>
                       <span style={{display:'inline-block',padding:'2px 8px',borderRadius:4,fontSize:10,fontWeight:500,background:statusStyle.bg,color:statusStyle.fg,whiteSpace:'nowrap'}}>
                         {i.effective_status}
                       </span>
@@ -239,12 +236,12 @@ const UnitDetailModal = ({ unit, building, assignment: passedAssignment, profile
               const InvoiceTableHeader = () => (
                 <thead>
                   <tr>
-                    <th style={{width:'14%'}}>Invoice</th>
-                    <th style={{width:'22%'}}>Description</th>
-                    <th style={{width:'20%'}}>Billed to</th>
-                    <th style={{width:'12%'}}>Due</th>
-                    <th style={{width:'14%'}}>Status</th>
-                    <th style={{width:'18%',textAlign:'right'}}>Amount</th>
+                    <th style={{width:'13%'}}>Invoice</th>
+                    <th style={{width:'17%'}}>Description</th>
+                    <th style={{width:'17%'}}>Billed to</th>
+                    <th style={{width:'16%'}}>Due</th>
+                    <th style={{width:'16%'}}>Status</th>
+                    <th style={{width:'21%',textAlign:'right'}}>Amount</th>
                   </tr>
                 </thead>
               );

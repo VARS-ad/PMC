@@ -1394,6 +1394,7 @@ const RESIDENT_FORM_DEFAULTS = {
   emergencyContactName: '', emergencyContactPhone: '',
   employer: '', occupation: '',
   tenure: '', leaseStart: '', leaseEnd: '', monthlyPayment: '', ownershipStart: '',
+  contractNumber: '', chequesPerYear: '',
 };
 
 const ResidentManualForm = () => {
@@ -1439,6 +1440,8 @@ const ResidentManualForm = () => {
           lease_end:               form.leaseEnd   || null,
           monthly_payment_aed:     form.monthlyPayment === '' ? null : Number(form.monthlyPayment),
           ownership_start:         form.ownershipStart || null,
+          contract_number:         form.contractNumber.trim() || null,
+          cheques_per_year:        form.chequesPerYear === '' ? null : Number(form.chequesPerYear),
         }]}),
       });
       const out = await resp.json();
@@ -1501,6 +1504,8 @@ const ResidentManualForm = () => {
         <PCField label="Lease start" type="date" value={form.leaseStart} onChange={set('leaseStart')} />
         <PCField label="Lease end"   type="date" value={form.leaseEnd}   onChange={set('leaseEnd')}   />
         <PCField label="Monthly payment (AED)" type="number" value={form.monthlyPayment} onChange={set('monthlyPayment')} placeholder="Tenant only"/>
+        <PCField label="Cheques per year" type="number" value={form.chequesPerYear} onChange={set('chequesPerYear')} placeholder="Tenant only e.g. 1, 4, 12"/>
+        <PCField label="Contract #" value={form.contractNumber} onChange={set('contractNumber')} placeholder="Tenancy contract number"/>
         <PCField label="Ownership start" type="date" value={form.ownershipStart} onChange={set('ownershipStart')} />
       </div>
       <div style={{fontSize:11,color:'var(--text-muted)',marginBottom:18,marginTop:-4}}>
