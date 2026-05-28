@@ -65,6 +65,17 @@ const TopBar = ({ onCreateClick, onMenuToggle, onLogout, onNavigate }) => {
   // ===== Notifications =====
   const [showNotifications, setShowNotifications] = useState(false);
   const [notifs, setNotifs] = useState({ srs: [], invoices: [], visits: [] });
+  // Persisted "last marked-as-read" timestamp. When user clicks the
+  // "Mark all read" link we store now(); the bell's red dot only shows
+  // when at least one item was created after that timestamp.
+  const [notifReadAt, setNotifReadAt] = useState(() => {
+    try { return localStorage.getItem('varspm_notif_read_at') || ''; } catch (_) { return ''; }
+  });
+  const markAllRead = () => {
+    const now = new Date().toISOString();
+    try { localStorage.setItem('varspm_notif_read_at', now); } catch (_) {}
+    setNotifReadAt(now);
+  };
   useEffect(() => {
     if (!supabaseClient) return;
     let mounted = true;
@@ -90,6 +101,10 @@ const TopBar = ({ onCreateClick, onMenuToggle, onLogout, onNavigate }) => {
     return () => { mounted = false; };
   }, [selectedProperties.join(',')]);
   const notifTotal = notifs.srs.length + notifs.invoices.length + notifs.visits.length;
+  // "Unread" = at least one item created after the last mark-as-read timestamp
+  const hasUnread = !notifReadAt || [...notifs.srs, ...notifs.invoices, ...notifs.visits]
+    .some(item => (item.created_at || '') > notifReadAt);
+  const showDot = notifTotal > 0 && hasUnread;
   const fmtAED = (n) => 'AED ' + Math.round(Number(n) || 0).toLocaleString();
   const goTo = (page) => { setShowNotifications(false); if (onNavigate) onNavigate(page); };
 
@@ -166,7 +181,7 @@ const TopBar = ({ onCreateClick, onMenuToggle, onLogout, onNavigate }) => {
         <div style={{position:'relative'}}>
           <div onClick={() => setShowNotifications(!showNotifications)} style={{width:34,height:34,display:'flex',alignItems:'center',justifyContent:'center',position:'relative',cursor:'pointer',background:'transparent',border:'none'}} title={notifTotal > 0 ? `${notifTotal} item${notifTotal === 1 ? '' : 's'} need attention` : 'Notifications'}>
             <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#131F23" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 01-3.46 0"/></svg>
-            {notifTotal > 0 && (
+            {showDot && (
               <span style={{position:'absolute',top:4,right:6,width:8,height:8,borderRadius:'50%',background:'#c62828',border:'2px solid #F4EEE4',boxSizing:'content-box'}}/>
             )}
           </div>
@@ -174,11 +189,16 @@ const TopBar = ({ onCreateClick, onMenuToggle, onLogout, onNavigate }) => {
             <>
               <div onClick={() => setShowNotifications(false)} style={{position:'fixed',inset:0,zIndex:997}}/>
               <div onClick={e => e.stopPropagation()} style={{position:'absolute',top:44,right:-8,width:360,maxHeight:520,background:'#fff',borderRadius:12,boxShadow:'0 12px 40px rgba(0,0,0,0.15)',border:'1px solid #E6EAE9',zIndex:999,overflow:'hidden',display:'flex',flexDirection:'column'}}>
-                <div style={{padding:'14px 16px',borderBottom:'1px solid #E6EAE9',display:'flex',alignItems:'center',justifyContent:'space-between'}}>
-                  <div>
+                <div style={{padding:'14px 16px',borderBottom:'1px solid #E6EAE9',display:'flex',alignItems:'center',justifyContent:'space-between',gap:12}}>
+                  <div style={{minWidth:0}}>
                     <div style={{fontSize:14,fontWeight:600,color:'#131F23'}}>Notifications</div>
                     <div style={{fontSize:11,color:'#61707D',marginTop:1}}>{notifTotal} item{notifTotal === 1 ? '' : 's'} need attention</div>
                   </div>
+                  {notifTotal > 0 && (
+                    <button onClick={markAllRead} disabled={!hasUnread} style={{flexShrink:0,fontSize:11,color: hasUnread ? '#3E4C59' : '#8A98A2',background:'transparent',border:'none',cursor: hasUnread ? 'pointer' : 'default',padding:'4px 6px',fontFamily:'inherit',whiteSpace:'nowrap',fontWeight:500}}>
+                      Mark all read
+                    </button>
+                  )}
                 </div>
                 <div style={{overflowY:'auto',flex:1}}>
                   {notifTotal === 0 ? (

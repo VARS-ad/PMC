@@ -52,7 +52,7 @@ body{font-family:'Anek Odia','Google Sans Flex','Inter','Helvetica Neue',-apple-
 .sidebar-header span{font-weight:600;font-size:14px;letter-spacing:-0.02em;color:var(--text-dark);font-family:'Google Sans Flex','Inter',system-ui,sans-serif}
 .sidebar-nav{flex:1;padding:12px 0;overflow-y:auto}
 .sidebar-item{display:flex;align-items:center;gap:10px;padding:10px 20px;cursor:pointer;color:var(--text-secondary);font-size:14px;font-weight:400;line-height:1;transition:background .12s,color .12s;position:relative;text-decoration:none;border-left:2px solid transparent;letter-spacing:-0.005em}
-.sidebar-item svg{flex-shrink:0;display:block}
+.sidebar-item svg{flex-shrink:0;display:block;transform:translateY(-1px)}
 .sidebar-item:hover{background:var(--bg-page);color:var(--text-dark)}
 .sidebar-item.active{background:var(--bg-page);color:var(--text-dark);font-weight:500;border-left-color:var(--accent-warm-dark)}
 .sidebar-item .badge{background:var(--accent-warm-light);color:var(--text-secondary);font-size:10px;padding:2px 6px;border-radius:3px;margin-left:auto;font-weight:500}
