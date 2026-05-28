@@ -97,7 +97,7 @@ html[dir="rtl"] div[style*="position:absolute"][style*="left:0"] { left:auto !im
 .kpi-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:16px;margin-bottom:32px}
 .kpi-card{background:var(--bg-card);border:1px solid var(--border-light);border-radius:var(--radius-md);padding:20px 24px;box-shadow:var(--shadow-sm)}
 .kpi-card .label{font-size:11px;color:var(--text-secondary);margin-bottom:6px;letter-spacing:0.06em;text-transform:uppercase;font-weight:500}
-.kpi-card .value{font-size:30px;font-weight:500;color:var(--text-dark);letter-spacing:-0.025em;font-family:'Google Sans Flex','Inter',system-ui,sans-serif;line-height:1.1}
+.kpi-card .value{font-size:24px;font-weight:500;color:var(--text-dark);letter-spacing:-0.025em;font-family:'Google Sans Flex','Inter',system-ui,sans-serif;line-height:1.15;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .kpi-card .change{font-size:11px;color:var(--text-muted);margin-left:8px}
 .kpi-card .sparkline{height:20px;margin-top:8px}
 .kpi-card .link{font-size:11px;color:var(--accent-warm-dark);margin-top:10px;cursor:pointer;text-decoration:none}

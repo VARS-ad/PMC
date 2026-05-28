@@ -153,7 +153,7 @@ const PMCOverviewPage = ({ setPage }) => {
       ) : (<>
         {/* KPI cards row — 6 wide */}
         <div style={{fontSize:11,letterSpacing:'0.06em',textTransform:'uppercase',color:'var(--text-secondary)',margin:'8px 0 10px',fontWeight:500}}>Key Performance Indicators</div>
-        <div className="kpi-row" style={{marginBottom:28}}>
+        <div className="kpi-row" style={{gridTemplateColumns:'repeat(6, minmax(0, 1fr))',marginBottom:28}}>
           {[
             { label: 'Service Requests Today', value: stats.todaySRs, page: 'service' },
             { label: 'Service Charge Arrears', value: fmt(stats.overdueAmt), page: 'payment' },
