@@ -170,9 +170,8 @@ const PMCOverviewPage = ({ setPage }) => {
           ))}
         </div>
 
-        {/* Two-column main: SR summary + needing-action  |  Service Charge Collection */}
-        <div style={{display:'grid',gridTemplateColumns:'2fr 1fr',gap:18}}>
-          <div>
+        {/* Stacked single-column: each card spans the full page width */}
+        <div style={{display:'grid',gridTemplateColumns:'1fr',gap:18}}>
             {/* Service Request Summary card */}
             <div className="card">
               <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:6}}>
@@ -227,9 +226,7 @@ const PMCOverviewPage = ({ setPage }) => {
                 </table>
               )}
             </div>
-          </div>
 
-          <div>
             {/* Service Charge Collection panel */}
             <div className="card">
               <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:14}}>
@@ -273,7 +270,6 @@ const PMCOverviewPage = ({ setPage }) => {
                 </div>
               ))}
             </div>
-          </div>
         </div>
       </>)}
     </div>
