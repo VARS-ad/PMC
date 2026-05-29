@@ -413,7 +413,6 @@ const PMCReportsPage = () => {
     { id: 'serviceOps',    label: 'Service Ops' },
     { id: 'maintenanceCo', label: 'Maintenance Co.' },
     { id: 'visitors',      label: 'Visitors & Guards' },
-    { id: 'compliance',    label: 'Compliance' },
   ];
 
   // ============ Download Data datasets (per-section spreadsheets) ============
