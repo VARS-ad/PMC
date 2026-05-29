@@ -34,6 +34,10 @@ const PMCOverviewPage = ({ setPage }) => {
   // Clicking a row in Unit Payment Activity opens the same UnitDetailModal
   // used everywhere else (full invoice list, resident, docs slots).
   const [openedUnit, setOpenedUnit] = useState(null); // { unit, building }
+  // Clicking an Asset card in 'Your Portfolio' opens this modal — a
+  // landlord-focused deep-dive on the building (chart + investment +
+  // tenant roster). Different lens from the operational UnitDetailModal.
+  const [openedAsset, setOpenedAsset] = useState(null);
   // Selected period for the financial KPIs and Operating Income card.
   // Lives in AppContext so navigating to Service Charges keeps the choice.
   const monthsBack = ({ '1m': 1, '2m': 2, '3m': 3, '12m': 12 })[timeRange] || 1;
@@ -610,11 +614,11 @@ const PMCOverviewPage = ({ setPage }) => {
                         if (c.expiring_leases_count > 0) issues.push({ label: c.expiring_leases_count + ' lease end', color:'#7a5a1f' });
                         return (
                           <div key={c.id}
-                            onClick={() => setPage && setPage('properties')}
-                            style={{background:'#fff',border:'1px solid var(--border-light)',borderRadius:10,padding:'16px 18px',cursor: setPage ? 'pointer' : 'default',transition:'box-shadow 0.15s, transform 0.15s',display:'flex',flexDirection:'column',gap:12}}
+                            onClick={() => setOpenedAsset(c)}
+                            style={{background:'#fff',border:'1px solid var(--border-light)',borderRadius:10,padding:'16px 18px',cursor:'pointer',transition:'box-shadow 0.15s, transform 0.15s',display:'flex',flexDirection:'column',gap:12}}
                             onMouseEnter={e => { e.currentTarget.style.boxShadow = '0 4px 14px rgba(19,31,35,0.06)'; e.currentTarget.style.transform = 'translateY(-1px)'; }}
                             onMouseLeave={e => { e.currentTarget.style.boxShadow = 'none'; e.currentTarget.style.transform = 'none'; }}
-                            title="Open Assets page for the deeper view">
+                            title="Open landlord deep-dive for this asset">
                             {/* Header line */}
                             <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',gap:10}}>
                               <div style={{minWidth:0,flex:1}}>
@@ -802,6 +806,12 @@ const PMCOverviewPage = ({ setPage }) => {
           unit={openedUnit.unit}
           building={openedUnit.building}
           onClose={() => setOpenedUnit(null)}
+        />
+      )}
+      {openedAsset && (
+        <AssetDetailModal
+          asset={openedAsset}
+          onClose={() => setOpenedAsset(null)}
         />
       )}
     </div>
