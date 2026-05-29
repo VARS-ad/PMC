@@ -267,17 +267,30 @@ const PMCPropertiesPage = ({ setPage }) => {
     (async () => {
       if (!supabaseClient) { setError('Supabase not initialized'); return; }
       try {
-        const [{ data: bs }, { data: units }, { data: ras }, { data: invoices }, { data: srs }, { data: profiles }] = await Promise.all([
+        const [{ data: bs }, { data: units }, { data: ras }, { data: invoices }, { data: srs }, { data: profiles }, { data: photoAtts }] = await Promise.all([
           supabaseClient.from('buildings').select('id,name,address,notes,property_type,created_at,purchase_price,current_value,acquired_on').order('name'),
           supabaseClient.from('units').select('id,building_id,floor,unit_number'),
           supabaseClient.from('resident_assignments').select('profile_id,unit_id,tenure,monthly_payment_aed,lease_start,lease_end,ownership_start'),
           supabaseClient.from('invoices').select('id,invoice_number,description,amount_aed,due_date,status,source_type,unit_id,resident_profile_id,created_at'),
           supabaseClient.from('service_requests').select('id,category,description,status,priority,created_at,unit_id,resident_profile_id,preferred_date'),
           supabaseClient.from('profiles').select('id,full_name,phone'),
+          // First photo per unit so each building card can pick a real
+          // hero image (falls back to Unsplash stock when nothing's been
+          // uploaded for any of the building's units).
+          supabaseClient.from('unit_attachments').select('unit_id,storage_path,created_at').eq('kind', 'photo').order('created_at', { ascending: true }),
         ]);
         if (!mounted) return;
         const profileMap = Object.fromEntries((profiles || []).map(p => [p.id, p]));
         const filterB = selectedProperties.length > 0 ? selectedProperties : null;
+        // unit_id → building_id, used to bucket the per-unit photo
+        // attachments back onto their building so each card can show
+        // the first available hero shot.
+        const unitToBuilding = Object.fromEntries((units || []).map(u => [u.id, u.building_id]));
+        const photoByBuilding = {};
+        for (const a of (photoAtts || [])) {
+          const bId = unitToBuilding[a.unit_id];
+          if (bId && !photoByBuilding[bId]) photoByBuilding[bId] = a.storage_path;
+        }
         const result = (bs || []).filter(b => !filterB || filterB.includes(b.id)).map(b => {
           const bUnits = (units || []).filter(u => u.building_id === b.id);
           const unitMap = Object.fromEntries(bUnits.map(u => [u.id, u]));
@@ -329,6 +342,7 @@ const PMCPropertiesPage = ({ setPage }) => {
             srs: bSRs,
             unitCount: bUnits.length, occupiedCount: occupied.length,
             monthlyRev, collected, pending, upcoming, future, openSRs, totalSRs: bSRs.length,
+            photo_path: photoByBuilding[b.id] || null,
           };
         });
         setBuildings(result);
@@ -469,13 +483,21 @@ const PMCPropertiesPage = ({ setPage }) => {
             const bExpiringLeases = (b.tenants || []).filter(t => t.lease_end && t.lease_end >= todayIso && t.lease_end <= cutoff60Iso).length;
             const bVacant = Math.max(0, b.unitCount - b.occupiedCount);
             const bUrgentSRs = (b.srs || []).filter(s => ['New','Acknowledged','In Progress'].includes(s.status) && ['High','Urgent'].includes(s.priority)).length;
+            // Each priority action carries an onAction so the row drills
+            // into the same modal the matching KPI tile would open.
+            const typeChip = ({ 'Residential':'#5a6b4f', 'Commercial':'#3E4C59', 'Villa':'#a07d3c', 'Commercial Land':'#61707D' })[b.property_type] || '#61707D';
             const attentionItems = [];
-            if (bOverdue > 0) attentionItems.push({ color:'#8b4a42', text: bOverdue + ' overdue tenant' + (bOverdue === 1 ? '' : 's') + ' · AED ' + Math.round(bOverdueTotal).toLocaleString() + ' at risk' });
-            if (bUrgentSRs > 0) attentionItems.push({ color:'#8b4a42', text: bUrgentSRs + ' high-priority service request' + (bUrgentSRs === 1 ? '' : 's') + ' open' });
-            if (bExpiringLeases > 0) attentionItems.push({ color:'#a07d3c', text: bExpiringLeases + ' lease' + (bExpiringLeases === 1 ? '' : 's') + ' expiring within 60 days' });
-            if (bVacant > 0) attentionItems.push({ color:'#a07d3c', text: bVacant + ' vacant unit' + (bVacant === 1 ? '' : 's') });
+            if (bOverdue > 0) attentionItems.push({ color:'#8b4a42', text: bOverdue + ' overdue tenant' + (bOverdue === 1 ? '' : 's') + ' · AED ' + Math.round(bOverdueTotal).toLocaleString() + ' at risk', onAction: () => setDrill({ building: b, view: 'pending' }) });
+            if (bUrgentSRs > 0) attentionItems.push({ color:'#8b4a42', text: bUrgentSRs + ' high-priority service request' + (bUrgentSRs === 1 ? '' : 's') + ' open', onAction: () => setDrill({ building: b, view: 'srs' }) });
+            if (bExpiringLeases > 0) attentionItems.push({ color:'#a07d3c', text: bExpiringLeases + ' lease' + (bExpiringLeases === 1 ? '' : 's') + ' expiring within 60 days', onAction: () => setDrill({ building: b, view: 'tenants' }) });
+            if (bVacant > 0) attentionItems.push({ color:'#a07d3c', text: bVacant + ' vacant unit' + (bVacant === 1 ? '' : 's'), onAction: open });
             return (
-              <div key={b.id} className="card" data-asset-id={b.id}>
+              <div key={b.id} className="card" data-asset-id={b.id} style={{padding:0,overflow:'hidden'}}>
+                {/* Hero photo strip — real upload → Unsplash stock → designed cover */}
+                <div onClick={open} style={{cursor:'pointer'}}>
+                  <AssetCardPhoto storagePath={b.photo_path} assetId={b.id} typeChipColor={typeChip} propertyType={b.property_type} name={b.name} height={160}/>
+                </div>
+                <div style={{padding:'18px 20px'}}>
                 <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:14}}>
                   <div style={{flex:1,minWidth:0,cursor:'pointer'}} onClick={open}>
                     <div style={{fontSize:20,fontWeight:500,color:'var(--text-dark)',letterSpacing:'-0.02em',lineHeight:1.15}}>{b.name}</div>
@@ -484,11 +506,18 @@ const PMCPropertiesPage = ({ setPage }) => {
                 </div>
                 {attentionItems.length > 0 && (
                   <div style={{background:'#fdf6e6', border:'1px solid #efe1be', borderRadius:8, padding:'10px 14px', marginBottom:14}}>
-                    <div style={{fontSize:10, letterSpacing:'0.08em', textTransform:'uppercase', color:'#7a5a1f', fontWeight:700, marginBottom:6}}>Needs your attention</div>
+                    <div style={{fontSize:10, letterSpacing:'0.08em', textTransform:'uppercase', color:'#7a5a1f', fontWeight:700, marginBottom:6}}>Top Priority Actions</div>
                     {attentionItems.map((it, idx) => (
-                      <div key={idx} style={{display:'flex', alignItems:'center', gap:8, fontSize:12, color:'var(--text-dark)', padding:'3px 0'}}>
+                      <div key={idx}
+                        onClick={(e) => { e.stopPropagation(); if (it.onAction) it.onAction(); }}
+                        style={{display:'flex', alignItems:'center', gap:8, fontSize:12, color:'var(--text-dark)', padding:'5px 0', cursor: it.onAction ? 'pointer' : 'default', borderRadius:4, transition:'background 0.12s'}}
+                        onMouseEnter={e => { if (it.onAction) e.currentTarget.style.background = 'rgba(122,90,31,0.08)'; }}
+                        onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}>
                         <span style={{width:6, height:6, borderRadius:3, background:it.color, flexShrink:0}}/>
-                        <span>{it.text}</span>
+                        <span style={{flex:1}}>{it.text}</span>
+                        {it.onAction && (
+                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#8a98a2" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+                        )}
                       </div>
                     ))}
                   </div>
@@ -517,6 +546,7 @@ const PMCPropertiesPage = ({ setPage }) => {
                   <PMCStat label="Future"       value={'AED ' + Math.round(b.future).toLocaleString()}    onClick={() => setDrill({ building: b, view: 'future' })}    color={b.future   > 0 ? '#61707D' : null} hint="Due more than 30 days out"/>
                   <PMCStat label="Open SRs"     value={b.openSRs + ' open · ' + b.totalSRs + ' total'}    onClick={() => setDrill({ building: b, view: 'srs' })}       hint="Service requests"/>
                 </div>
+                </div>{/* padded body */}
               </div>
             );
           };

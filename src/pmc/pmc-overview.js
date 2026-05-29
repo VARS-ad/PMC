@@ -27,11 +27,47 @@ const PMCStat = ({ label, value, color, onClick, hint }) => (
   </div>
 );
 
+// Stock building photos per property type. Picked deterministically from
+// the building id so each asset always lands the same photo, but
+// different assets of the same type don't repeat. URLs are Unsplash
+// CDN-hosted, free for commercial demo use.
+const STOCK_BUILDING_PHOTOS = {
+  'Residential': [
+    'https://images.unsplash.com/photo-1545324418-cc1a3fa10c00?w=1000&auto=format&fit=crop&q=70',
+    'https://images.unsplash.com/photo-1512453979798-5ea266f8880c?w=1000&auto=format&fit=crop&q=70',
+    'https://images.unsplash.com/photo-1582407947304-fd86f028f716?w=1000&auto=format&fit=crop&q=70',
+    'https://images.unsplash.com/photo-1486325212027-8081e485255e?w=1000&auto=format&fit=crop&q=70',
+  ],
+  'Commercial': [
+    'https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?w=1000&auto=format&fit=crop&q=70',
+    'https://images.unsplash.com/photo-1577415124269-fc1140a69e91?w=1000&auto=format&fit=crop&q=70',
+    'https://images.unsplash.com/photo-1497366754035-f200968a6e72?w=1000&auto=format&fit=crop&q=70',
+    'https://images.unsplash.com/photo-1554435493-93422e8220c8?w=1000&auto=format&fit=crop&q=70',
+  ],
+  'Villa': [
+    'https://images.unsplash.com/photo-1613490493576-7fde63acd811?w=1000&auto=format&fit=crop&q=70',
+    'https://images.unsplash.com/photo-1568605114967-8130f3a36994?w=1000&auto=format&fit=crop&q=70',
+    'https://images.unsplash.com/photo-1564013799919-ab600027ffc6?w=1000&auto=format&fit=crop&q=70',
+    'https://images.unsplash.com/photo-1600596542815-ffad4c1539a9?w=1000&auto=format&fit=crop&q=70',
+  ],
+  'Commercial Land': [
+    'https://images.unsplash.com/photo-1581094288338-2314dddb7ece?w=1000&auto=format&fit=crop&q=70',
+    'https://images.unsplash.com/photo-1565008447742-97f6f38c985c?w=1000&auto=format&fit=crop&q=70',
+    'https://images.unsplash.com/photo-1581090700227-1e37b190418e?w=1000&auto=format&fit=crop&q=70',
+    'https://images.unsplash.com/photo-1587293852726-70cdb56c2866?w=1000&auto=format&fit=crop&q=70',
+  ],
+};
+const pickStockPhoto = (assetId, propertyType) => {
+  const pool = STOCK_BUILDING_PHOTOS[propertyType] || STOCK_BUILDING_PHOTOS['Residential'];
+  const idx = Math.abs((assetId || '').split('').reduce((a, c) => a + c.charCodeAt(0), 0)) % pool.length;
+  return pool[idx];
+};
+
 // Small per-card photo strip. Lazy-signs a 1h URL the moment the card
-// renders; when the asset has no photo we draw a designed cover (warm
-// sand gradient, diagonal stripes, VARS slate badge, asset initials)
-// so every card looks intentional instead of like a placeholder.
-const AssetCardPhoto = ({ storagePath, assetId, typeChipColor, propertyType, name }) => {
+// renders; when the asset has no uploaded photo we fall back to a
+// curated Unsplash stock photo chosen by property type (see
+// STOCK_BUILDING_PHOTOS above) so every card looks like a real photo.
+const AssetCardPhoto = ({ storagePath, assetId, typeChipColor, propertyType, name, height = 120 }) => {
   const [url, setUrl] = useState(null);
   useEffect(() => {
     let mounted = true;
@@ -41,10 +77,16 @@ const AssetCardPhoto = ({ storagePath, assetId, typeChipColor, propertyType, nam
     });
     return () => { mounted = false; };
   }, [storagePath]);
-  if (url) {
+  // 1st pick: real uploaded photo (signed URL from Supabase storage)
+  // 2nd pick: a curated Unsplash stock photo by property type — looks
+  //            like an actual building rather than a placeholder
+  // 3rd pick: the designed initials cover (kept as defensive fallback
+  //            if Unsplash is unreachable)
+  const effectiveUrl = url || pickStockPhoto(assetId, propertyType);
+  if (effectiveUrl) {
     return (
-      <div style={{position:'relative',height:120,background:'url(' + url + ') center/cover no-repeat',borderBottom:'1px solid var(--border-light)'}}>
-        <div style={{position:'absolute',inset:0,background:'linear-gradient(to bottom, transparent 50%, rgba(19,31,35,0.18) 100%)'}}/>
+      <div style={{position:'relative',height,background:'url(' + effectiveUrl + ') center/cover no-repeat',borderBottom:'1px solid var(--border-light)'}}>
+        <div style={{position:'absolute',inset:0,background:'linear-gradient(to bottom, transparent 50%, rgba(19,31,35,0.30) 100%)'}}/>
         <span style={{position:'absolute',bottom:10,left:10,fontSize:9,letterSpacing:'0.05em',textTransform:'uppercase',color:'#fff',background:typeChipColor,padding:'3px 8px',borderRadius:3,fontWeight:600,whiteSpace:'nowrap'}}>{propertyType}</span>
       </div>
     );
@@ -64,7 +106,7 @@ const AssetCardPhoto = ({ storagePath, assetId, typeChipColor, propertyType, nam
   const stripes = encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="80" height="80"><path d="M-20 80 L80 -20 M0 80 L80 0 M20 80 L80 20" stroke="rgba(62,76,89,0.06)" stroke-width="14"/></svg>');
   const bg = 'linear-gradient(135deg, hsl(' + hue + ', 35%, 80%) 0%, hsl(' + ((hue + 25) % 360) + ', 32%, 58%) 100%), url("data:image/svg+xml;utf8,' + stripes + '")';
   return (
-    <div style={{position:'relative',height:120,background:bg,backgroundBlendMode:'multiply',borderBottom:'1px solid var(--border-light)',display:'flex',alignItems:'center',justifyContent:'center',overflow:'hidden'}}>
+    <div style={{position:'relative',height,background:bg,backgroundBlendMode:'multiply',borderBottom:'1px solid var(--border-light)',display:'flex',alignItems:'center',justifyContent:'center',overflow:'hidden'}}>
       {/* Slate VARS badge top-left */}
       <span style={{position:'absolute',top:10,left:10,fontSize:9,letterSpacing:'0.08em',textTransform:'uppercase',color:'#fff',background:'rgba(19,31,35,0.65)',padding:'3px 9px',borderRadius:3,fontWeight:700}}>VARS</span>
       {/* Big initials hugged by a soft outline */}
