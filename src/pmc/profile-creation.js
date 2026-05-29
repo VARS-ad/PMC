@@ -240,7 +240,7 @@ const PC_TEMPLATES = {
     ],
   },
   vendors: {
-    label: 'Vendors',
+    label: 'Maintenance Companies',
     headers: [
       'Company name','Service category','Contact person','Phone','Email','Address',
       'Contract start','Contract end','Contract value (AED)',
@@ -251,24 +251,20 @@ const PC_TEMPLATES = {
       ['Spark Electric Services','Electrical','Maryam Al Suwaidi','+971 55 444 5566','info@sparkelectric.ae','Al Reem Island, Abu Dhabi','2025-06-15','2026-06-14',18500,'7890123','987654321098765','Aljil Tower','Expiring Soon','Annual maintenance contract'],
       ['CrystalClean Co.','Cleaning','Aisha Al Marzouqi','+971 50 909 1212','ops@crystalclean.ae','Al Quoz, Dubai','2025-09-01','2026-08-31',24000,'5566778','455667788990011','Al Qurm View','Active','Daily cleaning of common areas'],
     ],
-    filename: 'vendors-template',
+    filename: 'maintenance-companies-template',
     rules: [
       'Company name and Service category are required.',
       'Service category must be one of: Plumbing, Electrical, HVAC, Cleaning, Security, Gardening, Pest Control, Lift Maintenance, General Handyman, Other.',
       'Status — Active, Expiring Soon, Expired, or Terminated. Defaults to Active when blank.',
       'Dates use ISO format YYYY-MM-DD.',
       'Buildings covered — comma-separated list of existing building names (e.g. "Aljil Tower, Al Qurm View"). Names that don\'t match an existing building are skipped silently.',
-      'Re-running the upload is safe: vendors are matched on Company name and skipped if already present.',
+      'Re-running the upload is safe: maintenance companies are matched on Company name and skipped if already present.',
       'After the metadata upload completes, an optional "Bulk attach documents" section appears where you can drag-drop multiple files at once.',
     ],
   },
-  contracts:        { label: 'Contracts',        singlePane: true },
-  documents:        { label: 'Documents',        singlePane: true },
+  documents:        { label: 'Document database', singlePane: true },
   reminderSettings: { label: 'Reminder Email',   singlePane: true },
   invoiceDocuments: { label: 'Invoice Docs',     singlePane: true },
-  amenities:        { label: 'Amenities',        readOnly: true },
-  maintenance:      { label: 'Maintenance',      readOnly: true },
-  payments:         { label: 'Payments',         readOnly: true },
 };
 
 function downloadAsXlsx(filename, headers, rows) {
@@ -350,13 +346,11 @@ const ProfileCreationPage = () => {
   const [authChecked, setAuthChecked] = useState(false);
   const [pmcSession, setPmcSession] = useState(null);
   const isReadOnly = !!(PC_TEMPLATES[section] && PC_TEMPLATES[section].readOnly);
-  // Contracts uses a single-pane custom UI (no Summary / Bulk / Manual sub-tabs).
+  // Documents / Reminder Email / Invoice Docs use single-pane custom UIs
+  // (no Summary / Bulk / Manual sub-tabs).
   const isSinglePane = !!(PC_TEMPLATES[section] && PC_TEMPLATES[section].singlePane);
-  // Vendors only has a Bulk upload sub-tab (no Summary / Manual — that lives
-  // on the dedicated Vendors page in the sidebar).
-  const vendorsOnly = section === 'vendors';
-  const effectiveInner = isReadOnly ? 'summary' : (vendorsOnly ? 'bulk' : inner);
-  const innerTabs = vendorsOnly ? ['bulk'] : ['summary','bulk','manual'];
+  const effectiveInner = isReadOnly ? 'summary' : inner;
+  const innerTabs = ['summary','bulk','manual'];
 
   useEffect(() => {
     if (!supabaseClient) { setAuthChecked(true); return; }
@@ -396,7 +390,7 @@ const ProfileCreationPage = () => {
       <div style={{display:'flex',gap:4,marginBottom:22,borderBottom:'1px solid var(--border-light)',overflowX:'auto'}}>
         {Object.entries(PC_TEMPLATES).map(([id, cfg]) => (
           <div key={id}
-            onClick={() => { setSection(id); setInner(id === 'vendors' ? 'bulk' : 'summary'); }}
+            onClick={() => { setSection(id); setInner('summary'); }}
             style={{padding:'12px 20px',cursor:'pointer',fontSize:14,fontWeight:section===id?500:400,color:section===id?'var(--text-dark)':'var(--text-secondary)',borderBottom: section===id ? '2px solid var(--bg-warm-dark)' : '2px solid transparent',marginBottom:-1,letterSpacing:'-0.01em',whiteSpace:'nowrap',transition:'color 0.15s'}}
             onMouseEnter={e => { if (section !== id) e.currentTarget.style.color = 'var(--text-dark)'; }}
             onMouseLeave={e => { if (section !== id) e.currentTarget.style.color = 'var(--text-secondary)'; }}
@@ -418,7 +412,6 @@ const ProfileCreationPage = () => {
         </div>
       )}
 
-      {isSinglePane && section === 'contracts'        && <ContractsSection/>}
       {isSinglePane && section === 'documents'        && <DocumentLibraryPage embedded/>}
       {isSinglePane && section === 'reminderSettings' && <ReminderSettingsSection/>}
       {isSinglePane && section === 'invoiceDocuments' && <InvoiceDocumentsBulkSection/>}
@@ -530,6 +523,17 @@ const PCSummary = ({ section }) => {
             shift: sa ? sa.shift : '—',
           };
         });
+      } else if (section === 'vendors') {
+        // Maintenance Companies summary — list of every vendor with the
+        // headline fields, sorted alphabetically. The full edit UI still
+        // lives on the dedicated Maintenance Companies page in the sidebar;
+        // this view is a quick at-a-glance check after a bulk upload.
+        const { data: vs, error: ve } = await supabaseClient
+          .from('vendors')
+          .select('id, name, service_category, status, contract_end, contact_person, phone, email')
+          .order('name');
+        if (ve) throw ve;
+        data = vs || [];
       } else if (section === 'amenities') {
         const { data: bookings, error: e1 } = await supabaseClient.from('amenity_bookings').select('id,amenity_name,booking_date,start_time,end_time,guests,status,building_id,unit_id,resident_profile_id,created_at').order('booking_date', { ascending: false });
         if (e1) throw e1;
@@ -608,7 +612,8 @@ const PCSummary = ({ section }) => {
   if (rows === null) return (<div className="card"><div style={{color:'var(--text-muted)',fontSize:13,padding:24}}>Loading…</div></div>);
   if (rows.length === 0) {
     const ro = !!(PC_TEMPLATES[section] && PC_TEMPLATES[section].readOnly);
-    return (<div className="card"><div style={{color:'var(--text-muted)',fontSize:13,padding:32,textAlign:'center'}}>No {section} yet.{ro ? '' : <> Use the <strong>Bulk upload</strong> tab to add some.</>}</div></div>);
+    const emptyLabel = section === 'vendors' ? 'maintenance companies' : section;
+    return (<div className="card"><div style={{color:'var(--text-muted)',fontSize:13,padding:32,textAlign:'center'}}>No {emptyLabel} yet.{ro ? '' : <> Use the <strong>Bulk upload</strong> tab to add some.</>}</div></div>);
   }
 
   if (section === 'buildings') {
@@ -873,90 +878,64 @@ const PCSummary = ({ section }) => {
     );
   }
 
-  if (section === 'amenities') {
+  if (section === 'vendors') {
+    // Maintenance Companies summary. Mirrors the Assets / Security idiom:
+    // count chip + Refresh on the top row, then a single card with a
+    // compact table. Detail editing still happens on the dedicated
+    // Maintenance Companies page (sidebar).
+    const statusBadge = (status) => {
+      const s = String(status || 'Active');
+      const colour = s === 'Active' ? { bg:'#e6efe1', fg:'#5a6b4f' }
+                   : s === 'Expiring Soon' ? { bg:'#fdf6e3', fg:'#a07d3c' }
+                   : s === 'Expired' ? { bg:'#fdf2f1', fg:'#8b4a42' }
+                   : s === 'Terminated' ? { bg:'#f0eded', fg:'#8b4a42' }
+                   : { bg:'#eef1f3', fg:'#3E4C59' };
+      return <span style={{display:'inline-block',padding:'2px 8px',borderRadius:10,background:colour.bg,color:colour.fg,fontSize:10,fontWeight:600,letterSpacing:'0.04em',textTransform:'uppercase'}}>{s}</span>;
+    };
+    const openVendorPage = () => {
+      // TODO: ProfileCreationPage doesn't receive setPage. We expose this
+      // global hop so the sidebar's Maintenance Companies entry can be the
+      // canonical destination — wire when app.js gains a navigation event.
+      try { window.alert('Open the "Maintenance Companies" page from the sidebar to edit this record.'); } catch (_) {}
+    };
     return (
       <div className="card">
-        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:12}}>
-          <div style={{fontSize:13,color:'var(--text-muted)'}}>{rows.length} booking{rows.length===1?'':'s'} · read-only</div>
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:12,gap:10,flexWrap:'wrap'}}>
+          <div style={{display:'flex',alignItems:'center',gap:10}}>
+            <span style={{display:'inline-block',padding:'4px 10px',borderRadius:10,background:'var(--bg-surface)',border:'1px solid var(--border-light)',fontSize:12,fontWeight:600,color:'var(--text-dark)'}}>
+              {rows.length} maintenance compan{rows.length === 1 ? 'y' : 'ies'}
+            </span>
+            <span style={{fontSize:12,color:'var(--text-muted)'}}>· sorted by name</span>
+          </div>
           <button className="btn btn-sm" onClick={reload}>Refresh</button>
         </div>
         <div className="data-table-scroll">
-        <table className="data-table">
-          <thead><tr><th>Amenity</th><th>Building</th><th>Unit</th><th>Resident</th><th>Date</th><th>Time</th><th>Status</th></tr></thead>
-          <tbody>
-            {rows.map(r => (
-              <tr key={r.id}>
-                <td style={{fontWeight:500}}>{r.amenity_name}</td>
-                <td>{r.building_name}</td>
-                <td>{r.unit_label}</td>
-                <td>{r.resident_name}</td>
-                <td>{r.booking_date}</td>
-                <td>{r.start_time ? (r.start_time + (r.end_time ? '–' + r.end_time : '')) : '—'}</td>
-                <td>{r.status}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-        </div>
-      </div>
-    );
-  }
-
-  if (section === 'maintenance') {
-    return (
-      <div className="card">
-        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:12}}>
-          <div style={{fontSize:13,color:'var(--text-muted)'}}>{rows.length} request{rows.length===1?'':'s'} · read-only</div>
-          <button className="btn btn-sm" onClick={reload}>Refresh</button>
-        </div>
-        <div className="data-table-scroll">
-        <table className="data-table">
-          <thead><tr><th>Category</th><th>Description</th><th>Building</th><th>Unit</th><th>Resident</th><th>Priority</th><th>Status</th><th>Created</th></tr></thead>
-          <tbody>
-            {rows.map(r => (
-              <tr key={r.id}>
-                <td style={{fontWeight:500}}>{r.category}</td>
-                <td style={{maxWidth:320,overflow:'hidden',textOverflow:'ellipsis'}} title={r.description}>{r.description}</td>
-                <td>{r.building_name}</td>
-                <td>{r.unit_label}</td>
-                <td>{r.resident_name}</td>
-                <td>{r.priority}</td>
-                <td>{r.status}</td>
-                <td>{r.created_at ? new Date(r.created_at).toLocaleDateString() : '—'}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-        </div>
-      </div>
-    );
-  }
-
-  if (section === 'payments') {
-    return (
-      <div className="card">
-        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:12}}>
-          <div style={{fontSize:13,color:'var(--text-muted)'}}>{rows.length} invoice{rows.length===1?'':'s'} · read-only</div>
-          <button className="btn btn-sm" onClick={reload}>Refresh</button>
-        </div>
-        <div className="data-table-scroll">
-        <table className="data-table">
-          <thead><tr><th>Invoice #</th><th>Description</th><th>Building</th><th>Unit</th><th>Resident</th><th style={{textAlign:'right'}}>Amount (AED)</th><th>Due</th><th>Status</th></tr></thead>
-          <tbody>
-            {rows.map(r => (
-              <tr key={r.id}>
-                <td style={{fontWeight:500}}>{r.invoice_number || '—'}</td>
-                <td style={{maxWidth:320,overflow:'hidden',textOverflow:'ellipsis'}} title={r.description}>{r.description}</td>
-                <td>{r.building_name}</td>
-                <td>{r.unit_label}</td>
-                <td>{r.resident_name}</td>
-                <td style={{textAlign:'right'}}>{Number(r.amount_aed).toLocaleString()}</td>
-                <td>{r.due_date || '—'}</td>
-                <td>{r.status}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+          <table className="data-table">
+            <thead><tr>
+              <th>Name</th>
+              <th>Category</th>
+              <th>Status</th>
+              <th>Contact</th>
+              <th>Phone</th>
+              <th>Contract end</th>
+              <th style={{textAlign:'right'}}>Open</th>
+            </tr></thead>
+            <tbody>
+              {rows.map(v => (
+                <tr key={v.id}>
+                  <td style={{fontWeight:500}}>{v.name}</td>
+                  <td>{v.service_category || '—'}</td>
+                  <td>{statusBadge(v.status)}</td>
+                  <td>{v.contact_person || '—'}</td>
+                  <td>{v.phone || '—'}</td>
+                  <td>{v.contract_end || '—'}</td>
+                  <td style={{textAlign:'right',whiteSpace:'nowrap'}}>
+                    <button onClick={openVendorPage} style={{padding:'4px 10px',fontSize:11,background:'#fff',border:'1px solid #D0D6D5',borderRadius:4,color:'var(--text-dark)',cursor:'pointer'}} title="Open the Maintenance Companies page from the sidebar">View →</button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       </div>
     );
