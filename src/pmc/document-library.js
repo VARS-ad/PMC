@@ -8,42 +8,61 @@
 
 const DocumentLibrary_BUCKET = 'unit-attachments';
 
-// ---- Client-side title-deed PDF -------------------------------------------
-// Generates a single-page A4 PDF that LOOKS like a UAE-style asset title
-// deed: header band, asset block, owner block, plot details, an issuing
-// authority footer, and a faint diagonal "DEMO" watermark so nobody
-// mistakes it for a real legal document.
-async function generateTitleDeedPdf({ building, units }) {
+// ---- Helpers shared by every PDF generator -------------------------------
+function _pdfBase() {
   const jsPDFCtor = (window.jspdf && window.jspdf.jsPDF) || window.jsPDF;
   if (!jsPDFCtor) throw new Error('PDF library not loaded');
   const doc = new jsPDFCtor({ unit: 'pt', format: 'a4' });
-  const W = doc.internal.pageSize.getWidth();
-  const H = doc.internal.pageSize.getHeight();
-
-  // Background sand band
+  return { doc, W: doc.internal.pageSize.getWidth(), H: doc.internal.pageSize.getHeight() };
+}
+function _drawHeaderBand(doc, W, title, subtitle) {
   doc.setFillColor(244, 238, 228); doc.rect(0, 0, W, 110, 'F');
   doc.setFillColor(62, 76, 89);    doc.rect(0, 90, W, 4, 'F');
-
-  // Title band text
   doc.setTextColor(19, 31, 35);
   doc.setFont('helvetica', 'bold'); doc.setFontSize(22);
-  doc.text('TITLE DEED', 48, 56);
+  doc.text(title, 48, 56);
   doc.setFont('helvetica', 'normal'); doc.setFontSize(10);
   doc.setTextColor(97, 112, 125);
-  doc.text('UAE Property Registry · Demo Issuance', 48, 76);
+  doc.text(subtitle, 48, 76);
+}
+function _drawWatermark(doc, W, H) {
+  doc.setTextColor(220, 220, 220);
+  doc.setFont('helvetica', 'bold'); doc.setFontSize(80);
+  doc.text('DEMO', W / 2 - 90, H / 2 + 30, { angle: 25 });
+}
+function _drawFooter(doc, W, H, lines) {
+  doc.setDrawColor(62, 76, 89);
+  doc.line(48, H - 96, W - 48, H - 96);
+  doc.setFont('helvetica', 'normal'); doc.setFontSize(9);
+  doc.setTextColor(97, 112, 125);
+  lines.forEach((line, i) => doc.text(line, 48, H - 76 + i * 14));
+  doc.setFont('helvetica', 'bold'); doc.setFontSize(11);
+  doc.setTextColor(19, 31, 35);
+  doc.text('Signature: __________________________', 48, H - 32);
+}
 
-  // Right-side metadata
+// ---- Client-side title-deed PDF (per UNIT) -------------------------------
+// One PDF per unit so each individual Q-101 / B-201 has its own deed showing
+// the asset block + the unit's own owner record. A diagonal "DEMO" watermark
+// makes it visually obvious this isn't a real legal document.
+async function generateTitleDeedPdf({ building, unit }) {
+  const { doc, W, H } = _pdfBase();
+  _drawHeaderBand(doc, W, 'TITLE DEED', 'UAE Property Registry · Demo Issuance');
+
+  // Right-side metadata (per unit)
   doc.setTextColor(19, 31, 35);
   doc.setFont('helvetica', 'bold'); doc.setFontSize(10);
   doc.text('Deed No.', W - 200, 46);
-  doc.text('Issued',   W - 200, 64);
-  doc.text('Folio',    W - 200, 82);
+  doc.text('Unit',     W - 200, 64);
+  doc.text('Issued',   W - 200, 82);
   doc.setFont('helvetica', 'normal');
-  doc.text('TD-' + (building.name || '').replace(/[^A-Z0-9]/gi, '').slice(0, 10).toUpperCase() + '-' + (new Date().getFullYear()), W - 140, 46);
-  doc.text(new Date().toISOString().slice(0, 10), W - 140, 64);
-  doc.text(String(Math.abs(((building.id || '').split('-')[0] || '').slice(0, 6) || '000000')), W - 140, 82);
+  const deedNo = 'TD-' + (building.name || '').replace(/[^A-Z0-9]/gi, '').slice(0, 8).toUpperCase()
+               + '-' + (unit.unit_number || '').replace(/[^A-Z0-9]/gi, '').toUpperCase();
+  doc.text(deedNo, W - 150, 46);
+  doc.text(String(unit.unit_number || '—'), W - 150, 64);
+  doc.text(new Date().toISOString().slice(0, 10), W - 150, 82);
 
-  // ----- Section: Asset -----
+  // ----- Section helpers -----
   let y = 150;
   const sectionTitle = (label) => {
     doc.setFont('helvetica', 'bold'); doc.setFontSize(9);
@@ -64,43 +83,213 @@ async function generateTitleDeedPdf({ building, units }) {
     y += 12 * wrapped.length + 6;
   };
 
+  // ----- Section: Asset -----
   sectionTitle('Asset');
-  row('Name',          building.name);
-  row('Type',          building.property_type);
-  row('Address',       building.address);
-  row('Plot area',     building.plot_area_sqft ? Number(building.plot_area_sqft).toLocaleString() + ' sqft' : null);
-  row('GLA',           building.gross_leasable_area_sqft ? Number(building.gross_leasable_area_sqft).toLocaleString() + ' sqft' : null);
-  row('Units / floors', (units && units.length ? units.length : (building.villa_count || '—')));
+  row('Building / Plot', building.name);
+  row('Type',            building.property_type);
+  row('Address',         building.address);
+  row('Plot area',       building.plot_area_sqft ? Number(building.plot_area_sqft).toLocaleString() + ' sqft' : null);
+  row('GLA',             building.gross_leasable_area_sqft ? Number(building.gross_leasable_area_sqft).toLocaleString() + ' sqft' : null);
 
-  // ----- Section: Registered Owner (use first non-empty owner_name across units) -----
-  const firstOwner = (units || []).find(u => u.owner_name);
-  if (firstOwner) {
+  // ----- Section: Unit -----
+  y += 8;
+  sectionTitle('Unit');
+  row('Unit number',    unit.unit_number);
+  row('Floor',          unit.floor != null ? unit.floor : null);
+
+  // ----- Section: Registered Owner (from THIS unit's owner_*) -----
+  if (unit.owner_name || unit.owner_phone || unit.owner_email) {
     y += 8;
     sectionTitle('Registered Owner');
-    row('Name',         firstOwner.owner_name);
-    row('Phone',        firstOwner.owner_phone);
-    row('Email',        firstOwner.owner_email);
-    row('Passport',     firstOwner.owner_passport_number);
-    row('Emirates ID',  firstOwner.owner_emirates_id);
-    row('Purchase date', firstOwner.purchase_date);
+    row('Name',          unit.owner_name);
+    row('Phone',         unit.owner_phone);
+    row('Email',         unit.owner_email);
+    row('Passport',      unit.owner_passport_number);
+    row('Emirates ID',   unit.owner_emirates_id);
+    row('Purchase date', unit.purchase_date);
   }
 
-  // ----- Footer -----
-  doc.setDrawColor(62, 76, 89);
-  doc.line(48, H - 96, W - 48, H - 96);
-  doc.setFont('helvetica', 'normal'); doc.setFontSize(9);
-  doc.setTextColor(97, 112, 125);
-  doc.text('Issued for: VARS Property Manager · Demo Workspace', 48, H - 76);
-  doc.text('This deed is generated for demonstration purposes and carries no legal weight.', 48, H - 60);
-  doc.setFont('helvetica', 'bold'); doc.setFontSize(11);
+  _drawFooter(doc, W, H, [
+    'Issued for: VARS Property Manager · Demo Workspace',
+    'This deed is generated for demonstration purposes and carries no legal weight.',
+  ]);
+  _drawWatermark(doc, W, H);
+  return doc.output('blob');
+}
+
+// ---- Client-side floor-plan PDF ------------------------------------------
+// One per UNIT. Draws a schematic top-down room layout that varies by
+// property_type — residential = bedrooms+living+kitchen+bath, commercial =
+// open floor + meeting + reception, villa = multi-zone, commercial-land =
+// plot outline + buildable envelope. Pure jsPDF vector drawing; no canvas.
+async function generateFloorPlanPdf({ building, unit }) {
+  const { doc, W, H } = _pdfBase();
+  _drawHeaderBand(doc, W, 'FLOOR PLAN', (building.name || '') + ' · Unit ' + (unit.unit_number || '—'));
+  // Right-side metadata
   doc.setTextColor(19, 31, 35);
-  doc.text('Signature: __________________________', 48, H - 32);
+  doc.setFont('helvetica', 'bold'); doc.setFontSize(10);
+  doc.text('Sheet',  W - 200, 46);
+  doc.text('Scale',  W - 200, 64);
+  doc.text('Issued', W - 200, 82);
+  doc.setFont('helvetica', 'normal');
+  doc.text('FP-' + (unit.unit_number || '').toUpperCase(), W - 150, 46);
+  doc.text('NTS · For Demo', W - 150, 64);
+  doc.text(new Date().toISOString().slice(0, 10), W - 150, 82);
 
-  // Watermark
-  doc.setTextColor(220, 220, 220);
-  doc.setFont('helvetica', 'bold'); doc.setFontSize(80);
-  doc.text('DEMO', W / 2 - 90, H / 2 + 30, { angle: 25 });
+  // ----- Drawing area -----
+  const planX = 56, planY = 150, planW = W - 112, planH = H - 230;
+  const propType = (building.property_type || 'Residential');
 
+  // Outer wall
+  doc.setDrawColor(62, 76, 89); doc.setLineWidth(2.5);
+  doc.rect(planX, planY, planW, planH);
+  doc.setLineWidth(1);
+
+  // Inner partitions + labels by type
+  doc.setFont('helvetica', 'bold'); doc.setFontSize(10);
+  doc.setTextColor(62, 76, 89);
+  const room = (x, y, w, h, label, sublabel) => {
+    doc.setDrawColor(150, 160, 168);
+    doc.rect(x, y, w, h);
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(11);
+    doc.setTextColor(19, 31, 35);
+    doc.text(label, x + 12, y + 24);
+    if (sublabel) {
+      doc.setFont('helvetica', 'normal'); doc.setFontSize(9);
+      doc.setTextColor(97, 112, 125);
+      doc.text(sublabel, x + 12, y + 40);
+    }
+  };
+
+  if (propType === 'Residential') {
+    // 4-zone layout: living + kitchen on top, two bedrooms below with bath strip
+    const midX = planX + planW * 0.6;
+    const midY = planY + planH * 0.5;
+    room(planX,  planY,  planW * 0.6, planH * 0.5, 'Living', '~22 m²');
+    room(midX,   planY,  planW * 0.4, planH * 0.5, 'Kitchen', '~10 m²');
+    room(planX,  midY,   planW * 0.45, planH * 0.5, 'Bedroom 1', '~14 m²');
+    room(planX + planW * 0.45, midY, planW * 0.35, planH * 0.5, 'Bedroom 2', '~12 m²');
+    room(planX + planW * 0.80, midY, planW * 0.20, planH * 0.5, 'Bath', '~5 m²');
+  } else if (propType === 'Commercial') {
+    // Open office + meeting room + pantry + reception
+    room(planX, planY, planW * 0.55, planH * 0.7, 'Open Workspace', '~110 m²');
+    room(planX + planW * 0.55, planY, planW * 0.45, planH * 0.35, 'Meeting Room', '~22 m²');
+    room(planX + planW * 0.55, planY + planH * 0.35, planW * 0.45, planH * 0.35, 'Pantry & Print', '~14 m²');
+    room(planX, planY + planH * 0.70, planW, planH * 0.30, 'Reception · Lobby', '~36 m²');
+  } else if (propType === 'Villa') {
+    // Ground floor (left) + Garden (right)
+    room(planX, planY, planW * 0.55, planH * 0.5, 'Living + Dining', '~38 m²');
+    room(planX, planY + planH * 0.5, planW * 0.35, planH * 0.5, 'Master Bedroom', '~24 m²');
+    room(planX + planW * 0.35, planY + planH * 0.5, planW * 0.20, planH * 0.5, 'Bath', '~8 m²');
+    room(planX + planW * 0.55, planY, planW * 0.45, planH, 'Garden + Pool', '~80 m²');
+  } else {
+    // Commercial Land — plot outline with sub-zones
+    room(planX, planY, planW * 0.5, planH * 0.5, 'Yard A', 'Storage');
+    room(planX + planW * 0.5, planY, planW * 0.5, planH * 0.5, 'Yard B', 'Logistics');
+    room(planX, planY + planH * 0.5, planW * 0.4, planH * 0.5, 'Office', 'Single-storey');
+    room(planX + planW * 0.4, planY + planH * 0.5, planW * 0.6, planH * 0.5, 'Open Lot', 'Buildable Area');
+  }
+
+  // N-arrow
+  doc.setDrawColor(62, 76, 89);
+  doc.setFont('helvetica', 'bold'); doc.setFontSize(9);
+  doc.setTextColor(62, 76, 89);
+  doc.text('N', W - 80, planY + 14);
+  doc.line(W - 76, planY + 18, W - 76, planY + 50);
+  doc.line(W - 76, planY + 18, W - 80, planY + 26);
+  doc.line(W - 76, planY + 18, W - 72, planY + 26);
+
+  _drawFooter(doc, W, H, [
+    'Schematic floor plan, dimensions are nominal and not to scale.',
+    'Generated by VARS Property Manager · Demo Workspace.',
+  ]);
+  _drawWatermark(doc, W, H);
+  return doc.output('blob');
+}
+
+// ---- Client-side tenancy / service agreement PDF -------------------------
+// One per UNIT, dropped under kind='other'. Uses the unit's tenant
+// (residential = resident_assignments; non-residential = units.tenant_*).
+async function generateAgreementPdf({ building, unit, tenant }) {
+  const { doc, W, H } = _pdfBase();
+  const isCommercial = building.property_type === 'Commercial' || building.property_type === 'Commercial Land';
+  const title = isCommercial ? 'LEASE AGREEMENT' : 'TENANCY CONTRACT';
+  _drawHeaderBand(doc, W, title, (building.name || '') + ' · Unit ' + (unit.unit_number || '—'));
+
+  // Right-side metadata
+  doc.setTextColor(19, 31, 35);
+  doc.setFont('helvetica', 'bold'); doc.setFontSize(10);
+  doc.text('Contract',  W - 200, 46);
+  doc.text('Effective', W - 200, 64);
+  doc.text('Expires',   W - 200, 82);
+  doc.setFont('helvetica', 'normal');
+  doc.text(String((tenant && tenant.contract_number) || 'CN-' + (unit.unit_number || '').toUpperCase()), W - 150, 46);
+  doc.text(String((tenant && tenant.lease_start) || '—'), W - 150, 64);
+  doc.text(String((tenant && tenant.lease_end) || '—'), W - 150, 82);
+
+  let y = 150;
+  const sectionTitle = (label) => {
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(9);
+    doc.setTextColor(97, 112, 125);
+    doc.text(label.toUpperCase(), 48, y);
+    doc.setDrawColor(230, 234, 233); doc.line(48, y + 6, W - 48, y + 6);
+    y += 24;
+  };
+  const row = (label, value) => {
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(10);
+    doc.setTextColor(97, 112, 125);
+    doc.text(label, 48, y);
+    doc.setTextColor(19, 31, 35);
+    doc.setFont('helvetica', 'bold');
+    const wrapped = doc.splitTextToSize(String(value == null || value === '' ? '—' : value), W - 220);
+    doc.text(wrapped, 220, y);
+    y += 12 * wrapped.length + 6;
+  };
+  const para = (text) => {
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(10);
+    doc.setTextColor(19, 31, 35);
+    const wrapped = doc.splitTextToSize(text, W - 96);
+    doc.text(wrapped, 48, y);
+    y += 12 * wrapped.length + 4;
+  };
+
+  sectionTitle('Premises');
+  row('Building / Plot', building.name);
+  row('Unit',            unit.unit_number + (unit.floor != null ? ' · Floor ' + unit.floor : ''));
+  row('Address',         building.address);
+
+  y += 6;
+  sectionTitle('Landlord');
+  row('Name',  unit.owner_name);
+  row('Phone', unit.owner_phone);
+  row('Email', unit.owner_email);
+
+  y += 6;
+  sectionTitle(isCommercial ? 'Tenant' : 'Resident');
+  row('Name',          (tenant && tenant.name) || '—');
+  row('Email',         (tenant && tenant.email) || '—');
+  row('Phone',         (tenant && tenant.phone) || '—');
+  row('Tenure',        (tenant && tenant.tenure) || '—');
+
+  y += 6;
+  sectionTitle('Financial Terms');
+  const monthly = tenant && tenant.monthly_payment_aed;
+  row('Monthly payment', monthly ? 'AED ' + Number(monthly).toLocaleString() : '—');
+  row('Annual rent',     monthly ? 'AED ' + (Number(monthly) * 12).toLocaleString() : '—');
+  if (tenant && tenant.cheques_per_year) row('Cheques per year', tenant.cheques_per_year);
+
+  y += 10;
+  sectionTitle('Clauses');
+  para('1. The Landlord agrees to let, and the Tenant agrees to take, the above-described premises for the term specified, subject to the terms and conditions of this agreement.');
+  para('2. The monthly payment shall be settled in advance via the cheque schedule above. Late payments incur a 1% per-month service charge calculated on the outstanding balance.');
+  para('3. The Tenant shall keep the premises in good order, allow scheduled maintenance access on 48-hour notice, and shall not sublet without the Landlord’s written consent.');
+  para('4. Either party may terminate this contract before the renewal anchor with 60 days’ written notice, subject to any early-termination fees set out in the schedule.');
+
+  _drawFooter(doc, W, H, [
+    'Demo template — actual tenancy contracts must be Ejari/Tawtheeq registered.',
+    'Generated by VARS Property Manager · Demo Workspace.',
+  ]);
+  _drawWatermark(doc, W, H);
   return doc.output('blob');
 }
 
@@ -201,78 +390,128 @@ const DocumentLibraryPage = () => {
   };
 
   // --- Bulk generators --------------------------------------------------
-  // Title deeds: one PDF per BUILDING attached to the building's first
-  // unit (the schema only has unit_attachments — we mirror the existing
-  // 'title_deed' kind so the unit modal also surfaces it). Skip a
-  // building if it already has at least one title deed across its units.
-  const bulkGenerateTitleDeeds = async () => {
-    if (!buildings.length) return;
-    setGenStatus({ phase: 'Generating title deeds…', current: 0, total: buildings.length });
-    let done = 0, skipped = 0, errors = 0;
-    for (const b of buildings) {
-      const buildingUnits = units.filter(u => u.building_id === b.id);
-      const target = buildingUnits[0];
-      if (!target) { skipped++; done++; setGenStatus({ phase: 'Generating title deeds…', current: done, total: buildings.length }); continue; }
-      const alreadyHas = attachments.some(a => a.kind === 'title_deed' && buildingUnits.some(u => u.id === a.unit_id));
-      if (alreadyHas) { skipped++; done++; setGenStatus({ phase: b.name + ' · already has a title deed (skipped)', current: done, total: buildings.length }); continue; }
-      try {
-        setGenStatus({ phase: 'Drawing ' + b.name + '…', current: done, total: buildings.length });
-        const blob = await generateTitleDeedPdf({ building: b, units: buildingUnits });
-        const safeBuilding = (b.name || 'asset').replace(/[^A-Za-z0-9._-]/g, '_');
-        const filename = 'title-deed-' + safeBuilding + '.pdf';
-        const path = target.id + '/title_deed-' + Date.now() + '-' + filename;
-        const { error: upErr } = await supabaseClient.storage.from(DocumentLibrary_BUCKET).upload(path, blob, { contentType: 'application/pdf', upsert: false });
-        if (upErr) throw upErr;
-        const { error: insErr } = await supabaseClient.from('unit_attachments').insert({
-          unit_id: target.id, kind: 'title_deed', filename, storage_path: path,
-        });
-        if (insErr) throw insErr;
-        done++;
-        setGenStatus({ phase: 'Uploaded title deed for ' + b.name, current: done, total: buildings.length });
-      } catch (e) {
-        errors++; done++;
-        console.error('Title deed for ' + b.name + ' failed:', e);
-      }
+  // Every generator iterates per UNIT, skips units that already have an
+  // attachment of that kind, batches to MAX_BATCH per click so a single
+  // run doesn't tie up the browser for too long, and reloads at the end.
+  const MAX_BATCH = 80;
+
+  // For Residential we hydrate a tenant block from resident_assignments
+  // + profiles so the tenancy contract has real names; for non-residential
+  // we read from units.tenant_*. Loaded lazily on first use.
+  const [residentByUnit, setResidentByUnit] = useState(null);
+  const loadResidentMap = async () => {
+    if (residentByUnit) return residentByUnit;
+    const unitIds = units.map(u => u.id);
+    if (unitIds.length === 0) { setResidentByUnit({}); return {}; }
+    const { data: assigns } = await supabaseClient
+      .from('resident_assignments')
+      .select('profile_id, unit_id, tenure, lease_start, lease_end, monthly_payment_aed, cheques_per_year, contract_number')
+      .in('unit_id', unitIds);
+    const profIds = Array.from(new Set((assigns || []).map(a => a.profile_id).filter(Boolean)));
+    let profileById = {};
+    if (profIds.length > 0) {
+      const { data: profs } = await supabaseClient.from('profiles').select('id, full_name, phone').in('id', profIds);
+      (profs || []).forEach(p => { profileById[p.id] = p; });
     }
-    setGenStatus({ phase: 'Done · ' + (done - skipped - errors) + ' generated, ' + skipped + ' skipped, ' + errors + ' failed', current: done, total: buildings.length });
-    setTimeout(() => setGenStatus(null), 2500);
-    await reload();
+    const map = {};
+    for (const a of (assigns || [])) {
+      const p = profileById[a.profile_id] || {};
+      map[a.unit_id] = {
+        name: p.full_name || '', phone: p.phone || '', email: '',
+        tenure: a.tenure || '', lease_start: a.lease_start || '', lease_end: a.lease_end || '',
+        monthly_payment_aed: a.monthly_payment_aed,
+        cheques_per_year: a.cheques_per_year, contract_number: a.contract_number || '',
+      };
+    }
+    setResidentByUnit(map);
+    return map;
   };
 
-  // Placeholder photos: one PNG per UNIT that doesn't already have a
-  // photo attachment. Capped at 60 generations per click so a large
-  // portfolio doesn't bury Supabase storage in a single batch — clicking
-  // again continues from the next batch.
-  const bulkGenerateUnitPhotos = async () => {
-    const todoUnits = units.filter(u => !attachments.some(a => a.kind === 'photo' && a.unit_id === u.id));
-    const batch = todoUnits.slice(0, 60);
-    if (batch.length === 0) { setGenStatus({ phase: 'Every unit already has a photo.', current: 0, total: 0 }); setTimeout(() => setGenStatus(null), 2000); return; }
-    setGenStatus({ phase: 'Generating placeholder photos…', current: 0, total: batch.length });
+  // Shared per-unit worker. `kind` is the unit_attachments.kind value,
+  // `mime` is the upload content-type, `makeBlob({building,unit,tenant})`
+  // returns a Blob, `filenameFor(unit)` returns the user-facing filename.
+  const _runPerUnit = async ({ label, kind, mime, makeBlob, filenameFor, needsTenant }) => {
+    const tenantMap = needsTenant ? await loadResidentMap() : null;
+    const todo = units.filter(u => !attachments.some(a => a.kind === kind && a.unit_id === u.id));
+    const batch = todo.slice(0, MAX_BATCH);
+    if (batch.length === 0) {
+      setGenStatus({ phase: 'Every unit already has a ' + label + '.', current: 0, total: 0 });
+      setTimeout(() => setGenStatus(null), 2000);
+      return;
+    }
+    setGenStatus({ phase: 'Generating ' + label + 's…', current: 0, total: batch.length });
     let done = 0, errors = 0;
     for (const u of batch) {
       const b = buildings.find(bb => bb.id === u.building_id);
       if (!b) { done++; continue; }
       try {
-        setGenStatus({ phase: 'Rendering ' + b.name + ' · ' + u.unit_number, current: done, total: batch.length });
-        const blob = await generateUnitPhotoBlob({ building: b, unit: u });
-        const filename = 'photo-' + (u.unit_number || u.id).replace(/[^A-Za-z0-9._-]/g, '_') + '.jpg';
-        const path = u.id + '/photo-' + Date.now() + '-' + filename;
-        const { error: upErr } = await supabaseClient.storage.from(DocumentLibrary_BUCKET).upload(path, blob, { contentType: 'image/jpeg', upsert: false });
+        setGenStatus({ phase: 'Rendering ' + label + ' · ' + b.name + ' · ' + (u.unit_number || ''), current: done, total: batch.length });
+        let tenant = null;
+        if (needsTenant) {
+          tenant = tenantMap[u.id] || (u.tenant_name ? {
+            name: u.tenant_name, email: u.tenant_email || '', phone: u.tenant_phone || '',
+            tenure: u.tenant_tenure || '', lease_start: u.tenant_lease_start, lease_end: u.tenant_lease_end,
+            monthly_payment_aed: u.tenant_monthly_payment_aed, contract_number: u.tenant_contract_number,
+          } : null);
+        }
+        const blob = await makeBlob({ building: b, unit: u, tenant });
+        const filename = filenameFor(u, b);
+        const path = u.id + '/' + kind + '-' + Date.now() + '-' + filename;
+        const { error: upErr } = await supabaseClient.storage.from(DocumentLibrary_BUCKET).upload(path, blob, { contentType: mime, upsert: false });
         if (upErr) throw upErr;
         const { error: insErr } = await supabaseClient.from('unit_attachments').insert({
-          unit_id: u.id, kind: 'photo', filename, storage_path: path,
+          unit_id: u.id, kind, filename, storage_path: path,
         });
         if (insErr) throw insErr;
         done++;
       } catch (e) {
         errors++; done++;
-        console.error('Photo for ' + u.unit_number + ' failed:', e);
+        console.error(label + ' for ' + u.unit_number + ' failed:', e);
       }
       setGenStatus({ phase: 'Uploaded ' + done + ' / ' + batch.length, current: done, total: batch.length });
     }
-    setGenStatus({ phase: 'Done · ' + (done - errors) + ' uploaded, ' + errors + ' failed' + (todoUnits.length > batch.length ? ' · ' + (todoUnits.length - batch.length) + ' more pending (click again)' : ''), current: done, total: batch.length });
+    const remaining = todo.length - batch.length;
+    setGenStatus({
+      phase: 'Done · ' + (done - errors) + ' uploaded, ' + errors + ' failed' + (remaining > 0 ? ' · ' + remaining + ' more pending (click again)' : ''),
+      current: done, total: batch.length,
+    });
     setTimeout(() => setGenStatus(null), 3500);
     await reload();
+  };
+
+  const safeUnitFilename = (u, b, suffix) =>
+    (b.name || 'asset').replace(/[^A-Za-z0-9._-]/g, '_') + '-' + (u.unit_number || u.id).toString().replace(/[^A-Za-z0-9._-]/g, '_') + '-' + suffix;
+
+  const bulkGenerateUnitPhotos = () => _runPerUnit({
+    label: 'photo', kind: 'photo', mime: 'image/jpeg', needsTenant: false,
+    makeBlob: ({ building, unit }) => generateUnitPhotoBlob({ building, unit }),
+    filenameFor: (u, b) => safeUnitFilename(u, b, 'photo.jpg'),
+  });
+  const bulkGenerateTitleDeeds = () => _runPerUnit({
+    label: 'title deed', kind: 'title_deed', mime: 'application/pdf', needsTenant: false,
+    makeBlob: ({ building, unit }) => generateTitleDeedPdf({ building, unit }),
+    filenameFor: (u, b) => safeUnitFilename(u, b, 'title-deed.pdf'),
+  });
+  const bulkGenerateFloorPlans = () => _runPerUnit({
+    label: 'floor plan', kind: 'layout', mime: 'application/pdf', needsTenant: false,
+    makeBlob: ({ building, unit }) => generateFloorPlanPdf({ building, unit }),
+    filenameFor: (u, b) => safeUnitFilename(u, b, 'floor-plan.pdf'),
+  });
+  const bulkGenerateAgreements = () => _runPerUnit({
+    label: 'tenancy contract', kind: 'other', mime: 'application/pdf', needsTenant: true,
+    makeBlob: ({ building, unit, tenant }) => generateAgreementPdf({ building, unit, tenant }),
+    filenameFor: (u, b) => safeUnitFilename(u, b, 'tenancy-contract.pdf'),
+  });
+
+  // One-click sweep: runs photo → title deed → floor plan → tenancy contract
+  // for every unit that's missing them. Each pass is rate-limited by
+  // MAX_BATCH, so a large portfolio may need a re-click — the UI status
+  // says how many more remain.
+  const bulkGenerateAllMissing = async () => {
+    await bulkGenerateUnitPhotos();
+    await bulkGenerateTitleDeeds();
+    await bulkGenerateFloorPlans();
+    await bulkGenerateAgreements();
   };
 
   if (loading) {
@@ -326,8 +565,11 @@ const DocumentLibraryPage = () => {
           <div style={{fontSize:13,color:'var(--text-muted)',marginTop:4}}>Every attachment in the system, grouped by asset. Generate title deeds and unit photos in bulk.</div>
         </div>
         <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
-          <button className="btn" onClick={bulkGenerateUnitPhotos} disabled={!!genStatus}>Generate placeholder photos</button>
-          <button className="btn btn-primary" onClick={bulkGenerateTitleDeeds} disabled={!!genStatus}>Generate title deeds</button>
+          <button className="btn" onClick={bulkGenerateUnitPhotos}  disabled={!!genStatus}>Photos</button>
+          <button className="btn" onClick={bulkGenerateTitleDeeds} disabled={!!genStatus}>Title deeds</button>
+          <button className="btn" onClick={bulkGenerateFloorPlans} disabled={!!genStatus}>Floor plans</button>
+          <button className="btn" onClick={bulkGenerateAgreements} disabled={!!genStatus}>Tenancy contracts</button>
+          <button className="btn btn-primary" onClick={bulkGenerateAllMissing} disabled={!!genStatus}>Generate everything missing</button>
         </div>
       </div>
 
