@@ -581,6 +581,7 @@ const PMCReportsPage = () => {
       <div className="page-header">
         <div>
           <h1>Reports</h1>
+          <div className="subtitle">Portfolio, financial &amp; operational insights for the selected period</div>
         </div>
         <div style={{display:'flex',gap:10,alignItems:'center',flexWrap:'wrap'}}>
           <TimeRangePicker/>
@@ -619,17 +620,32 @@ const PMCReportsPage = () => {
 
 // ==================== SECTION COMPONENTS ====================
 
-const _kpiCard = (label, value, color) => (
-  <div style={{padding:14,background:'var(--bg-surface)',borderRadius:8}}>
-    <div style={{fontSize:10,letterSpacing:'0.06em',textTransform:'uppercase',color:'var(--text-secondary)',marginBottom:4}}>{label}</div>
-    <div style={{fontSize:22,fontWeight:600,color:color||'var(--text-dark)'}}>{value}</div>
-  </div>
-);
+// Soft tint + border keyed off the semantic accent colour, so a tile reads
+// as its own block on a white card (the old white-on-white had no edge) and
+// the row carries a quiet band of colour instead of looking flat.
+const _KPI_TINT = {
+  '#5a6b4f': { bg:'#f2f6ef', bd:'#dce6d4' }, // green  · positive
+  '#8b4a42': { bg:'#fbf2f1', bd:'#f1dbd7' }, // maroon · overdue
+  '#a07d3c': { bg:'#fbf5ea', bd:'#ece0c6' }, // tan    · upcoming
+  '#61707D': { bg:'#eff2f3', bd:'#dde4e6' }, // slate  · neutral-stat
+};
+const _kpiCard = (label, value, color) => {
+  const accent = color || 'var(--bg-warm-dark)';                 // slate-deep default
+  const t = _KPI_TINT[color] || { bg:'#f6f1ea', bd:'#e9e0d2' };  // warm neutral default
+  return (
+    <div style={{position:'relative',padding:'15px 16px 15px 18px',background:t.bg,border:'1px solid '+t.bd,borderRadius:8,overflow:'hidden'}}>
+      {/* colour spine — the pop of colour + a clear left edge */}
+      <div style={{position:'absolute',left:0,top:0,bottom:0,width:4,background:accent}}/>
+      <div style={{fontSize:10,letterSpacing:'0.07em',textTransform:'uppercase',color:'var(--text-secondary)',marginBottom:6,fontWeight:600}}>{label}</div>
+      <div style={{fontSize:24,fontWeight:600,letterSpacing:'-0.015em',color:color||'var(--text-dark)',lineHeight:1}}>{value}</div>
+    </div>
+  );
+};
 
 const PortfolioReports = ({ stats, fmt, fmtShort }) => (
   <div>
     <div className="card">
-      <div style={{fontSize:13,fontWeight:600,marginBottom:14}}>Portfolio KPIs</div>
+      <div style={{fontSize:14,fontWeight:700,letterSpacing:'-0.01em',color:'var(--text-dark)',marginBottom:18,paddingBottom:12,borderBottom:'1px solid var(--border-light)'}}>Portfolio KPIs</div>
       <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit, minmax(150px, 1fr))',gap:14}}>
         {_kpiCard('Total Assets', stats.buildings.length)}
         {_kpiCard('Total Units', stats.totalUnits)}
@@ -640,7 +656,7 @@ const PortfolioReports = ({ stats, fmt, fmtShort }) => (
     </div>
 
     <div className="card">
-      <div style={{fontSize:13,fontWeight:600,marginBottom:14}}>Assets by Type</div>
+      <div style={{fontSize:14,fontWeight:700,letterSpacing:'-0.01em',color:'var(--text-dark)',marginBottom:18,paddingBottom:12,borderBottom:'1px solid var(--border-light)'}}>Assets by Type</div>
       {Object.keys(stats.assetsByType).length === 0 ? (
         <div style={{color:'var(--text-muted)',fontSize:13,padding:20}}>No assets in scope.</div>
       ) : (
@@ -651,7 +667,7 @@ const PortfolioReports = ({ stats, fmt, fmtShort }) => (
     </div>
 
     <div className="card">
-      <div style={{fontSize:13,fontWeight:600,marginBottom:14}}>Occupancy Mix</div>
+      <div style={{fontSize:14,fontWeight:700,letterSpacing:'-0.01em',color:'var(--text-dark)',marginBottom:18,paddingBottom:12,borderBottom:'1px solid var(--border-light)'}}>Occupancy Mix</div>
       <div style={{display:'grid',gridTemplateColumns:'1fr 2fr',gap:18,alignItems:'center'}}>
         <ChartCanvas height={220} config={{
           type: 'doughnut',
@@ -668,7 +684,7 @@ const PortfolioReports = ({ stats, fmt, fmtShort }) => (
     </div>
 
     <div className="card">
-      <div style={{fontSize:13,fontWeight:600,marginBottom:14}}>Top Vacant Units</div>
+      <div style={{fontSize:14,fontWeight:700,letterSpacing:'-0.01em',color:'var(--text-dark)',marginBottom:18,paddingBottom:12,borderBottom:'1px solid var(--border-light)'}}>Top Vacant Units</div>
       {stats.vacancyList.length === 0 ? (
         <div style={{color:'var(--text-muted)',fontSize:13,padding:20}}>Fully occupied — no vacant units.</div>
       ) : (
@@ -694,7 +710,7 @@ const PortfolioReports = ({ stats, fmt, fmtShort }) => (
 const FinancialReports = ({ stats, fmt, fmtShort }) => (
   <div>
     <div className="card">
-      <div style={{fontSize:13,fontWeight:600,marginBottom:14}}>Financial KPIs · {stats.periodLabel}</div>
+      <div style={{fontSize:14,fontWeight:700,letterSpacing:'-0.01em',color:'var(--text-dark)',marginBottom:18,paddingBottom:12,borderBottom:'1px solid var(--border-light)'}}>Financial KPIs · {stats.periodLabel}</div>
       <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit, minmax(150px, 1fr))',gap:14}}>
         {_kpiCard('Total Billed', fmtShort(stats.totalInvoiced))}
         {_kpiCard('Collected', fmtShort(stats.collected), '#5a6b4f')}
@@ -705,7 +721,7 @@ const FinancialReports = ({ stats, fmt, fmtShort }) => (
     </div>
 
     <div className="card">
-      <div style={{fontSize:13,fontWeight:600,marginBottom:14}}>Revenue by Asset Type</div>
+      <div style={{fontSize:14,fontWeight:700,letterSpacing:'-0.01em',color:'var(--text-dark)',marginBottom:18,paddingBottom:12,borderBottom:'1px solid var(--border-light)'}}>Revenue by Asset Type</div>
       {Object.keys(stats.revByType).length === 0 ? (
         <div style={{color:'var(--text-muted)',fontSize:13,padding:20}}>No billed revenue in this period.</div>
       ) : (
@@ -718,7 +734,7 @@ const FinancialReports = ({ stats, fmt, fmtShort }) => (
     </div>
 
     <div className="card">
-      <div style={{fontSize:13,fontWeight:600,marginBottom:14}}>Collection Trend — Last 12 Months</div>
+      <div style={{fontSize:14,fontWeight:700,letterSpacing:'-0.01em',color:'var(--text-dark)',marginBottom:18,paddingBottom:12,borderBottom:'1px solid var(--border-light)'}}>Collection Trend — Last 12 Months</div>
       <ChartCanvas height={280} config={{
         type: 'bar',
         data: { labels: stats.trendLabels, datasets: [
@@ -730,7 +746,7 @@ const FinancialReports = ({ stats, fmt, fmtShort }) => (
     </div>
 
     <div className="card">
-      <div style={{fontSize:13,fontWeight:600,marginBottom:14}}>Top Contributors</div>
+      <div style={{fontSize:14,fontWeight:700,letterSpacing:'-0.01em',color:'var(--text-dark)',marginBottom:18,paddingBottom:12,borderBottom:'1px solid var(--border-light)'}}>Top Contributors</div>
       {stats.topContributors.length === 0 ? (
         <div style={{color:'var(--text-muted)',fontSize:13,padding:20}}>No collected revenue yet.</div>
       ) : (
@@ -752,7 +768,7 @@ const FinancialReports = ({ stats, fmt, fmtShort }) => (
     </div>
 
     <div className="card">
-      <div style={{fontSize:13,fontWeight:600,marginBottom:14}}>Outstanding Invoices</div>
+      <div style={{fontSize:14,fontWeight:700,letterSpacing:'-0.01em',color:'var(--text-dark)',marginBottom:18,paddingBottom:12,borderBottom:'1px solid var(--border-light)'}}>Outstanding Invoices</div>
       {stats.outstandingInvoices.length === 0 ? (
         <div style={{color:'var(--text-muted)',fontSize:13,padding:20}}>No outstanding invoices.</div>
       ) : (
@@ -780,7 +796,7 @@ const FinancialReports = ({ stats, fmt, fmtShort }) => (
     </div>
 
     <div className="card">
-      <div style={{fontSize:13,fontWeight:600,marginBottom:14}}>Future Revenue Projection (12 mo)</div>
+      <div style={{fontSize:14,fontWeight:700,letterSpacing:'-0.01em',color:'var(--text-dark)',marginBottom:18,paddingBottom:12,borderBottom:'1px solid var(--border-light)'}}>Future Revenue Projection (12 mo)</div>
       <ChartCanvas height={240} config={{
         type: 'bar',
         data: { labels: stats.futureLabels, datasets: [{ label: 'Projected AED', data: stats.futureRevenue, backgroundColor: '#a07d3c' }] },
@@ -794,7 +810,7 @@ const FinancialReports = ({ stats, fmt, fmtShort }) => (
 const ResidentsReports = ({ stats, fmt }) => (
   <div>
     <div className="card">
-      <div style={{fontSize:13,fontWeight:600,marginBottom:14}}>Resident KPIs</div>
+      <div style={{fontSize:14,fontWeight:700,letterSpacing:'-0.01em',color:'var(--text-dark)',marginBottom:18,paddingBottom:12,borderBottom:'1px solid var(--border-light)'}}>Resident KPIs</div>
       <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit, minmax(150px, 1fr))',gap:14}}>
         {_kpiCard('Active Tenants', stats.activeTenants.length)}
         {_kpiCard('Move-Ins (period)', stats.moveIns, '#5a6b4f')}
@@ -806,7 +822,7 @@ const ResidentsReports = ({ stats, fmt }) => (
     </div>
 
     <div className="card">
-      <div style={{fontSize:13,fontWeight:600,marginBottom:14}}>Active Tenants</div>
+      <div style={{fontSize:14,fontWeight:700,letterSpacing:'-0.01em',color:'var(--text-dark)',marginBottom:18,paddingBottom:12,borderBottom:'1px solid var(--border-light)'}}>Active Tenants</div>
       {stats.activeTenants.length === 0 ? (
         <div style={{color:'var(--text-muted)',fontSize:13,padding:20}}>No active assignments.</div>
       ) : (
@@ -840,7 +856,7 @@ const ResidentsReports = ({ stats, fmt }) => (
     </div>
 
     <div className="card">
-      <div style={{fontSize:13,fontWeight:600,marginBottom:14}}>Leases Expiring in 60 Days</div>
+      <div style={{fontSize:14,fontWeight:700,letterSpacing:'-0.01em',color:'var(--text-dark)',marginBottom:18,paddingBottom:12,borderBottom:'1px solid var(--border-light)'}}>Leases Expiring in 60 Days</div>
       {stats.leasesExpiring60.length === 0 ? (
         <div style={{color:'var(--text-muted)',fontSize:13,padding:20}}>No leases expiring in the next 60 days.</div>
       ) : (
@@ -866,7 +882,7 @@ const ResidentsReports = ({ stats, fmt }) => (
     </div>
 
     <div className="card">
-      <div style={{fontSize:13,fontWeight:600,marginBottom:14}}>Top Arrears</div>
+      <div style={{fontSize:14,fontWeight:700,letterSpacing:'-0.01em',color:'var(--text-dark)',marginBottom:18,paddingBottom:12,borderBottom:'1px solid var(--border-light)'}}>Top Arrears</div>
       {stats.topArrears.length === 0 ? (
         <div style={{color:'var(--text-muted)',fontSize:13,padding:20}}>No outstanding balances.</div>
       ) : (
@@ -907,7 +923,7 @@ const ServiceOpsReports = ({ stats }) => {
   return (
     <div>
       <div className="card">
-        <div style={{fontSize:13,fontWeight:600,marginBottom:14}}>Service Op KPIs · {stats.periodLabel}</div>
+        <div style={{fontSize:14,fontWeight:700,letterSpacing:'-0.01em',color:'var(--text-dark)',marginBottom:18,paddingBottom:12,borderBottom:'1px solid var(--border-light)'}}>Service Op KPIs · {stats.periodLabel}</div>
         <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit, minmax(150px, 1fr))',gap:14}}>
           {_kpiCard('Total SRs', stats.totalSRs)}
           {_kpiCard('Open', stats.openSRs, '#a07d3c')}
@@ -919,7 +935,7 @@ const ServiceOpsReports = ({ stats }) => {
       </div>
 
       <div className="card">
-        <div style={{fontSize:13,fontWeight:600,marginBottom:14}}>SR Funnel — By Status</div>
+        <div style={{fontSize:14,fontWeight:700,letterSpacing:'-0.01em',color:'var(--text-dark)',marginBottom:18,paddingBottom:12,borderBottom:'1px solid var(--border-light)'}}>SR Funnel — By Status</div>
         <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit, minmax(120px, 1fr))',gap:10}}>
           {['New','Acknowledged','In Progress','Done','Closed','Rejected'].map((status, i) => {
             const colors = ['#3E4C59','#61707D','#a07d3c','#5a6b4f','#61707D','#8b4a42'];
@@ -929,7 +945,7 @@ const ServiceOpsReports = ({ stats }) => {
       </div>
 
       <div className="card">
-        <div style={{fontSize:13,fontWeight:600,marginBottom:14}}>By Priority</div>
+        <div style={{fontSize:14,fontWeight:700,letterSpacing:'-0.01em',color:'var(--text-dark)',marginBottom:18,paddingBottom:12,borderBottom:'1px solid var(--border-light)'}}>By Priority</div>
         <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit, minmax(120px, 1fr))',gap:10}}>
           {['Urgent','High','Normal','Low'].map((p, i) => {
             const colors = ['#8b4a42','#a07d3c','#3E4C59','#61707D'];
@@ -939,7 +955,7 @@ const ServiceOpsReports = ({ stats }) => {
       </div>
 
       <div className="card">
-        <div style={{fontSize:13,fontWeight:600,marginBottom:14}}>By Category</div>
+        <div style={{fontSize:14,fontWeight:700,letterSpacing:'-0.01em',color:'var(--text-dark)',marginBottom:18,paddingBottom:12,borderBottom:'1px solid var(--border-light)'}}>By Category</div>
         {Object.keys(stats.srByCategory).length === 0 ? (
           <div style={{color:'var(--text-muted)',fontSize:13,padding:20}}>No service requests in period.</div>
         ) : Object.entries(stats.srByCategory).sort((a,b)=>b[1]-a[1]).map(([cat, n]) => {
@@ -959,7 +975,7 @@ const ServiceOpsReports = ({ stats }) => {
       </div>
 
       <div className="card">
-        <div style={{fontSize:13,fontWeight:600,marginBottom:14}}>Urgent Open Tickets</div>
+        <div style={{fontSize:14,fontWeight:700,letterSpacing:'-0.01em',color:'var(--text-dark)',marginBottom:18,paddingBottom:12,borderBottom:'1px solid var(--border-light)'}}>Urgent Open Tickets</div>
         {stats.urgentOpen.length === 0 ? (
           <div style={{color:'var(--text-muted)',fontSize:13,padding:20}}>No urgent open tickets.</div>
         ) : (
@@ -992,7 +1008,7 @@ const ServiceOpsReports = ({ stats }) => {
 const MaintenanceCoReports = ({ stats, fmt }) => (
   <div>
     <div className="card">
-      <div style={{fontSize:13,fontWeight:600,marginBottom:14}}>Maintenance Co. KPIs</div>
+      <div style={{fontSize:14,fontWeight:700,letterSpacing:'-0.01em',color:'var(--text-dark)',marginBottom:18,paddingBottom:12,borderBottom:'1px solid var(--border-light)'}}>Maintenance Co. KPIs</div>
       <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit, minmax(150px, 1fr))',gap:14}}>
         {_kpiCard('Vendors', stats.vendors.length)}
         {_kpiCard('Active Contracts', stats.activeContracts.length, '#5a6b4f')}
@@ -1003,7 +1019,7 @@ const MaintenanceCoReports = ({ stats, fmt }) => (
     </div>
 
     <div className="card">
-      <div style={{fontSize:13,fontWeight:600,marginBottom:14}}>Active Contracts</div>
+      <div style={{fontSize:14,fontWeight:700,letterSpacing:'-0.01em',color:'var(--text-dark)',marginBottom:18,paddingBottom:12,borderBottom:'1px solid var(--border-light)'}}>Active Contracts</div>
       {stats.activeContracts.length === 0 ? (
         <div style={{color:'var(--text-muted)',fontSize:13,padding:20}}>No active contracts.</div>
       ) : (
@@ -1032,7 +1048,7 @@ const MaintenanceCoReports = ({ stats, fmt }) => (
 
     {stats.contractsExp90.length > 0 && (
       <div className="card">
-        <div style={{fontSize:13,fontWeight:600,marginBottom:14}}>Contracts Expiring in 90 Days</div>
+        <div style={{fontSize:14,fontWeight:700,letterSpacing:'-0.01em',color:'var(--text-dark)',marginBottom:18,paddingBottom:12,borderBottom:'1px solid var(--border-light)'}}>Contracts Expiring in 90 Days</div>
         <table style={{width:'100%',borderCollapse:'collapse',fontSize:12,tableLayout:'fixed'}}>
           <thead><tr style={{textAlign:'left',color:'var(--text-secondary)',fontSize:11}}>
             <th style={{padding:'8px 4px',width:'30%'}}>Vendor</th>
@@ -1053,7 +1069,7 @@ const MaintenanceCoReports = ({ stats, fmt }) => (
     )}
 
     <div className="card">
-      <div style={{fontSize:13,fontWeight:600,marginBottom:14}}>Top Spend by Vendor</div>
+      <div style={{fontSize:14,fontWeight:700,letterSpacing:'-0.01em',color:'var(--text-dark)',marginBottom:18,paddingBottom:12,borderBottom:'1px solid var(--border-light)'}}>Top Spend by Vendor</div>
       {stats.topVendorSpend.length === 0 ? (
         <div style={{color:'var(--text-muted)',fontSize:13,padding:20}}>No vendor payments yet.</div>
       ) : (
@@ -1079,7 +1095,7 @@ const MaintenanceCoReports = ({ stats, fmt }) => (
 const VisitorsGuardsReports = ({ stats }) => (
   <div>
     <div className="card">
-      <div style={{fontSize:13,fontWeight:600,marginBottom:14}}>Visitors & Guards KPIs · {stats.periodLabel}</div>
+      <div style={{fontSize:14,fontWeight:700,letterSpacing:'-0.01em',color:'var(--text-dark)',marginBottom:18,paddingBottom:12,borderBottom:'1px solid var(--border-light)'}}>Visitors & Guards KPIs · {stats.periodLabel}</div>
       <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit, minmax(150px, 1fr))',gap:14}}>
         {_kpiCard('Total Visits', stats.totalVisits)}
         {_kpiCard('Pre-Approved', stats.visitsByStatus['Pre-Approved'] || 0)}
@@ -1090,7 +1106,7 @@ const VisitorsGuardsReports = ({ stats }) => (
     </div>
 
     <div className="card">
-      <div style={{fontSize:13,fontWeight:600,marginBottom:14}}>Visitor Flow — Daily</div>
+      <div style={{fontSize:14,fontWeight:700,letterSpacing:'-0.01em',color:'var(--text-dark)',marginBottom:18,paddingBottom:12,borderBottom:'1px solid var(--border-light)'}}>Visitor Flow — Daily</div>
       {stats.visitDailyLabels.length === 0 ? (
         <div style={{color:'var(--text-muted)',fontSize:13,padding:20}}>No visits in the selected period.</div>
       ) : (
@@ -1103,7 +1119,7 @@ const VisitorsGuardsReports = ({ stats }) => (
     </div>
 
     <div className="card">
-      <div style={{fontSize:13,fontWeight:600,marginBottom:14}}>Visitors by Type</div>
+      <div style={{fontSize:14,fontWeight:700,letterSpacing:'-0.01em',color:'var(--text-dark)',marginBottom:18,paddingBottom:12,borderBottom:'1px solid var(--border-light)'}}>Visitors by Type</div>
       {Object.keys(stats.visitsByType).length === 0 ? (
         <div style={{color:'var(--text-muted)',fontSize:13,padding:20}}>No visits yet.</div>
       ) : (
@@ -1116,7 +1132,7 @@ const VisitorsGuardsReports = ({ stats }) => (
     </div>
 
     <div className="card">
-      <div style={{fontSize:13,fontWeight:600,marginBottom:14}}>Guard Shift Coverage</div>
+      <div style={{fontSize:14,fontWeight:700,letterSpacing:'-0.01em',color:'var(--text-dark)',marginBottom:18,paddingBottom:12,borderBottom:'1px solid var(--border-light)'}}>Guard Shift Coverage</div>
       {Object.keys(stats.guardsByBuilding).length === 0 ? (
         <div style={{color:'var(--text-muted)',fontSize:13,padding:20}}>No guards assigned in scope.</div>
       ) : (
@@ -1142,7 +1158,7 @@ const VisitorsGuardsReports = ({ stats }) => (
     </div>
 
     <div className="card">
-      <div style={{fontSize:13,fontWeight:600,marginBottom:14}}>Incidents</div>
+      <div style={{fontSize:14,fontWeight:700,letterSpacing:'-0.01em',color:'var(--text-dark)',marginBottom:18,paddingBottom:12,borderBottom:'1px solid var(--border-light)'}}>Incidents</div>
       <div style={{color:'var(--text-muted)',fontSize:13,padding:20}}>
         No incidents table exists yet — add a <code>incidents</code> table to surface guard-reported events here.
       </div>
@@ -1153,7 +1169,7 @@ const VisitorsGuardsReports = ({ stats }) => (
 const ComplianceReports = ({ stats }) => (
   <div>
     <div className="card">
-      <div style={{fontSize:13,fontWeight:600,marginBottom:14}}>Lease Registration</div>
+      <div style={{fontSize:14,fontWeight:700,letterSpacing:'-0.01em',color:'var(--text-dark)',marginBottom:18,paddingBottom:12,borderBottom:'1px solid var(--border-light)'}}>Lease Registration</div>
       <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit, minmax(180px, 1fr))',gap:14}}>
         {_kpiCard('Leases with contract #', stats.leasesRegistered, '#5a6b4f')}
         {_kpiCard('Missing contract #', stats.leasesUnregistered, stats.leasesUnregistered ? '#8b4a42' : '#5a6b4f')}
@@ -1163,7 +1179,7 @@ const ComplianceReports = ({ stats }) => (
     </div>
 
     <div className="card">
-      <div style={{fontSize:13,fontWeight:600,marginBottom:14}}>Certificates Expiring</div>
+      <div style={{fontSize:14,fontWeight:700,letterSpacing:'-0.01em',color:'var(--text-dark)',marginBottom:18,paddingBottom:12,borderBottom:'1px solid var(--border-light)'}}>Certificates Expiring</div>
       {!stats.hasCerts ? (
         <div style={{color:'var(--text-muted)',fontSize:13,padding:20}}>
           TODO — no certificate attachments (<code>kind = cert_*</code>) found on units. Upload certificates via the unit detail modal to populate this section.
@@ -1187,7 +1203,7 @@ const ComplianceReports = ({ stats }) => (
     </div>
 
     <div className="card">
-      <div style={{fontSize:13,fontWeight:600,marginBottom:14}}>PMC Performance Scorecard</div>
+      <div style={{fontSize:14,fontWeight:700,letterSpacing:'-0.01em',color:'var(--text-dark)',marginBottom:18,paddingBottom:12,borderBottom:'1px solid var(--border-light)'}}>PMC Performance Scorecard</div>
       {[
         { label: 'Maintenance resolution rate', value: stats.totalSRs > 0 ? Math.round((stats.closedSRs / stats.totalSRs) * 100) + '%' : '—' },
         { label: 'Collection efficiency', value: stats.collectionRate + '%' },
