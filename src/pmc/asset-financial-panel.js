@@ -27,8 +27,6 @@ const AssetFinancialPanel = ({ building, onClose }) => {
   const [showDownload, setShowDownload] = useState(false);
   const [openUnit, setOpenUnit] = useState(null);    // row click → UnitDetailModal
   const [invoiceSort, setInvoiceSort] = useState({ key: 'due_date', dir: 'desc' });
-  // Month filter set by clicking a bar on the chart. 'YYYY-MM' or null.
-  const [selectedMonth, setSelectedMonth] = useState(null);
   // Chart.js refs replaced by an inline SVG renderer (see TimelineChart
   // below) — eliminates the canvas-sizing race we were fighting and
   // gives us a cleaner, more modern look.
@@ -179,7 +177,11 @@ const AssetFinancialPanel = ({ building, onClose }) => {
   const TimelineChart = ({ data, selectedMonth, onSelectMonth }) => {
     const [hoveredIdx, setHoveredIdx] = useState(null);
     const W = 1000, H = 280;
-    const padTop = 26, padBottom = 50, padLeft = 56, padRight = 16;
+    // padTop dropped from 26 to 12 so the topmost gridline sits close
+    // to the card edge — there was a visible 'big gap' above the 80k
+    // line. Bar value labels handle that compression by drawing
+    // INSIDE the bar (white text) when the bar is near the top.
+    const padTop = 12, padBottom = 50, padLeft = 56, padRight = 16;
     const chartW = W - padLeft - padRight;
     const chartH = H - padTop - padBottom;
     const groupW = chartW / data.length;
@@ -306,10 +308,26 @@ const AssetFinancialPanel = ({ building, onClose }) => {
                 {showLabel(i) && (
                   <text x={cx + barW / 2} y={padTop + chartH + 22} fontSize="12" fill={isSelected ? '#131F23' : '#61707D'} fontWeight={isSelected ? 700 : 500} textAnchor="middle" fontFamily="inherit">{d.label}</text>
                 )}
-                {/* Total value above the bar — only when bar has data */}
-                {monthly > 0 && !isHovered && (
-                  <text x={cx + barW / 2} y={Math.max(padTop + 10, outY - 9)} fontSize="11" fill="#131F23" textAnchor="middle" fontWeight="700" fontFamily="inherit" opacity={dim ? 0.4 : 1}>{fmtTick(monthly)}</text>
-                )}
+                {/* Total value — sits above the bar by default, but flips
+                    INSIDE the bar in white when the bar is so tall that
+                    the outside label would collide with the top gridline. */}
+                {monthly > 0 && !isHovered && (() => {
+                  const inside = outY < padTop + 18;
+                  return (
+                    <text
+                      x={cx + barW / 2}
+                      y={inside ? outY + 14 : outY - 8}
+                      fontSize="11"
+                      fill={inside ? '#ffffff' : '#131F23'}
+                      textAnchor="middle"
+                      fontWeight="700"
+                      fontFamily="inherit"
+                      opacity={dim ? 0.4 : 1}
+                      style={{textShadow: inside ? '0 1px 2px rgba(0,0,0,0.35)' : 'none'}}>
+                      {fmtTick(monthly)}
+                    </text>
+                  );
+                })()}
               </g>
             );
           })}
@@ -340,9 +358,6 @@ const AssetFinancialPanel = ({ building, onClose }) => {
             <span style={{width:12,height:12,background:'#8b4a42',opacity:0.82,borderRadius:3,display:'inline-block'}}/>
             Outstanding
           </span>
-          {onSelectMonth && (
-            <span style={{color:'var(--text-muted)',fontStyle:'italic'}}>· click a month to filter the invoice list</span>
-          )}
         </div>
       </div>
     );
@@ -355,11 +370,7 @@ const AssetFinancialPanel = ({ building, onClose }) => {
       : { key, dir: ['amount_aed','due_date','created_at'].includes(key) ? 'desc' : 'asc' }
     );
   };
-  // Apply the chart-driven month filter on top of the period filter.
-  const monthFilteredInvoices = selectedMonth
-    ? periodInvoices.filter(i => (i.created_at || '').slice(0, 7) === selectedMonth)
-    : periodInvoices;
-  const sortedInvoices = monthFilteredInvoices.slice().sort((a, b) => {
+  const sortedInvoices = periodInvoices.slice().sort((a, b) => {
     const k = invoiceSort.key;
     const sign = invoiceSort.dir === 'asc' ? 1 : -1;
     let av = a[k]; let bv = b[k];
@@ -483,9 +494,12 @@ const AssetFinancialPanel = ({ building, onClose }) => {
             </Section>
 
             {/* 12-month chart */}
-            <Section label={'Income Timeline · ' + (series.length === 1 ? '1 month' : series.length + ' months')} right={<span style={{fontSize:11,color:'var(--text-muted)'}}>{periodLabel} · click a bar to filter</span>}>
+            <Section label={'Income Timeline · ' + (series.length === 1 ? '1 month' : series.length + ' months')} right={<span style={{fontSize:11,color:'var(--text-muted)'}}>{periodLabel}</span>}>
               <div style={{background:'#fff',border:'1px solid var(--border-light)',borderRadius:10,padding:'18px 22px'}}>
-                <TimelineChart data={series} selectedMonth={selectedMonth} onSelectMonth={setSelectedMonth}/>
+                {/* Click-to-filter dropped per product direction; chart
+                    still hovers + tooltips, but bars no longer filter the
+                    invoice list. */}
+                <TimelineChart data={series}/>
               </div>
             </Section>
 
@@ -546,19 +560,7 @@ const AssetFinancialPanel = ({ building, onClose }) => {
             </Section>
 
             {/* Invoices — sortable, centered status + slots, truncated INV # */}
-            <Section label={'Invoices · ' + sortedInvoices.length + (selectedMonth ? ' in ' + new Date(selectedMonth + '-01').toLocaleString('en-GB', { month:'long', year:'numeric' }) : ' in period')} right={
-              <span style={{display:'inline-flex',alignItems:'center',gap:10,fontSize:11,color:'var(--text-muted)'}}>
-                {selectedMonth ? (
-                  <button type="button" onClick={() => setSelectedMonth(null)}
-                    style={{fontSize:11,fontWeight:600,letterSpacing:'0.04em',textTransform:'uppercase',color:'#3E4C59',background:'#E6EAE9',border:'none',padding:'4px 10px',borderRadius:4,cursor:'pointer',display:'inline-flex',alignItems:'center',gap:6}}>
-                    {new Date(selectedMonth + '-01').toLocaleString('en-GB', { month:'short', year:'numeric' })}
-                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-                  </button>
-                ) : (
-                  <span>{periodLabel}</span>
-                )}
-              </span>
-            }>
+            <Section label={'Invoices · ' + sortedInvoices.length + ' in period'} right={<span style={{fontSize:11,color:'var(--text-muted)'}}>{periodLabel}</span>}>
               <div style={{background:'#fff',border:'1px solid var(--border-light)',borderRadius:10,overflow:'hidden'}}>
                 {sortedInvoices.length === 0 ? (
                   <div style={{padding:24,color:'var(--text-muted)',fontSize:13,textAlign:'center'}}>No invoices in the selected period.</div>
