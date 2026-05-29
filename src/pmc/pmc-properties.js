@@ -214,6 +214,20 @@ const PMCPropertiesPage = ({ setPage }) => {
   const [selectedBuilding, setSelectedBuilding] = useState(null);
   const [drill, setDrill] = useState(null); // { building, view }
   const [showDownload, setShowDownload] = useState(false);
+  // Inner tab selector — the four asset types used to stack; now they
+  // sit behind tabs so the user can focus on one type at a time.
+  // sessionStorage hand-off from Overview lets a click on a type-level
+  // KPI land directly on that tab.
+  const [activeAssetType, setActiveAssetType] = useState(() => {
+    try {
+      const fromOverview = sessionStorage.getItem('vars:scroll-to-asset-type');
+      if (fromOverview) {
+        sessionStorage.removeItem('vars:scroll-to-asset-type');
+        if (['Residential','Commercial','Villa','Commercial Land'].includes(fromOverview)) return fromOverview;
+      }
+    } catch (_) {}
+    return 'Residential';
+  });
   const monthsBack = ({ '1m': 1, '2m': 2, '3m': 3, '12m': 12 })[timeRange] || 1;
 
   // Same period bounds as Overview / Service Charges.
@@ -444,29 +458,22 @@ const PMCPropertiesPage = ({ setPage }) => {
             const open = () => setSelectedBuilding(b);
             const isCommercial = kind === 'Commercial';
             const cols = isCommercial ? 7 : 6;
-            // Investment summary (purchase / current / appreciation / hold)
-            // for the general-info row directly under the address. Computed
-            // inline; falls back to '—' when the column is empty.
-            const purchase = Number(b.purchase_price) || 0;
-            const current  = Number(b.current_value)  || 0;
-            const gain     = purchase > 0 ? current - purchase : 0;
-            const gainPct  = purchase > 0 ? (gain / purchase) * 100 : null;
-            const acquiredHuman = b.acquired_on
-              ? new Date(b.acquired_on).toLocaleDateString('en-GB', { day:'2-digit', month:'short', year:'numeric' })
-              : null;
-            let holdLabel = null;
-            if (b.acquired_on) {
-              const start = new Date(b.acquired_on);
-              if (!isNaN(start.getTime())) {
-                const months = (new Date().getFullYear() - start.getFullYear()) * 12 + (new Date().getMonth() - start.getMonth());
-                const years = Math.floor(months / 12);
-                const rem   = months % 12;
-                holdLabel = (years ? years + 'y ' : '') + rem + 'm';
-              }
-            }
-            const annualTarget = (b.tenants || []).reduce((s, t) => s + Number(t.monthly_payment_aed || 0), 0) * 12
-                               + (b.units || []).reduce((s, u) => s + Number(u.tenant_monthly_payment_aed || 0), 0) * 12;
-            const yieldPct = purchase > 0 ? (annualTarget / purchase) * 100 : null;
+            // Per-asset "Needs your attention" list. Mirrors the page-level
+            // attention bar (overview eyebrow) but scoped to this building
+            // so the user sees the urgent items without scanning the KPIs.
+            const todayIso = new Date().toISOString().slice(0, 10);
+            const cutoff60Iso = new Date(Date.now() + 60 * 24 * 3600 * 1000).toISOString().slice(0, 10);
+            const overdueInvoices = (b.invoices || []).filter(i => i.effective_status === 'Pending');
+            const bOverdue = overdueInvoices.length;
+            const bOverdueTotal = overdueInvoices.reduce((s, i) => s + Number(i.amount_aed || 0), 0);
+            const bExpiringLeases = (b.tenants || []).filter(t => t.lease_end && t.lease_end >= todayIso && t.lease_end <= cutoff60Iso).length;
+            const bVacant = Math.max(0, b.unitCount - b.occupiedCount);
+            const bUrgentSRs = (b.srs || []).filter(s => ['New','Acknowledged','In Progress'].includes(s.status) && ['High','Urgent'].includes(s.priority)).length;
+            const attentionItems = [];
+            if (bOverdue > 0) attentionItems.push({ color:'#8b4a42', text: bOverdue + ' overdue tenant' + (bOverdue === 1 ? '' : 's') + ' · AED ' + Math.round(bOverdueTotal).toLocaleString() + ' at risk' });
+            if (bUrgentSRs > 0) attentionItems.push({ color:'#8b4a42', text: bUrgentSRs + ' high-priority service request' + (bUrgentSRs === 1 ? '' : 's') + ' open' });
+            if (bExpiringLeases > 0) attentionItems.push({ color:'#a07d3c', text: bExpiringLeases + ' lease' + (bExpiringLeases === 1 ? '' : 's') + ' expiring within 60 days' });
+            if (bVacant > 0) attentionItems.push({ color:'#a07d3c', text: bVacant + ' vacant unit' + (bVacant === 1 ? '' : 's') });
             return (
               <div key={b.id} className="card" data-asset-id={b.id}>
                 <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:14}}>
@@ -475,32 +482,15 @@ const PMCPropertiesPage = ({ setPage }) => {
                     <div style={{fontSize:12,color:'var(--text-muted)',marginTop:4}}>{b.address || '—'}</div>
                   </div>
                 </div>
-                {/* ---- General info strip (Investment + yield). Skipped when
-                       no acquisition data is recorded — keeps the card tidy
-                       for assets the user hasn't filled out yet. */}
-                {(purchase > 0 || b.acquired_on) && (
-                  <div style={{display:'grid',gridTemplateColumns:'repeat(4, minmax(0, 1fr))',gap:14,padding:'12px 14px',background:'var(--bg-page)',borderRadius:8,marginBottom:14}}>
-                    <div>
-                      <div style={{fontSize:10,letterSpacing:'0.06em',textTransform:'uppercase',color:'var(--text-secondary)',fontWeight:600,marginBottom:3}}>Acquired</div>
-                      <div style={{fontSize:13,fontWeight:600,color:'var(--text-dark)'}}>{acquiredHuman || '—'}</div>
-                      {holdLabel && <div style={{fontSize:11,color:'var(--text-muted)',marginTop:2}}>{holdLabel} hold</div>}
-                    </div>
-                    <div>
-                      <div style={{fontSize:10,letterSpacing:'0.06em',textTransform:'uppercase',color:'var(--text-secondary)',fontWeight:600,marginBottom:3}}>Purchase</div>
-                      <div style={{fontSize:13,fontWeight:600,color:'var(--text-dark)'}}>{purchase ? 'AED ' + purchase.toLocaleString() : '—'}</div>
-                    </div>
-                    <div>
-                      <div style={{fontSize:10,letterSpacing:'0.06em',textTransform:'uppercase',color:'var(--text-secondary)',fontWeight:600,marginBottom:3}}>Current value</div>
-                      <div style={{fontSize:13,fontWeight:600,color:'var(--text-dark)'}}>{current ? 'AED ' + current.toLocaleString() : '—'}</div>
-                      {gain !== 0 && (
-                        <div style={{fontSize:11,fontWeight:600,color: gain > 0 ? '#5a6b4f' : '#8b4a42',marginTop:2}}>{gain > 0 ? '▲' : '▼'} {(gainPct > 0 ? '+' : '') + gainPct.toFixed(1) + '%'}</div>
-                      )}
-                    </div>
-                    <div>
-                      <div style={{fontSize:10,letterSpacing:'0.06em',textTransform:'uppercase',color:'var(--text-secondary)',fontWeight:600,marginBottom:3}}>Yield</div>
-                      <div style={{fontSize:13,fontWeight:600,color:'var(--text-dark)'}}>{yieldPct == null ? '—' : yieldPct.toFixed(1) + '%'}</div>
-                      <div style={{fontSize:11,color:'var(--text-muted)',marginTop:2}}>annualised gross</div>
-                    </div>
+                {attentionItems.length > 0 && (
+                  <div style={{background:'#fdf6e6', border:'1px solid #efe1be', borderRadius:8, padding:'10px 14px', marginBottom:14}}>
+                    <div style={{fontSize:10, letterSpacing:'0.08em', textTransform:'uppercase', color:'#7a5a1f', fontWeight:700, marginBottom:6}}>Needs your attention</div>
+                    {attentionItems.map((it, idx) => (
+                      <div key={idx} style={{display:'flex', alignItems:'center', gap:8, fontSize:12, color:'var(--text-dark)', padding:'3px 0'}}>
+                        <span style={{width:6, height:6, borderRadius:3, background:it.color, flexShrink:0}}/>
+                        <span>{it.text}</span>
+                      </div>
+                    ))}
                   </div>
                 )}
                 <div style={{display:'grid',gridTemplateColumns:`repeat(${cols}, minmax(0, 1fr))`,gap:8,marginTop:14}}>
@@ -555,12 +545,37 @@ const PMCPropertiesPage = ({ setPage }) => {
           const villas         = buildings.filter(b => b.property_type === 'Villa');
           const commercialLand = buildings.filter(b => b.property_type === 'Commercial Land');
 
+          const tabs = [
+            { key:'Residential',     label:'Residential',          count: residential.length },
+            { key:'Commercial',      label:'Commercial buildings', count: commercial.length },
+            { key:'Villa',           label:'Villas',               count: villas.length },
+            { key:'Commercial Land', label:'Lands',                count: commercialLand.length },
+          ];
           return (
             <>
-              {renderSection('Residential',     'Residential',     residential)}
-              {renderSection('Commercial',      'Commercial',      commercial)}
-              {renderSection('Villas',          'Villa',           villas)}
-              {renderSection('Commercial Land', 'Commercial Land', commercialLand)}
+              <div style={{display:'flex', gap:4, marginBottom:24, borderBottom:'1px solid var(--border-light)'}}>
+                {tabs.map(t => {
+                  const active = activeAssetType === t.key;
+                  return (
+                    <button key={t.key} type="button"
+                      onClick={() => setActiveAssetType(t.key)}
+                      style={{
+                        padding:'10px 18px', background:'transparent',
+                        border:'none', borderBottom: active ? '2px solid var(--accent-warm-dark)' : '2px solid transparent',
+                        marginBottom:-1, cursor:'pointer',
+                        fontSize:13, fontWeight: active ? 600 : 400,
+                        color: active ? 'var(--text-dark)' : 'var(--text-secondary)',
+                        letterSpacing:'-0.005em',
+                      }}>
+                      {t.label} <span style={{fontSize:11, color:'var(--text-muted)', marginLeft:6, fontWeight:400}}>· {t.count}</span>
+                    </button>
+                  );
+                })}
+              </div>
+              {activeAssetType === 'Residential'     && renderSection('Residential',     'Residential',     residential)}
+              {activeAssetType === 'Commercial'      && renderSection('Commercial',      'Commercial',      commercial)}
+              {activeAssetType === 'Villa'           && renderSection('Villas',          'Villa',           villas)}
+              {activeAssetType === 'Commercial Land' && renderSection('Commercial Land', 'Commercial Land', commercialLand)}
             </>
           );
         })()

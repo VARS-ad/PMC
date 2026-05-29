@@ -27,11 +27,11 @@ const PMCStat = ({ label, value, color, onClick, hint }) => (
   </div>
 );
 
-// Small per-card photo strip. Lazy-signs a 1h URL the moment the
-// card renders; falls back to a deterministic colour gradient when
-// the asset has no photo uploaded yet. The property-type chip is
-// pinned to the bottom-left of the photo to keep the card body tight.
-const AssetCardPhoto = ({ storagePath, assetId, typeChipColor, propertyType }) => {
+// Small per-card photo strip. Lazy-signs a 1h URL the moment the card
+// renders; when the asset has no photo we draw a designed cover (warm
+// sand gradient, diagonal stripes, VARS slate badge, asset initials)
+// so every card looks intentional instead of like a placeholder.
+const AssetCardPhoto = ({ storagePath, assetId, typeChipColor, propertyType, name }) => {
   const [url, setUrl] = useState(null);
   useEffect(() => {
     let mounted = true;
@@ -41,13 +41,36 @@ const AssetCardPhoto = ({ storagePath, assetId, typeChipColor, propertyType }) =
     });
     return () => { mounted = false; };
   }, [storagePath]);
+  if (url) {
+    return (
+      <div style={{position:'relative',height:120,background:'url(' + url + ') center/cover no-repeat',borderBottom:'1px solid var(--border-light)'}}>
+        <div style={{position:'absolute',inset:0,background:'linear-gradient(to bottom, transparent 50%, rgba(19,31,35,0.18) 100%)'}}/>
+        <span style={{position:'absolute',bottom:10,left:10,fontSize:9,letterSpacing:'0.05em',textTransform:'uppercase',color:'#fff',background:typeChipColor,padding:'3px 8px',borderRadius:3,fontWeight:600,whiteSpace:'nowrap'}}>{propertyType}</span>
+      </div>
+    );
+  }
+  // ---- Designed fallback cover -----------------------------------------
+  // 3-character initials from the asset name + a warm sand gradient that
+  // shifts hue deterministically from the building id, so two assets
+  // never get the same fallback colour.
   const hue = Math.abs((assetId || '').split('').reduce((a, c) => a + c.charCodeAt(0), 0)) % 360;
-  const bg = url
-    ? 'url(' + url + ') center/cover no-repeat'
-    : 'linear-gradient(135deg, hsl(' + hue + ', 22%, 78%) 0%, hsl(' + ((hue + 30) % 360) + ', 28%, 56%) 100%)';
+  const initials = (name || 'Asset')
+    .split(/\s+/)
+    .map(w => w.replace(/[^A-Za-z0-9]/g, '').charAt(0).toUpperCase())
+    .filter(Boolean)
+    .slice(0, 3)
+    .join('');
+  // SVG diagonal stripes baked into the background for texture.
+  const stripes = encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="80" height="80"><path d="M-20 80 L80 -20 M0 80 L80 0 M20 80 L80 20" stroke="rgba(62,76,89,0.06)" stroke-width="14"/></svg>');
+  const bg = 'linear-gradient(135deg, hsl(' + hue + ', 35%, 80%) 0%, hsl(' + ((hue + 25) % 360) + ', 32%, 58%) 100%), url("data:image/svg+xml;utf8,' + stripes + '")';
   return (
-    <div style={{position:'relative',height:120,background:bg,borderBottom:'1px solid var(--border-light)'}}>
-      <div style={{position:'absolute',inset:0,background:'linear-gradient(to bottom, transparent 50%, rgba(19,31,35,0.18) 100%)'}}/>
+    <div style={{position:'relative',height:120,background:bg,backgroundBlendMode:'multiply',borderBottom:'1px solid var(--border-light)',display:'flex',alignItems:'center',justifyContent:'center',overflow:'hidden'}}>
+      {/* Slate VARS badge top-left */}
+      <span style={{position:'absolute',top:10,left:10,fontSize:9,letterSpacing:'0.08em',textTransform:'uppercase',color:'#fff',background:'rgba(19,31,35,0.65)',padding:'3px 9px',borderRadius:3,fontWeight:700}}>VARS</span>
+      {/* Big initials hugged by a soft outline */}
+      <div style={{fontSize:46,fontWeight:700,letterSpacing:'-0.02em',color:'#fff',textShadow:'0 2px 8px rgba(19,31,35,0.25)',lineHeight:1,fontFamily:'"Google Sans Flex","Inter",system-ui,sans-serif'}}>{initials || 'A'}</div>
+      {/* Property-type chip bottom-left, on top of the gradient bleed */}
+      <div style={{position:'absolute',inset:0,background:'linear-gradient(to bottom, transparent 60%, rgba(19,31,35,0.22) 100%)'}}/>
       <span style={{position:'absolute',bottom:10,left:10,fontSize:9,letterSpacing:'0.05em',textTransform:'uppercase',color:'#fff',background:typeChipColor,padding:'3px 8px',borderRadius:3,fontWeight:600,whiteSpace:'nowrap'}}>{propertyType}</span>
     </div>
   );
@@ -60,10 +83,6 @@ const PMCOverviewPage = ({ setPage }) => {
   // Clicking a row in Unit Payment Activity opens the same UnitDetailModal
   // used everywhere else (full invoice list, resident, docs slots).
   const [openedUnit, setOpenedUnit] = useState(null); // { unit, building }
-  // Clicking an Asset card in 'Your Portfolio' opens this modal — a
-  // landlord-focused deep-dive on the building (chart + investment +
-  // tenant roster). Different lens from the operational UnitDetailModal.
-  const [openedAsset, setOpenedAsset] = useState(null);
   // Selected period for the financial KPIs and Operating Income card.
   // Lives in AppContext so navigating to Service Charges keeps the choice.
   const monthsBack = ({ '1m': 1, '2m': 2, '3m': 3, '12m': 12 })[timeRange] || 1;
@@ -638,13 +657,13 @@ const PMCOverviewPage = ({ setPage }) => {
                         if (c.expiring_leases_count > 0) issues.push({ label: c.expiring_leases_count + ' lease end', color:'#7a5a1f' });
                         return (
                           <div key={c.id}
-                            onClick={() => { try { sessionStorage.setItem('vars:scroll-to-asset', c.id); } catch (_) {} if (setPage) setPage('properties'); }}
+                            onClick={() => { try { sessionStorage.setItem('vars:scroll-to-asset', c.id); sessionStorage.setItem('vars:scroll-to-asset-type', c.property_type || 'Residential'); } catch (_) {} if (setPage) setPage('properties'); }}
                             style={{background:'#fff',border:'1px solid var(--border-light)',borderRadius:10,padding:0,cursor: setPage ? 'pointer' : 'default',transition:'box-shadow 0.15s, transform 0.15s',display:'flex',flexDirection:'column',overflow:'hidden'}}
                             onMouseEnter={e => { e.currentTarget.style.boxShadow = '0 4px 14px rgba(19,31,35,0.06)'; e.currentTarget.style.transform = 'translateY(-1px)'; }}
                             onMouseLeave={e => { e.currentTarget.style.boxShadow = 'none'; e.currentTarget.style.transform = 'none'; }}
                             title="Open this asset on the Assets page">
                             {/* Photo strip — fallback to a deterministic colour-block when none uploaded */}
-                            <AssetCardPhoto storagePath={c.photo_path} assetId={c.id} typeChipColor={typeChip[c.property_type] || '#61707D'} propertyType={c.property_type}/>
+                            <AssetCardPhoto storagePath={c.photo_path} assetId={c.id} typeChipColor={typeChip[c.property_type] || '#61707D'} propertyType={c.property_type} name={c.name}/>
                             <div style={{padding:'14px 16px',display:'flex',flexDirection:'column',gap:12}}>
                               {/* Name + address */}
                               <div style={{minWidth:0}}>
