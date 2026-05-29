@@ -6,15 +6,25 @@
 // the single upload box at the bottom can ingest any combination.
 // Column conventions across the four templates:
 //   B-* = Building / unit columns
-//   O-* = Owner columns (always present — owner is the asset record)
-//   R-* = Resident columns (only on types that have a current resident)
-const OWNER_COLS    = ['Owner name','Owner phone','Owner email','Owner passport','Owner Emirates ID','Purchase date'];
+//   O-* = Owner columns (the asset record)
+//   R-* = Resident columns (residential / villa — full personal data)
+//   T-* = Tenant columns (commercial — corporate fields only)
+const OWNER_COLS = ['Owner name','Owner phone','Owner email','Owner passport','Owner Emirates ID','Purchase date'];
+// Residential resident columns: per the user, emergency contact fields
+// are dropped (not relevant for billing / records).
 const RESIDENT_COLS = [
   'Resident full name','Resident email','Resident phone','Resident temp password',
   'Resident date of birth','Resident passport','Resident Emirates ID',
-  'Resident emergency contact name','Resident emergency contact phone',
   'Resident employer','Resident occupation',
   'Resident tenure','Lease start','Lease end','Monthly payment (AED)','Ownership start','Cheques per year','Contract #',
+];
+// Commercial tenant columns: corporate-only. No DOB / Passport / Emirates
+// ID / emergency contact / employer / occupation / ownership_start /
+// cheques. Contract # comes first; tenant block follows; Owner block lives
+// at the very end of the Commercial row.
+const TENANT_COLS = [
+  'Contract #','Tenant name','Tenant email','Tenant phone','Tenant temp password',
+  'Tenant tenure','Lease start','Lease end','Monthly payment (AED)',
 ];
 
 const BUILDINGS_BY_TYPE = {
@@ -22,28 +32,27 @@ const BUILDINGS_BY_TYPE = {
     label: 'Residential buildings',
     headers: ['Building name','Property type','Floor','Unit','Address','Notes', ...OWNER_COLS, ...RESIDENT_COLS],
     examples: [
-      // Owner-occupied — owner_is_resident flag should be set by parser when
-      // Owner email matches Resident email.
+      // Owner-occupied — owner_is_resident flag set by parser when Owner email matches Resident email.
       ['Aljil Tower','Residential',1,'A-101','Sheikh Zayed Rd, Dubai, UAE','High-rise residential, mixed amenities (pool, gym).',
         'Khalid Al Mansoori','+971 50 111 2233','khalid.almansoori@example.ae','AB1234567','784-1980-1234567-1','2018-03-12',
         'Khalid Al Mansoori','khalid.almansoori@example.ae','+971 50 111 2233','Welcome2026!',
-        '1980-05-14','AB1234567','784-1980-1234567-1','Aisha Al Mansoori','+971 55 998 7766','Emirates NBD','Senior Banker',
+        '1980-05-14','AB1234567','784-1980-1234567-1','Emirates NBD','Senior Banker',
         'Owner','','','','2018-03-12','',''],
-      // Tenant-occupied — owner is different from resident.
+      // Tenant-occupied — owner different from resident.
       ['Aljil Tower','Residential',1,'A-102','','',
         'Mohammed Al Hammadi','+971 55 234 1187','mohammed.alhammadi@example.ae','CD7654321','784-1990-7654321-2','2019-09-01',
         'Reem Al Suwaidi','reem.alsuwaidi@example.ae','+971 56 887 3300','Welcome2026!',
-        '1992-11-08','EF1122334','784-1992-1122334-3','Salama Al Suwaidi','+971 55 332 4499','Mubadala','HR Analyst',
+        '1992-11-08','EF1122334','784-1992-1122334-3','Mubadala','HR Analyst',
         'Tenant','2026-01-01','2026-12-31',12000,'',12,'RNT-2026-A102'],
       // Vacant unit — owner present, no resident yet.
       ['Aljil Tower','Residential',2,'A-201','','',
         'Mohammed Al Hammadi','+971 55 234 1187','mohammed.alhammadi@example.ae','CD7654321','784-1990-7654321-2','2019-09-01',
-        '','','','','','','','','','','','','','','','',''],
+        '','','','','','','','','','','','','',''],
       // New building — Owner only on the FIRST row; later units inherit it on parse.
       ['Al Qurm View','Residential',1,'Q-101','Shams Abu Dhabi, Al Reem Island, Abu Dhabi, UAE','Low-rise residential by Aldar Properties.',
         'Hassan Al Awadi','+971 50 808 4040','hassan.awadi@example.ae','GH5566778','784-1975-5566778-9','2015-06-20',
         'Hassan Al Awadi','hassan.awadi@example.ae','+971 50 808 4040','Welcome2026!',
-        '1975-01-30','GH5566778','784-1975-5566778-9','Mariam Al Awadi','+971 55 660 1234','Self-employed','Real estate investor',
+        '1975-01-30','GH5566778','784-1975-5566778-9','Self-employed','Real estate investor',
         'Owner','','','','2015-06-20','',''],
     ],
     filename: 'residential-template',
@@ -51,7 +60,7 @@ const BUILDINGS_BY_TYPE = {
       'ONE ROW PER UNIT — a 100-unit tower = 100 rows; repeat the Building name on every row.',
       'Floor and Unit are both required.',
       'Building-level fields (Address, Notes) live on the FIRST row of each building.',
-      'OWNER columns describe the property owner — usually permanent, survives tenant turnover. Required for at least the FIRST unit of each building; later units inherit the owner if blank.',
+      'OWNER columns describe the property owner — required for at least the FIRST unit of each building; later units inherit the owner if blank.',
       'RESIDENT columns describe the current occupant — leave blank if the unit is vacant.',
       'If the Resident email matches the Owner email we automatically flag the unit as owner-occupied.',
       'Resident tenure must be one of: Owner, Tenant.',
@@ -59,25 +68,29 @@ const BUILDINGS_BY_TYPE = {
   },
   Commercial: {
     label: 'Commercial buildings',
-    headers: ['Building name','Property type','Floor','Unit','Address','Notes','Commercial use','Gross leasable area (sqft)','Parking spots', ...OWNER_COLS, ...RESIDENT_COLS],
+    // Order: building cols → commercial-specific use/GLA/parking → TENANT
+    // block (Contract # first, then tenant identity + lease) → OWNER
+    // block at the very end (landlord is often a holding company; less
+    // important than the tenant for day-to-day operations).
+    headers: ['Building name','Property type','Floor','Unit','Address','Notes','Commercial use','Gross leasable area (sqft)','Parking spots', ...TENANT_COLS, ...OWNER_COLS],
     examples: [
       ['Boulevard Plaza Offices','Commercial',1,'B-101','Sheikh Mohammed bin Rashid Blvd, Downtown Dubai, UAE','Grade A office tower.','Office',850000,1200,
-        'Downtown Holding LLC','+971 4 555 1000','contracts@downtownholding.ae','-','-','2013-11-20',
-        'TechCorp ME FZ-LLC','tenancy@techcorp.me','+971 4 778 2200','Welcome2026!','','','','Procurement','+971 50 111 9988','TechCorp HQ','Anchor office tenant','Tenant','2026-02-01','2027-01-31',45000,'',4,'CMT-BLV-101'],
+        'CMT-BLV-101','TechCorp ME FZ-LLC','tenancy@techcorp.me','+971 4 778 2200','Welcome2026!','Tenant','2026-02-01','2027-01-31',45000,
+        'Downtown Holding LLC','+971 4 555 1000','contracts@downtownholding.ae','-','-','2013-11-20'],
       ['Boulevard Plaza Offices','Commercial',1,'B-102','','','','','',
-        'Downtown Holding LLC','+971 4 555 1000','contracts@downtownholding.ae','','','',
-        '','','','','','','','','','','','','','','','',''],
+        '','','','','','','','','',
+        'Downtown Holding LLC','+971 4 555 1000','contracts@downtownholding.ae','','',''],
       ['Mall of the Emirates Retail Hub','Commercial',1,'R-101','Sheikh Zayed Rd, Al Barsha 1, Dubai, UAE','Anchor retail concourse.','Retail',420000,850,
-        'Majid Al Futtaim Retail','+971 4 409 9999','leasing@maf.ae','-','-','2005-09-14',
-        'Carrefour UAE','contracts@carrefour.ae','+971 4 295 1010','Welcome2026!','','','','Leasing','+971 50 220 1010','Carrefour HQ','Anchor grocery tenant','Tenant','2026-01-01','2030-12-31',95000,'',1,'CMT-MOE-101'],
+        'CMT-MOE-101','Carrefour UAE','contracts@carrefour.ae','+971 4 295 1010','Welcome2026!','Tenant','2026-01-01','2030-12-31',95000,
+        'Majid Al Futtaim Retail','+971 4 409 9999','leasing@maf.ae','-','-','2005-09-14'],
     ],
     filename: 'commercial-template',
     rules: [
       'ONE ROW PER UNIT. Floor and Unit are required.',
       'Commercial use must be one of: Office, Retail, Mixed.',
       'Building-level fields (Address, Notes, GLA, Parking, Commercial use) go on the FIRST row of each building.',
-      'OWNER columns describe the landlord — typically a holding company or developer.',
-      'RESIDENT columns describe the commercial tenant when present.',
+      'TENANT block (Contract #, name, email, phone, lease) describes the corporate tenant. Personal fields like DOB / passport / emergency contact intentionally aren’t collected here.',
+      'OWNER block sits at the END of the row — typically a holding company or developer.',
     ],
   },
   Villa: {
@@ -86,10 +99,10 @@ const BUILDINGS_BY_TYPE = {
     examples: [
       ['Emirates Hills Estate','Villa','Emirates Hills, Dubai, UAE','Gated villa community by EMAAR with golf course frontage.',60000,8,5,
         'Mubadala Real Estate','+971 2 413 0000','assets@mubadalare.ae','-','-','2010-04-01',
-        'Ali Al Naqbi','ali.naqbi@example.ae','+971 50 700 3344','Welcome2026!','1982-07-19','IJ9988776','784-1982-9988776-5','Layla Al Naqbi','+971 55 660 9988','Emirates Investment Authority','Investment Director','Tenant','2026-03-01','2027-02-28',45000,'',4,'RNT-VIL-EH'],
+        'Ali Al Naqbi','ali.naqbi@example.ae','+971 50 700 3344','Welcome2026!','1982-07-19','IJ9988776','784-1982-9988776-5','Emirates Investment Authority','Investment Director','Tenant','2026-03-01','2027-02-28',45000,'',4,'RNT-VIL-EH'],
       ['Saadiyat Beach Villas','Villa','Saadiyat Island, Abu Dhabi, UAE','Beachfront luxury villa cluster, private beach access.',95000,12,4,
         'Aldar Properties','+971 2 810 5555','assets@aldar.ae','-','-','2018-06-12',
-        'Yusuf Al Marzouqi','yusuf.marzouqi@example.ae','+971 56 901 4477','Welcome2026!','1986-12-02','KL1122334','784-1986-1122334-6','Salma Al Marzouqi','+971 50 410 8877','ADNOC','Process Engineer','Owner','','','','2018-06-12','',''],
+        'Yusuf Al Marzouqi','yusuf.marzouqi@example.ae','+971 56 901 4477','Welcome2026!','1986-12-02','KL1122334','784-1986-1122334-6','ADNOC','Process Engineer','Owner','','','','2018-06-12','',''],
     ],
     filename: 'villas-template',
     rules: [
@@ -119,7 +132,7 @@ const BUILDINGS_BY_TYPE = {
 
 const PC_TEMPLATES = {
   buildings: {
-    label: 'Properties',
+    label: 'Assets',
     headers: [
       'Building name','Property type','Floor','Unit','Address','Notes',
       'Plot area (sqft)','Villa count','Bedrooms per villa',
@@ -307,7 +320,7 @@ const ProfileCreationPage = () => {
   if (!pmcSession || authRole !== 'pmc') {
     return (
       <div>
-        <div className="page-header"><div><h1>Profile Creation</h1></div></div>
+        <div className="page-header"><div><h1>Database</h1></div></div>
         <div className="card" style={{padding:32,textAlign:'center'}}>
           <div style={{fontSize:13,color:'var(--text-secondary)',marginBottom:14}}>
             {pmcSession ? 'Your account does not have PMC privileges.' : 'You are not signed in to a real VARS account yet.'}
@@ -322,7 +335,7 @@ const ProfileCreationPage = () => {
     <div>
       <div className="page-header">
         <div>
-          <h1>Profile Creation</h1>
+          <h1>Database</h1>
         </div>
       </div>
 
@@ -796,42 +809,65 @@ const PCSummary = ({ section }) => {
     );
   }
 
+  // Group guards by building so the Security summary mirrors the
+  // Properties summary's per-type sections. A guard with no building
+  // assignment shows in an 'Unassigned' bucket.
+  const guardsByBuilding = {};
+  (rows || []).forEach(r => {
+    const key = r.building_name || '(Unassigned)';
+    (guardsByBuilding[key] = guardsByBuilding[key] || []).push(r);
+  });
+  const buildingNamesSorted = Object.keys(guardsByBuilding).sort((a, b) => {
+    if (a === '(Unassigned)') return 1;
+    if (b === '(Unassigned)') return -1;
+    return a.localeCompare(b);
+  });
+  const deleteGuard = async (r) => {
+    if (!window.confirm('Delete guard "' + r.full_name + '"? This removes their login too.')) return;
+    const out = await deleteUsersViaFunction([r.id]);
+    const first = out && out.results && out.results[0];
+    if (!first || !first.ok) alert('Delete failed: ' + ((first && first.error) || (out && out.error) || 'Unknown'));
+    reload();
+  };
+
   return (
     <>
-    <div className="card">
-      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:12}}>
-        <div style={{fontSize:13,color:'var(--text-muted)'}}>{rows.length} guard{rows.length===1?'':'s'}</div>
-        <button className="btn btn-sm" onClick={reload}>Refresh</button>
-      </div>
-      <div className="data-table-scroll">
-      <table className="data-table">
-        <thead><tr><th>Name</th><th>Email</th><th>Phone</th><th>Passport</th><th>DOB</th><th>Building</th><th>Shift</th><th style={{textAlign:'right'}}>Actions</th></tr></thead>
-        <tbody>
-          {rows.map(r => (
-            <tr key={r.id}>
-              <td style={{fontWeight:500}}>{r.full_name}</td>
-              <td style={{fontSize:12,color:'var(--accent-warm-dark)'}}>{r.email}</td>
-              <td>{r.phone || '—'}</td>
-              <td>{r.passport_number || '—'}</td>
-              <td>{r.date_of_birth || '—'}</td>
-              <td>{r.building_name}</td>
-              <td>{r.shift}</td>
-              <td style={{textAlign:'right',whiteSpace:'nowrap'}}>
-                <button onClick={() => setEditing({ kind: 'security', record: r })} style={{padding:'4px 10px',fontSize:11,background:'#fff',border:'1px solid #D0D6D5',borderRadius:4,color:'var(--text-dark)',cursor:'pointer',marginRight:6}}>Edit</button>
-                <button onClick={async () => {
-                  if (!window.confirm('Delete guard "' + r.full_name + '"? This removes their login too.')) return;
-                  const out = await deleteUsersViaFunction([r.id]);
-                  const first = out && out.results && out.results[0];
-                  if (!first || !first.ok) alert('Delete failed: ' + ((first && first.error) || (out && out.error) || 'Unknown'));
-                  reload();
-                }} style={{padding:'4px 10px',fontSize:11,background:'#fff',border:'1px solid #D0D6D5',borderRadius:4,color:'#8b4a42',cursor:'pointer'}}>Delete</button>
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-      </div>
+    <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:14}}>
+      <div style={{fontSize:13,color:'var(--text-muted)'}}>{(rows||[]).length} guard{(rows||[]).length===1?'':'s'} across {buildingNamesSorted.length} building{buildingNamesSorted.length===1?'':'s'}</div>
+      <button className="btn btn-sm" onClick={reload}>Refresh</button>
     </div>
+    {buildingNamesSorted.map(bname => {
+      const list = guardsByBuilding[bname];
+      return (
+        <div key={bname} className="card" style={{marginBottom:18}}>
+          <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',marginBottom:12,gap:10}}>
+            <div style={{fontSize:11,letterSpacing:'0.1em',textTransform:'uppercase',color:'var(--text-secondary)',fontWeight:600}}>{bname}</div>
+            <div style={{fontSize:12,color:'var(--text-muted)'}}>{list.length} guard{list.length===1?'':'s'}</div>
+          </div>
+          <div className="data-table-scroll">
+            <table className="data-table">
+              <thead><tr><th>Name</th><th>Email</th><th>Phone</th><th>Passport</th><th>DOB</th><th>Shift</th><th style={{textAlign:'right'}}>Actions</th></tr></thead>
+              <tbody>
+                {list.map(r => (
+                  <tr key={r.id}>
+                    <td style={{fontWeight:500}}>{r.full_name}</td>
+                    <td style={{fontSize:12,color:'var(--accent-warm-dark)'}}>{r.email}</td>
+                    <td>{r.phone || '—'}</td>
+                    <td>{r.passport_number || '—'}</td>
+                    <td>{r.date_of_birth || '—'}</td>
+                    <td>{r.shift}</td>
+                    <td style={{textAlign:'right',whiteSpace:'nowrap'}}>
+                      <button onClick={() => setEditing({ kind: 'security', record: r })} style={{padding:'4px 10px',fontSize:11,background:'#fff',border:'1px solid #D0D6D5',borderRadius:4,color:'var(--text-dark)',cursor:'pointer',marginRight:6}}>Edit</button>
+                      <button onClick={() => deleteGuard(r)} style={{padding:'4px 10px',fontSize:11,background:'#fff',border:'1px solid #D0D6D5',borderRadius:4,color:'#8b4a42',cursor:'pointer'}}>Delete</button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      );
+    })}
     {editing && <EditRecordModal kind={editing.kind} record={editing.record} onClose={() => setEditing(null)} onSaved={reload}/>}
     </>
   );
@@ -961,8 +997,6 @@ const PCBulkUpload = ({ section }) => {
               date_of_birth: r['Date of birth'] || null,
               passport_number: r['Passport number'] || null,
               emirates_id: r['Emirates ID'] || null,
-              emergency_contact_name: r['Emergency contact name'] || null,
-              emergency_contact_phone: r['Emergency contact phone'] || null,
               employer: r['Employer'] || null,
               occupation: r['Occupation'] || null,
               tenure: r['Tenure'] || null,
@@ -1161,19 +1195,20 @@ async function uploadBuildingsBulk(parsedRows, conflictMode = 'skip') {
     purchase_date:   str(row['Purchase date']),
   });
   const hasOwner = (o) => !!(o && (o.name || o.phone || o.email || o.passport_number || o.emirates_id));
+  // Residential / Villa templates prefix columns with 'Resident *';
+  // Commercial uses 'Tenant *' for the corporate-tenant fields it keeps.
+  // We accept either so a mixed file can ingest both shapes.
   const residentFrom = (row) => ({
-    full_name:                str(row['Resident full name']),
-    email:                    str(row['Resident email']),
-    phone:                    str(row['Resident phone']),
-    password:                 str(row['Resident temp password']) || 'Welcome2026!',
+    full_name:                str(row['Resident full name']    || row['Tenant name']),
+    email:                    str(row['Resident email']        || row['Tenant email']),
+    phone:                    str(row['Resident phone']        || row['Tenant phone']),
+    password:                 str(row['Resident temp password']|| row['Tenant temp password']) || 'Welcome2026!',
     date_of_birth:            str(row['Resident date of birth']),
     passport_number:          str(row['Resident passport']),
     emirates_id:              str(row['Resident Emirates ID']),
-    emergency_contact_name:   str(row['Resident emergency contact name']),
-    emergency_contact_phone:  str(row['Resident emergency contact phone']),
     employer:                 str(row['Resident employer']),
     occupation:               str(row['Resident occupation']),
-    tenure:                   str(row['Resident tenure']),
+    tenure:                   str(row['Resident tenure']       || row['Tenant tenure']),
     lease_start:              str(row['Lease start']),
     lease_end:                str(row['Lease end']),
     monthly_payment_aed:      numOrNull(row['Monthly payment (AED)']),
@@ -1338,8 +1373,6 @@ async function uploadBuildingsBulk(parsedRows, conflictMode = 'skip') {
             date_of_birth:           u.resident.date_of_birth   || null,
             passport_number:         u.resident.passport_number || null,
             emirates_id:             u.resident.emirates_id     || null,
-            emergency_contact_name:  u.resident.emergency_contact_name  || null,
-            emergency_contact_phone: u.resident.emergency_contact_phone || null,
             employer:                u.resident.employer   || null,
             occupation:              u.resident.occupation || null,
             tenure:                  u.resident.tenure || null,
@@ -1861,7 +1894,6 @@ const RESIDENT_FORM_DEFAULTS = {
   fullName: '', email: '', phone: '', password: 'Welcome2026!',
   buildingId: '', unitId: '',
   dob: '', passport: '', emiratesId: '',
-  emergencyContactName: '', emergencyContactPhone: '',
   employer: '', occupation: '',
   tenure: '', leaseStart: '', leaseEnd: '', monthlyPayment: '', ownershipStart: '',
   contractNumber: '', chequesPerYear: '',
@@ -1901,8 +1933,6 @@ const ResidentManualForm = () => {
           date_of_birth:           form.dob || null,
           passport_number:         form.passport.trim() || null,
           emirates_id:             form.emiratesId.trim() || null,
-          emergency_contact_name:  form.emergencyContactName.trim() || null,
-          emergency_contact_phone: form.emergencyContactPhone.trim() || null,
           employer:                form.employer.trim() || null,
           occupation:              form.occupation.trim() || null,
           tenure:                  form.tenure || null,
@@ -1947,12 +1977,6 @@ const ResidentManualForm = () => {
         <PCField label="Date of birth" type="date" value={form.dob} onChange={set('dob')}/>
         <PCField label="Passport number" value={form.passport} onChange={set('passport')} placeholder="e.g. AB1234567"/>
         <PCField label="Emirates ID" value={form.emiratesId} onChange={set('emiratesId')} placeholder="784-YYYY-NNNNNNN-N"/>
-      </div>
-
-      <div style={sectionLabel}>Emergency contact</div>
-      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:14,marginBottom:14}}>
-        <PCField label="Contact name" value={form.emergencyContactName} onChange={set('emergencyContactName')}/>
-        <PCField label="Contact phone" value={form.emergencyContactPhone} onChange={set('emergencyContactPhone')} placeholder="+971 …"/>
       </div>
 
       <div style={sectionLabel}>Employment</div>

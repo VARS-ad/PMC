@@ -18,9 +18,9 @@ const TRANSLATIONS = {
     // Sidebar
     'nav.overview': 'Overview',
     'nav.service': 'Service Requests',
-    'nav.payment': 'Service Charges',
+    'nav.payment': 'Operating Revenue',
     'nav.escalations': 'Escalations',
-    'nav.properties': 'Properties',
+    'nav.properties': 'Assets',
     'nav.announcements': 'Announcements',
     'nav.visitors': 'Visitors',
     'nav.guards': 'Guards',

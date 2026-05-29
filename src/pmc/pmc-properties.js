@@ -327,7 +327,7 @@ const PMCPropertiesPage = ({ setPage }) => {
     <div>
       <div className="page-header">
         <div>
-          <h1>Properties</h1>
+          <h1>Assets</h1>
           <div style={{marginTop:6,fontSize:14,color:'var(--text-secondary)',fontWeight:500,letterSpacing:'-0.01em'}}>
             {explicitRange}
           </div>

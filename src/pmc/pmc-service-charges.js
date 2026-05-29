@@ -166,7 +166,7 @@ const PMCServiceChargesPage = () => {
     <div>
       <div className="page-header">
         <div>
-          <h1>Service Charges</h1>
+          <h1>Operating Revenue</h1>
           <div style={{marginTop:6,fontSize:14,color:'var(--text-secondary)',fontWeight:500,letterSpacing:'-0.01em'}}>
             {explicitRange}
           </div>
