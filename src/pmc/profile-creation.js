@@ -26,6 +26,15 @@ const TENANT_COLS = [
   'Contract #','Tenant name','Tenant email','Tenant phone','Tenant temp password',
   'Tenant tenure','Lease start','Lease end','Monthly payment (AED)',
 ];
+// Commercial Land uses "Client" terminology instead of "Tenant". Same
+// shape, same parser branch. Each row is one client on the plot —
+// a single plot can have many client rows (yard subdivisions, multi-
+// tenant lease arrangements, etc.) and the parser de-dupes by Contract #
+// or by an auto-incremented slot number when Contract # is blank.
+const CLIENT_COLS = [
+  'Contract #','Client name','Client email','Client phone','Client temp password',
+  'Lease start','Lease end','Monthly payment (AED)',
+];
 
 const BUILDINGS_BY_TYPE = {
   Residential: {
@@ -68,64 +77,142 @@ const BUILDINGS_BY_TYPE = {
   },
   Commercial: {
     label: 'Commercial buildings',
-    // Order: building cols → commercial-specific use/GLA/parking → TENANT
-    // block (Contract # first, then tenant identity + lease) → OWNER
-    // block at the very end (landlord is often a holding company; less
-    // important than the tenant for day-to-day operations).
+    // One row per OFFICE / RETAIL UNIT. User shape:
+    //   Building 1 = 4 floors × 2 offices per floor = 8 rows.
+    //   Building 2 = 5 floors × 2 offices per floor = 10 rows.
     headers: ['Building name','Property type','Floor','Unit','Address','Notes','Commercial use','Gross leasable area (sqft)','Parking spots', ...TENANT_COLS, ...OWNER_COLS],
     examples: [
-      ['Boulevard Plaza Offices','Commercial',1,'B-101','Sheikh Mohammed bin Rashid Blvd, Downtown Dubai, UAE','Grade A office tower.','Office',850000,1200,
+      // === Building 1: Boulevard Plaza Offices — 4 floors × 2 offices ===
+      ['Boulevard Plaza Offices','Commercial',1,'B-101','Sheikh Mohammed bin Rashid Blvd, Downtown Dubai, UAE','Grade A office tower (4 floors, 2 offices per floor).','Office',180000,400,
         'CMT-BLV-101','TechCorp ME FZ-LLC','tenancy@techcorp.me','+971 4 778 2200','Welcome2026!','Tenant','2026-02-01','2027-01-31',45000,
         'Downtown Holding LLC','+971 4 555 1000','contracts@downtownholding.ae','-','-','2013-11-20'],
       ['Boulevard Plaza Offices','Commercial',1,'B-102','','','','','',
+        'CMT-BLV-102','Apex Consulting ME','admin@apexconsulting.ae','+971 4 224 5500','Welcome2026!','Tenant','2026-01-15','2027-01-14',38000,
+        '','','','','',''],
+      ['Boulevard Plaza Offices','Commercial',2,'B-201','','','','','',
+        'CMT-BLV-201','Sigma Health Group','finance@sigmahealth.ae','+971 4 990 1100','Welcome2026!','Tenant','2026-03-01','2028-02-28',42000,
+        '','','','','',''],
+      ['Boulevard Plaza Offices','Commercial',2,'B-202','','','','','',
         '','','','','','','','','',
-        'Downtown Holding LLC','+971 4 555 1000','contracts@downtownholding.ae','','',''],
-      ['Mall of the Emirates Retail Hub','Commercial',1,'R-101','Sheikh Zayed Rd, Al Barsha 1, Dubai, UAE','Anchor retail concourse.','Retail',420000,850,
-        'CMT-MOE-101','Carrefour UAE','contracts@carrefour.ae','+971 4 295 1010','Welcome2026!','Tenant','2026-01-01','2030-12-31',95000,
-        'Majid Al Futtaim Retail','+971 4 409 9999','leasing@maf.ae','-','-','2005-09-14'],
+        '','','','','',''],
+      ['Boulevard Plaza Offices','Commercial',3,'B-301','','','','','',
+        'CMT-BLV-301','Helios Energy Trading','contracts@heliosenergy.ae','+971 4 339 4422','Welcome2026!','Tenant','2026-02-15','2028-02-14',55000,
+        '','','','','',''],
+      ['Boulevard Plaza Offices','Commercial',3,'B-302','','','','','',
+        'CMT-BLV-302','Vertex Law Firm','reception@vertexlaw.ae','+971 4 778 9900','Welcome2026!','Tenant','2026-01-01','2027-12-31',60000,
+        '','','','','',''],
+      ['Boulevard Plaza Offices','Commercial',4,'B-401','','','','','',
+        'CMT-BLV-401','Bloomberg LP (Bureau)','dubai.bureau@bloomberg.net','+971 4 990 2233','Welcome2026!','Tenant','2026-01-01','2030-12-31',75000,
+        '','','','','',''],
+      ['Boulevard Plaza Offices','Commercial',4,'B-402','','','','','',
+        'CMT-BLV-402','PwC Middle East (Annex)','annex.uae@pwc.com','+971 4 224 9911','Welcome2026!','Tenant','2026-01-01','2028-12-31',82000,
+        '','','','','',''],
+      // === Building 2: Marina Trade Centre — 5 floors × 2 offices ===
+      ['Marina Trade Centre','Commercial',1,'M-101','Dubai Marina, Dubai, UAE','Mid-market office building (5 floors, 2 offices per floor).','Office',220000,560,
+        'CMT-MTC-101','Standard Chartered SME','sme.uae@sc.com','+971 4 332 7788','Welcome2026!','Tenant','2026-02-01','2028-01-31',58000,
+        'Marina Plaza Holdings LLC','+971 4 555 7700','contracts@marinaplaza.ae','-','-','2013-04-15'],
+      ['Marina Trade Centre','Commercial',1,'M-102','','','','','',
+        'CMT-MTC-102','Cobalt Engineering Ltd','accounts@cobaltgcc.ae','+971 4 224 7799','Welcome2026!','Tenant','2026-02-01','2027-01-31',32000,
+        '','','','','',''],
+      ['Marina Trade Centre','Commercial',2,'M-201','','','','','',
+        'CMT-MTC-201','Mercury Digital ME','accounts@mercurydigital.ae','+971 4 556 7700','Welcome2026!','Tenant','2026-05-01','2027-04-30',28000,
+        '','','','','',''],
+      ['Marina Trade Centre','Commercial',2,'M-202','','','','','',
+        'CMT-MTC-202','BlueCrest Advisory','ops@bluecrest.ae','+971 4 339 7799','Welcome2026!','Tenant','2026-04-01','2027-03-31',30000,
+        '','','','','',''],
+      ['Marina Trade Centre','Commercial',3,'M-301','','','','','',
+        'CMT-MTC-301','Crescent Capital MENA','admin@crescentcap.ae','+971 4 119 4477','Welcome2026!','Tenant','2026-02-01','2027-01-31',40000,
+        '','','','','',''],
+      ['Marina Trade Centre','Commercial',3,'M-302','','','','','',
+        '','','','','','','','','',
+        '','','','','',''],
+      ['Marina Trade Centre','Commercial',4,'M-401','','','','','',
+        'CMT-MTC-401','Aurora Digital Agency','accounts@auroradigital.ae','+971 4 224 3366','Welcome2026!','Tenant','2026-03-01','2027-02-28',26000,
+        '','','','','',''],
+      ['Marina Trade Centre','Commercial',4,'M-402','','','','','',
+        'CMT-MTC-402','Rosenthal Law Firm','reception@rosenthallaw.ae','+971 4 778 5544','Welcome2026!','Tenant','2026-02-01','2027-01-31',38000,
+        '','','','','',''],
+      ['Marina Trade Centre','Commercial',5,'M-501','','','','','',
+        'CMT-MTC-501','Nimbus Cloud Services','accounts@nimbuscloud.ae','+971 4 224 5588','Welcome2026!','Tenant','2026-04-01','2027-03-31',34000,
+        '','','','','',''],
+      ['Marina Trade Centre','Commercial',5,'M-502','','','','','',
+        'CMT-MTC-502','Falcon Maritime Trading','contracts@falconmaritime.ae','+971 4 556 6644','Welcome2026!','Tenant','2026-03-15','2028-03-14',42000,
+        '','','','','',''],
     ],
     filename: 'commercial-template',
     rules: [
-      'ONE ROW PER UNIT. Floor and Unit are required.',
+      'ONE ROW PER OFFICE (or retail unit). Floor and Unit are both required.',
+      'A 4-floor building with 2 offices per floor = 8 rows; 5 floors × 2 offices = 10 rows.',
       'Commercial use must be one of: Office, Retail, Mixed.',
       'Building-level fields (Address, Notes, GLA, Parking, Commercial use) go on the FIRST row of each building.',
       'TENANT block (Contract #, name, email, phone, lease) describes the corporate tenant. Personal fields like DOB / passport / emergency contact intentionally aren’t collected here.',
-      'OWNER block sits at the END of the row — typically a holding company or developer.',
+      'OWNER block sits at the END — usually a holding company. Fill on the FIRST row of each building; later rows inherit.',
     ],
   },
   Villa: {
     label: 'Villas',
-    headers: ['Building name','Property type','Address','Notes','Plot area (sqft)','Villa count','Bedrooms per villa', ...OWNER_COLS, ...RESIDENT_COLS],
+    // One row per individual villa (not per compound). Each villa is its
+    // own building record with its own owner + resident. The 'Villa count'
+    // column from the old compound shape is gone — each row IS one villa.
+    headers: ['Villa name','Property type','Address','Notes','Bedrooms','Plot area (sqft)', ...OWNER_COLS, ...RESIDENT_COLS],
     examples: [
-      ['Emirates Hills Estate','Villa','Emirates Hills, Dubai, UAE','Gated villa community by EMAAR with golf course frontage.',60000,8,5,
-        'Mubadala Real Estate','+971 2 413 0000','assets@mubadalare.ae','-','-','2010-04-01',
-        'Ali Al Naqbi','ali.naqbi@example.ae','+971 50 700 3344','Welcome2026!','1982-07-19','IJ9988776','784-1982-9988776-5','Emirates Investment Authority','Investment Director','Tenant','2026-03-01','2027-02-28',45000,'',4,'RNT-VIL-EH'],
-      ['Saadiyat Beach Villas','Villa','Saadiyat Island, Abu Dhabi, UAE','Beachfront luxury villa cluster, private beach access.',95000,12,4,
-        'Aldar Properties','+971 2 810 5555','assets@aldar.ae','-','-','2018-06-12',
-        'Yusuf Al Marzouqi','yusuf.marzouqi@example.ae','+971 56 901 4477','Welcome2026!','1986-12-02','KL1122334','784-1986-1122334-6','ADNOC','Process Engineer','Owner','','','','2018-06-12','',''],
+      // Palm Jumeirah villa — rented to a tenant.
+      ['Palm Frond M-23','Villa','Palm Jumeirah, Frond M, Dubai, UAE','Signature villa, private beach access, 3 floors.',6,12500,
+        'Layla Al Maktoum','+971 50 778 9900','layla.maktoum@example.ae','MM1122334','784-1981-1122334-1','2014-09-22',
+        'Stefan Hartmann','stefan.hartmann@example.ae','+971 52 119 8877','Welcome2026!','1979-04-12','DE2233445','','BMW ME','Regional CEO','Tenant','2026-01-01','2027-12-31',38000,'',12,'RNT-PALM-M23'],
+      // Emirates Hills mansion — owner-occupied.
+      ['Emirates Hills V-14','Villa','Emirates Hills, Street 7, Dubai, UAE','Mansion-style villa, golf course frontage, 2 floors.',8,18000,
+        'Mohammed Al Habtoor','+971 50 224 5500','mohammed.habtoor@example.ae','HB7788990','784-1972-7788990-5','2009-11-08',
+        'Mohammed Al Habtoor','mohammed.habtoor@example.ae','+971 50 224 5500','Welcome2026!','1972-03-30','HB7788990','784-1972-7788990-5','Al Habtoor Group','Chairman','Owner','','','','2009-11-08','',''],
+      // Saadiyat villa — rented.
+      ['Saadiyat Beach B-7','Villa','Saadiyat Beach Villas, Saadiyat Island, Abu Dhabi, UAE','Aldar Saadiyat Beach community villa, 2 floors.',5,9500,
+        'Ahmed Al Marzouqi','+971 50 119 2244','ahmed.marzouqi@example.ae','MZ1122334','784-1977-1122334-3','2017-06-04',
+        'Eric Lambert','eric.lambert@example.ae','+971 55 663 7788','Welcome2026!','1983-11-20','FR4455667','','TotalEnergies','Country GM','Tenant','2026-02-01','2027-01-31',32000,'',4,'RNT-SAAD-B7'],
+      // Al Barari villa — corporate owner, rented.
+      ['Al Barari Forest Villa F-3','Villa','Al Barari, Forest Villas, Dubai, UAE','Forest villa, private pool, 3 floors.',7,15000,
+        'Al Barari Investments LLC','+971 4 339 7788','contracts@albarariinv.ae','-','-','2015-03-18',
+        'Patricia Romano','patricia.r@example.ae','+971 56 778 9911','Welcome2026!','1985-07-14','IT2233445','','L Catterton','Partner, Private Equity','Tenant','2026-03-01','2027-02-28',45000,'',12,'RNT-BARARI-F3'],
     ],
     filename: 'villas-template',
     rules: [
-      'ONE ROW per villa compound — no Floor / Unit columns.',
-      'Plot area, Villa count, and Bedrooms per villa describe the whole compound.',
-      'OWNER columns describe whoever holds title to the compound (often a developer or holding company).',
-      'RESIDENT columns describe the primary household; leave blank for vacant compounds.',
+      'ONE ROW per individual villa (no compound grouping, no Floor / Unit columns).',
+      'Bedrooms and Plot area describe THIS villa.',
+      'OWNER columns describe whoever holds title to the villa (individual or corporate).',
+      'RESIDENT columns describe the current occupant; leave blank for vacant villas.',
+      'If the Resident email matches the Owner email we automatically flag the villa as owner-occupied.',
     ],
   },
   'Commercial Land': {
     label: 'Commercial land',
-    headers: ['Building name','Property type','Address','Notes','Plot area (sqft)', ...OWNER_COLS],
+    // 'Plot name' is the user-facing label; data still maps to
+    // buildings.name (the parser accepts either header). One plot may
+    // host multiple clients — each row is one client lease on the plot.
+    headers: ['Plot name','Property type','Address','Notes','Plot area (sqft)', ...OWNER_COLS, ...CLIENT_COLS],
     examples: [
-      ['Al Quoz Industrial Plot','Commercial Land','Al Quoz Industrial Area 3, Dubai, UAE','Industrial-zoned plot leased to a regional logistics tenant.',35000,
-        'Khalifa Industrial Holdings','+971 4 252 0000','plots@kih.ae','-','-','2009-02-04'],
-      ['Reem Island Vacant Plot','Commercial Land','Al Reem Island, Abu Dhabi, UAE','Mixed-use zoned plot held for future tower development.',60000,
-        'Reem Investments LLC','+971 2 614 7777','plots@reeminv.ae','-','-','2014-08-22'],
+      // Plot 1 — 3 clients (industrial subdivisions / yards).
+      ['Al Quoz Industrial Plot 14','Commercial Land','Al Quoz Industrial Area 3, Dubai, UAE','Industrial plot subdivided into 3 yards, leased to logistics tenants.',85000,
+        'Khalifa Industrial Holdings','+971 4 252 9900','plots@kih.ae','-','-','2009-02-04',
+        'CL-AQ14-A','Aramex Yards','contracts@aramex.com','+971 4 778 1100','Welcome2026!','2026-01-01','2028-12-31',120000],
+      ['Al Quoz Industrial Plot 14','Commercial Land','','','','','','','','','',
+        'CL-AQ14-B','DHL Express UAE','accounts@dhl.ae','+971 4 224 5511','Welcome2026!','2026-02-01','2027-01-31',95000],
+      ['Al Quoz Industrial Plot 14','Commercial Land','','','','','','','','','',
+        'CL-AQ14-C','GMG Logistics','contracts@gmglogistics.ae','+971 4 339 7700','Welcome2026!','2026-03-01','2028-02-28',88000],
+      // Plot 2 — vacant.
+      ['DIP Phase 2 Plot 38','Commercial Land','Dubai Investment Park, Phase 2, Dubai, UAE','Mixed light-industrial / showroom plot, currently vacant.',45000,
+        'Dubai Investments PJSC','+971 4 812 0700','plots@dubaiinvestments.ae','-','-','2003-07-21',
+        '','','','','','','',''],
+      // Plot 3 — single long-term ground lease.
+      ['KIZAD South Plot 22','Commercial Land','Khalifa Industrial Zone Abu Dhabi (KIZAD) South, Abu Dhabi, UAE','Heavy-industrial plot, 30-year ground lease.',120000,
+        'AD Ports Group','+971 2 695 2000','plots@adports.ae','-','-','2015-10-12',
+        'CL-KZ22-Main','JAFZA-Logistic Co','contracts@jafzalogistic.ae','+971 2 511 3300','Welcome2026!','2025-10-01','2055-09-30',225000],
     ],
     filename: 'commercial-land-template',
     rules: [
-      'ONE ROW per plot — no Floor / Unit columns.',
-      'Plot area is required.',
-      'OWNER columns describe the title holder; Commercial Land has no resident, so resident columns are intentionally absent.',
+      'ONE row per CLIENT lease. A plot leased to 3 tenants = 3 rows; repeat the Plot name on every row.',
+      'Plot-level fields (Address, Notes, Plot area, Owner block) go on the FIRST row of each plot; later rows can leave them blank.',
+      'Each client row must have a unique Contract # — that becomes the slot id under the plot. Leave blank for vacant plots.',
+      'OWNER columns describe the title holder (usually a holding company).',
+      'CLIENT columns describe whoever is currently leasing the slot; corporate fields only (no DOB / passport / Emirates ID).',
     ],
   },
 };
@@ -964,18 +1051,23 @@ const PCBulkUpload = ({ section }) => {
   const [error, setError] = useState(null);
   const [conflictMode, setConflictMode] = useState('skip'); // 'skip' | 'update' — what happens when an email already exists
 
-  const handleFile = async (e) => {
+  // For Buildings ('Assets') each property type has its own Upload control
+  // wired to its own header list (Residential / Commercial / Villa /
+  // Commercial Land). For every other section the shared upload at the
+  // bottom uses cfg.headers as before.
+  const handleFileWithHeaders = (expectedHeaders) => async (e) => {
     setError(null); setResults(null); setParsedRows(null);
     const file = e.target.files && e.target.files[0];
     if (!file) return;
     try {
       const rows = await parseUploadedFile(file);
-      const objs = rowsToObjects(rows, cfg.headers);
+      const objs = rowsToObjects(rows, expectedHeaders);
       setParsedRows(objs);
     } catch (err) {
       setError(String(err.message || err));
     }
   };
+  const handleFile = handleFileWithHeaders(cfg.headers);
 
   const submit = async () => {
     if (!parsedRows || parsedRows.length === 0) return;
@@ -1052,9 +1144,16 @@ const PCBulkUpload = ({ section }) => {
               <div key={typeKey} style={{marginBottom:22,paddingBottom:18,borderBottom:'1px solid var(--border-light)'}}>
                 <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:10,gap:14,flexWrap:'wrap'}}>
                   <div style={{fontSize:14,fontWeight:600,color:'var(--text-dark)',letterSpacing:'-0.01em'}}>{t.label}</div>
-                  <div style={{display:'flex',gap:8}}>
+                  <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
                     <button className="btn btn-sm btn-primary" onClick={() => downloadAsXlsx(t.filename, t.headers, t.examples)}>Download .xlsx</button>
                     <button className="btn btn-sm" onClick={() => downloadAsCsv(t.filename, t.headers, t.examples)}>Download .csv</button>
+                    {/* Per-type Upload input. Validates against THIS type's
+                        headers so a Villas file isn't rejected for missing
+                        Commercial / Floor columns. */}
+                    <label className="btn btn-sm" style={{cursor:'pointer'}}>
+                      Upload {t.label.toLowerCase()}
+                      <input type="file" accept=".xlsx,.csv" onChange={handleFileWithHeaders(t.headers)} style={{display:'none'}}/>
+                    </label>
                   </div>
                 </div>
                 <div className="data-table-scroll">
@@ -1068,7 +1167,7 @@ const PCBulkUpload = ({ section }) => {
                 </ul>
               </div>
             ))}
-            <div style={{fontSize:12,color:'var(--text-muted)',fontStyle:'italic'}}>You can also mix all four types into a single file — every column listed above is valid; rows with missing optional columns are filled with blanks.</div>
+            <div style={{fontSize:12,color:'var(--text-muted)',fontStyle:'italic'}}>Use the Upload button next to each type so the file is checked against the right column set.</div>
           </div>
         </>
       ) : (
@@ -1195,20 +1294,22 @@ async function uploadBuildingsBulk(parsedRows, conflictMode = 'skip') {
     purchase_date:   str(row['Purchase date']),
   });
   const hasOwner = (o) => !!(o && (o.name || o.phone || o.email || o.passport_number || o.emirates_id));
-  // Residential / Villa templates prefix columns with 'Resident *';
-  // Commercial uses 'Tenant *' for the corporate-tenant fields it keeps.
-  // We accept either so a mixed file can ingest both shapes.
+  // Three templates use three different prefixes for the resident block:
+  //   Residential / Villa  → 'Resident *' (full personal data)
+  //   Commercial buildings → 'Tenant *'   (corporate tenant fields)
+  //   Commercial land      → 'Client *'   (corporate client / lessee)
+  // The parser accepts any of them so a mixed file ingests cleanly.
   const residentFrom = (row) => ({
-    full_name:                str(row['Resident full name']    || row['Tenant name']),
-    email:                    str(row['Resident email']        || row['Tenant email']),
-    phone:                    str(row['Resident phone']        || row['Tenant phone']),
-    password:                 str(row['Resident temp password']|| row['Tenant temp password']) || 'Welcome2026!',
+    full_name:                str(row['Resident full name']     || row['Tenant name'] || row['Client name']),
+    email:                    str(row['Resident email']         || row['Tenant email'] || row['Client email']),
+    phone:                    str(row['Resident phone']         || row['Tenant phone'] || row['Client phone']),
+    password:                 str(row['Resident temp password'] || row['Tenant temp password'] || row['Client temp password']) || 'Welcome2026!',
     date_of_birth:            str(row['Resident date of birth']),
     passport_number:          str(row['Resident passport']),
     emirates_id:              str(row['Resident Emirates ID']),
     employer:                 str(row['Resident employer']),
     occupation:               str(row['Resident occupation']),
-    tenure:                   str(row['Resident tenure']       || row['Tenant tenure']),
+    tenure:                   str(row['Resident tenure']        || row['Tenant tenure']) || (str(row['Client name']) ? 'Tenant' : null),
     lease_start:              str(row['Lease start']),
     lease_end:                str(row['Lease end']),
     monthly_payment_aed:      numOrNull(row['Monthly payment (AED)']),
@@ -1219,8 +1320,11 @@ async function uploadBuildingsBulk(parsedRows, conflictMode = 'skip') {
   const hasResident = (r) => !!(r && r.full_name && r.email);
 
   for (const row of parsedRows) {
-    const bname = (row['Building name'] || '').toString().trim();
-    if (!bname) { results.push({ row: JSON.stringify(row), ok: false, error: 'Missing building name' }); continue; }
+    // Accept 'Building name' (Residential / Commercial), 'Plot name'
+    // (Commercial Land) or 'Villa name' (Villa template) as the row's
+    // building identifier; all three map to public.buildings.name.
+    const bname = (row['Building name'] || row['Plot name'] || row['Villa name'] || '').toString().trim();
+    if (!bname) { results.push({ row: JSON.stringify(row), ok: false, error: 'Missing building / plot / villa name' }); continue; }
     if (!buildingMap[bname]) {
       buildingMap[bname] = {
         name: bname,
@@ -1229,6 +1333,7 @@ async function uploadBuildingsBulk(parsedRows, conflictMode = 'skip') {
         commercial_use_type: null, gross_leasable_area_sqft: null, parking_spots: null,
         defaultOwner: null,   // first non-empty owner block seen — inherited by later units
         units: [],
+        _slotCounter: 0,      // synthetic unit numbers for Commercial Land multi-client rows
       };
     }
     const b = buildingMap[bname];
@@ -1237,7 +1342,7 @@ async function uploadBuildingsBulk(parsedRows, conflictMode = 'skip') {
     b.notes                     = takeFirst(b.notes,                     row['Notes']);
     b.plot_area_sqft            = takeFirst(b.plot_area_sqft,            row['Plot area (sqft)']);
     b.villa_count               = takeFirst(b.villa_count,               row['Villa count']);
-    b.bedrooms_per_villa        = takeFirst(b.bedrooms_per_villa,        row['Bedrooms per villa']);
+    b.bedrooms_per_villa        = takeFirst(b.bedrooms_per_villa,        row['Bedrooms per villa'] || row['Bedrooms']);
     b.commercial_use_type       = takeFirst(b.commercial_use_type,       row['Commercial use']);
     b.gross_leasable_area_sqft  = takeFirst(b.gross_leasable_area_sqft,  row['Gross leasable area (sqft)']);
     b.parking_spots             = takeFirst(b.parking_spots,             row['Parking spots']);
@@ -1260,11 +1365,21 @@ async function uploadBuildingsBulk(parsedRows, conflictMode = 'skip') {
         resident: hasResident(rowResident) ? rowResident : null,
       });
     } else if (hasOwner(rowOwner) || hasResident(rowResident)) {
-      // For Villa / Commercial Land — attach to a single virtual unit slot
-      // (floor null, unit_number null) so we still capture owner/resident
-      // even without a per-unit row.
+      // No explicit Floor / Unit on this row — Villa (one row = one
+      // villa) or Commercial Land (one row = one client lease on the
+      // plot, can repeat for multiple clients on the same plot).
+      //
+      // For Commercial Land we synthesise a unique unit_number per row
+      // (Contract # if provided, otherwise an auto-incremented slot id)
+      // so multiple clients on the same plot don't collide on the
+      // unique (building_id, unit_number) constraint.
+      const isLand = (row['Property type'] || '').toString().trim() === 'Commercial Land';
+      const synth  = isLand
+        ? (rowResident && rowResident.contract_number) || (bname.slice(0, 18) + '-SLOT-' + (++b._slotCounter))
+        : null;
       b.units.push({
-        floor: null, unit_number: null,
+        floor: null,
+        unit_number: synth,
         owner:    hasOwner(rowOwner)    ? rowOwner    : null,
         resident: hasResident(rowResident) ? rowResident : null,
       });
