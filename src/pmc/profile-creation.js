@@ -530,7 +530,7 @@ const PCSummary = ({ section }) => {
         // this view is a quick at-a-glance check after a bulk upload.
         const { data: vs, error: ve } = await supabaseClient
           .from('vendors')
-          .select('id, name, service_category, status, contract_end, contact_person, phone, email')
+          .select('id, name, service_category, status, contract_end, contact_person, contact_phone, contact_email')
           .order('name');
         if (ve) throw ve;
         data = vs || [];
@@ -927,7 +927,7 @@ const PCSummary = ({ section }) => {
                   <td>{v.service_category || '—'}</td>
                   <td>{statusBadge(v.status)}</td>
                   <td>{v.contact_person || '—'}</td>
-                  <td>{v.phone || '—'}</td>
+                  <td>{v.contact_phone || '—'}</td>
                   <td>{v.contract_end || '—'}</td>
                   <td style={{textAlign:'right',whiteSpace:'nowrap'}}>
                     <button onClick={openVendorPage} style={{padding:'4px 10px',fontSize:11,background:'#fff',border:'1px solid #D0D6D5',borderRadius:4,color:'var(--text-dark)',cursor:'pointer'}} title="Open the Maintenance Companies page from the sidebar">View →</button>
