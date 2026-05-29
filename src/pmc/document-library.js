@@ -458,6 +458,12 @@ const DocumentLibraryPage = ({ embedded } = {}) => {
   const [filterKind, setFilterKind] = useState('all');
   const [genStatus, setGenStatus] = useState(null);  // { phase, current, total }
   const [signedUrls, setSignedUrls] = useState({}); // attachmentId -> url
+  // Hidden refs for the bulk-import + per-unit / per-attachment file
+  // pickers. Each picker remembers what it was opened for via dataset
+  // attributes so the same input element can serve every row.
+  const importInputRef  = useRef(null);
+  const replaceInputRef = useRef(null);
+  const addInputRef     = useRef(null);
 
   const reload = async () => {
     setLoading(true); setError(null);
@@ -488,6 +494,78 @@ const DocumentLibraryPage = ({ embedded } = {}) => {
       setSignedUrls(prev => ({ ...prev, [att.id]: url }));
     }
     window.open(url, '_blank', 'noopener');
+  };
+
+  // --- Download a file to local disk ----------------------------------
+  // Forces a browser download instead of opening the signed URL in a tab.
+  const downloadAttachment = async (att) => {
+    try {
+      const { data, error: e } = await supabaseClient.storage.from(DocumentLibrary_BUCKET).createSignedUrl(att.storage_path, 600, { download: att.filename });
+      if (e) throw e;
+      const a = document.createElement('a');
+      a.href = data.signedUrl;
+      a.download = att.filename || 'download';
+      document.body.appendChild(a); a.click(); a.remove();
+    } catch (e) {
+      alert('Download failed: ' + (e.message || e));
+    }
+  };
+
+  // --- Delete an attachment (storage object + DB row) -----------------
+  const deleteAttachment = async (att) => {
+    if (!window.confirm('Delete ' + (att.filename || 'this attachment') + '? This removes the file from storage and cannot be undone.')) return;
+    try {
+      // Remove the storage object first; if the DB row stays, the user
+      // still sees nothing (broken link is harmless and easy to retry).
+      await supabaseClient.storage.from(DocumentLibrary_BUCKET).remove([att.storage_path]);
+      const { error: e } = await supabaseClient.from('unit_attachments').delete().eq('id', att.id);
+      if (e) throw e;
+      setAttachments(prev => prev.filter(x => x.id !== att.id));
+    } catch (e) {
+      alert('Delete failed: ' + (e.message || e));
+      reload();
+    }
+  };
+
+  // --- Replace the file backing an attachment row ---------------------
+  // Same DB row, new file uploaded at the same kind, into a new path so
+  // the old storage object is then explicitly removed. Triggered by a
+  // hidden <input type=file> next to each row.
+  const replaceAttachment = async (att, file) => {
+    if (!file) return;
+    try {
+      const oldPath = att.storage_path;
+      const safeName = (file.name || 'file').replace(/[^a-zA-Z0-9._-]/g, '_');
+      const newPath = att.unit_id + '/' + att.kind + '-' + Date.now() + '-' + safeName;
+      const { error: upErr } = await supabaseClient.storage.from(DocumentLibrary_BUCKET).upload(newPath, file, { contentType: file.type || undefined });
+      if (upErr) throw upErr;
+      const { error: updErr } = await supabaseClient.from('unit_attachments').update({ filename: file.name, storage_path: newPath }).eq('id', att.id);
+      if (updErr) throw updErr;
+      // Best-effort cleanup of the old object.
+      try { await supabaseClient.storage.from(DocumentLibrary_BUCKET).remove([oldPath]); } catch (_) {}
+      setSignedUrls(prev => { const out = { ...prev }; delete out[att.id]; return out; });
+      await reload();
+    } catch (e) {
+      alert('Replace failed: ' + (e.message || e));
+    }
+  };
+
+  // --- Upload a brand-new attachment for a given unit + kind ---------
+  const addAttachment = async (unit, kind, file) => {
+    if (!file) return;
+    try {
+      const safeName = (file.name || 'file').replace(/[^a-zA-Z0-9._-]/g, '_');
+      const path = unit.id + '/' + kind + '-' + Date.now() + '-' + safeName;
+      const { error: upErr } = await supabaseClient.storage.from(DocumentLibrary_BUCKET).upload(path, file, { contentType: file.type || undefined });
+      if (upErr) throw upErr;
+      const { error: insErr } = await supabaseClient.from('unit_attachments').insert({
+        unit_id: unit.id, kind, filename: file.name, storage_path: path,
+      });
+      if (insErr) throw insErr;
+      await reload();
+    } catch (e) {
+      alert('Upload failed: ' + (e.message || e));
+    }
   };
 
   // --- Bulk generators --------------------------------------------------
@@ -675,6 +753,124 @@ const DocumentLibraryPage = ({ embedded } = {}) => {
     await bulkGenerateInvoicePdfs();
   };
 
+  // ---- Bulk ZIP export -------------------------------------------------
+  // Walks every CURRENTLY VISIBLE attachment, fetches the file through a
+  // short-lived signed URL, and packs it into a ZIP with the user-picked
+  // Asset/Unit/Kind/filename folder structure. Saves with a date-stamped
+  // filename. Concurrency is capped at 6 simultaneous downloads to be
+  // gentle on the storage API.
+  const safeFolderName = (s) => (s || 'unknown').toString().replace(/[\\/:*?"<>|]/g, '_').trim() || 'unknown';
+  const bulkExport = async () => {
+    if (!window.JSZip) { alert('ZIP library failed to load — try reloading the page.'); return; }
+    const toExport = visibleAtts;
+    if (toExport.length === 0) { alert('No documents match the current filter.'); return; }
+    const zip = new window.JSZip();
+    setGenStatus({ phase: 'Packaging ' + toExport.length + ' file' + (toExport.length === 1 ? '' : 's') + '…', current: 0, total: toExport.length });
+    let done = 0, errors = 0;
+    const CONC = 6;
+    let cursor = 0;
+    const next = async () => {
+      while (cursor < toExport.length) {
+        const i = cursor++;
+        const att = toExport[i];
+        const u = units.find(x => x.id === att.unit_id);
+        const b = u ? buildings.find(x => x.id === u.building_id) : null;
+        const folder = safeFolderName(b ? b.name : 'unknown-asset')
+                     + '/' + safeFolderName(u ? u.unit_number : 'unknown-unit')
+                     + '/' + att.kind;
+        try {
+          const { data: signed, error } = await supabaseClient.storage.from(DocumentLibrary_BUCKET).createSignedUrl(att.storage_path, 600);
+          if (error) throw error;
+          const resp = await fetch(signed.signedUrl);
+          if (!resp.ok) throw new Error('HTTP ' + resp.status);
+          const blob = await resp.blob();
+          zip.file(folder + '/' + (att.filename || ('file-' + att.id.slice(0, 8))), blob);
+          done++;
+        } catch (e) {
+          errors++; done++;
+          console.error('Export failed for ' + att.storage_path + ':', e);
+        }
+        setGenStatus({ phase: 'Downloading ' + done + ' / ' + toExport.length, current: done, total: toExport.length });
+      }
+    };
+    await Promise.all(Array.from({ length: CONC }, next));
+    setGenStatus({ phase: 'Generating ZIP…', current: done, total: toExport.length });
+    const zipBlob = await zip.generateAsync({ type: 'blob', compression: 'DEFLATE', compressionOptions: { level: 5 } });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(zipBlob);
+    a.download = 'documents-' + new Date().toISOString().slice(0, 10) + '.zip';
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+    setGenStatus({ phase: 'Exported ' + (done - errors) + ' file' + (done - errors === 1 ? '' : 's') + (errors ? ' (' + errors + ' failed)' : ''), current: done, total: toExport.length });
+    setTimeout(() => setGenStatus(null), 3000);
+  };
+
+  // ---- Bulk ZIP import -------------------------------------------------
+  // Parses an uploaded .zip whose internal structure matches the export
+  // shape (Asset / Unit / Kind / filename). For each entry it resolves
+  // the building by name (case-insensitive), then the unit by number,
+  // then uploads the file to the unit-attachments bucket and inserts a
+  // unit_attachments row. Entries that don't map are skipped with a
+  // warning in the console.
+  const bulkImport = async (file) => {
+    if (!file) return;
+    if (!window.JSZip) { alert('ZIP library failed to load — try reloading the page.'); return; }
+    setGenStatus({ phase: 'Reading ZIP…', current: 0, total: 0 });
+    let zip;
+    try { zip = await window.JSZip.loadAsync(file); }
+    catch (e) { alert('Could not read ZIP: ' + (e.message || e)); setGenStatus(null); return; }
+    const entries = Object.values(zip.files).filter(f => !f.dir);
+    if (entries.length === 0) { alert('ZIP is empty.'); setGenStatus(null); return; }
+
+    // Pre-index buildings + units by normalised name / number for fast lookup.
+    const norm = (s) => (s || '').toString().trim().toLowerCase();
+    const bByName  = new Map(buildings.map(b => [norm(b.name), b]));
+    const unitsByBid = new Map();
+    for (const u of units) {
+      const arr = unitsByBid.get(u.building_id) || [];
+      arr.push(u); unitsByBid.set(u.building_id, arr);
+    }
+    const validKinds = new Set(['photo', 'title_deed', 'layout', 'other']);
+
+    setGenStatus({ phase: 'Uploading 0 / ' + entries.length, current: 0, total: entries.length });
+    let done = 0, ok = 0, skipped = 0, errors = 0;
+    for (const entry of entries) {
+      done++;
+      try {
+        const parts = entry.name.split('/').filter(Boolean);
+        if (parts.length < 4) {
+          // Need at least Asset / Unit / Kind / filename
+          skipped++;
+          setGenStatus({ phase: 'Skipping ' + entry.name + ' (path too shallow)', current: done, total: entries.length });
+          continue;
+        }
+        const [bName, uNumber, kindRaw, ...rest] = parts;
+        const filename = rest.join('/');
+        const b = bByName.get(norm(bName));
+        if (!b) { skipped++; setGenStatus({ phase: 'Skipping ' + entry.name + ' (asset not found)', current: done, total: entries.length }); continue; }
+        const u = (unitsByBid.get(b.id) || []).find(x => norm(x.unit_number) === norm(uNumber));
+        if (!u) { skipped++; setGenStatus({ phase: 'Skipping ' + entry.name + ' (unit not found)', current: done, total: entries.length }); continue; }
+        const kind = validKinds.has(kindRaw) ? kindRaw : 'other';
+        const blob = await entry.async('blob');
+        const path = u.id + '/' + kind + '-' + Date.now() + '-' + filename.replace(/[^A-Za-z0-9._-]/g, '_');
+        const { error: upErr } = await supabaseClient.storage.from(DocumentLibrary_BUCKET).upload(path, blob, { upsert: false });
+        if (upErr) throw upErr;
+        const { error: insErr } = await supabaseClient.from('unit_attachments').insert({
+          unit_id: u.id, kind, filename, storage_path: path,
+        });
+        if (insErr) throw insErr;
+        ok++;
+      } catch (e) {
+        errors++;
+        console.error('Import failed for ' + entry.name + ':', e);
+      }
+      setGenStatus({ phase: 'Uploaded ' + ok + ' · skipped ' + skipped + ' · failed ' + errors, current: done, total: entries.length });
+    }
+    setGenStatus({ phase: 'Done · ' + ok + ' imported, ' + skipped + ' skipped, ' + errors + ' failed', current: done, total: entries.length });
+    setTimeout(() => setGenStatus(null), 4000);
+    await reload();
+  };
+
   if (loading) {
     return (<div className="page-padding"><h1>Documents</h1><div className="card"><div style={{padding:32,color:'var(--text-muted)',fontSize:13,textAlign:'center'}}>Loading library…</div></div></div>);
   }
@@ -726,12 +922,33 @@ const DocumentLibraryPage = ({ embedded } = {}) => {
           <div style={{fontSize:13,color:'var(--text-muted)',marginTop:4}}>Every attachment in the system, grouped by asset. Generate title deeds and unit photos in bulk.</div>
         </div>
         <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
+          <button className="btn" onClick={bulkExport} disabled={!!genStatus} title="Download every visible document as one ZIP, grouped by Asset / Unit / Type.">Export ZIP</button>
+          <button className="btn" onClick={() => importInputRef.current && importInputRef.current.click()} disabled={!!genStatus} title="Upload a ZIP that mirrors the Asset / Unit / Type folder structure. Files inside are matched to the right unit by folder name.">Import ZIP</button>
           <button className="btn" onClick={bulkGenerateUnitPhotos}    disabled={!!genStatus}>Photos</button>
           <button className="btn" onClick={bulkGenerateTitleDeeds}   disabled={!!genStatus}>Title deeds</button>
           <button className="btn" onClick={bulkGenerateFloorPlans}   disabled={!!genStatus}>Floor plans</button>
           <button className="btn" onClick={bulkGenerateAgreements}   disabled={!!genStatus}>Tenancy contracts</button>
           <button className="btn" onClick={bulkGenerateInvoicePdfs}  disabled={!!genStatus}>Invoice PDFs</button>
           <button className="btn btn-primary" onClick={bulkGenerateAllMissing} disabled={!!genStatus}>Generate everything missing</button>
+          <input ref={importInputRef} type="file" accept=".zip" style={{display:'none'}}
+                 onChange={e => { const f = e.target.files && e.target.files[0]; if (f) bulkImport(f); if (importInputRef.current) importInputRef.current.value=''; }}/>
+          <input ref={replaceInputRef} type="file" style={{display:'none'}}
+                 onChange={e => {
+                   const f = e.target.files && e.target.files[0];
+                   const attId = replaceInputRef.current && replaceInputRef.current.dataset.attId;
+                   const att = attId ? attachments.find(x => x.id === attId) : null;
+                   if (f && att) replaceAttachment(att, f);
+                   if (replaceInputRef.current) { replaceInputRef.current.value=''; replaceInputRef.current.removeAttribute('data-att-id'); }
+                 }}/>
+          <input ref={addInputRef} type="file" style={{display:'none'}}
+                 onChange={e => {
+                   const f = e.target.files && e.target.files[0];
+                   const uId  = addInputRef.current && addInputRef.current.dataset.unitId;
+                   const kind = (addInputRef.current && addInputRef.current.dataset.kind) || 'other';
+                   const u = uId ? units.find(x => x.id === uId) : null;
+                   if (f && u) addAttachment(u, kind, f);
+                   if (addInputRef.current) { addInputRef.current.value=''; addInputRef.current.removeAttribute('data-unit-id'); addInputRef.current.removeAttribute('data-kind'); }
+                 }}/>
         </div>
       </div>
 
@@ -812,27 +1029,70 @@ const DocumentLibraryPage = ({ embedded } = {}) => {
                   {us.map(u => {
                     const ua = (attsByUnit[u.id] || []).filter(a => filterKind === 'all' || a.kind === filterKind)
                       .filter(a => !lowerSearch || (a.filename + ' ' + (u.unit_number || '') + ' ' + b.name).toLowerCase().includes(lowerSearch));
-                    if (ua.length === 0) return null;
+                    // Show the unit even when it has zero files so the
+                    // user can drop their own in via the per-unit Upload
+                    // pickers. Hide only when an active search filter
+                    // hides every attachment on this unit.
+                    if (ua.length === 0 && lowerSearch) return null;
                     return (
-                      <div key={u.id} style={{padding:'8px 18px 8px 38px',borderBottom:'1px solid #f4f4f4'}}>
-                        <div style={{display:'flex',alignItems:'baseline',gap:10,marginBottom:6}}>
-                          <span style={{fontSize:13,fontWeight:500,color:'var(--text-dark)'}}>Unit {u.unit_number}</span>
-                          <span style={{fontSize:11,color:'var(--text-muted)'}}>Floor {u.floor != null ? u.floor : '—'}</span>
+                      <div key={u.id} style={{padding:'10px 18px 10px 38px',borderBottom:'1px solid #f4f4f4'}}>
+                        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:10,marginBottom:8,flexWrap:'wrap'}}>
+                          <div style={{display:'flex',alignItems:'baseline',gap:10}}>
+                            <span style={{fontSize:13,fontWeight:500,color:'var(--text-dark)'}}>Unit {u.unit_number}</span>
+                            <span style={{fontSize:11,color:'var(--text-muted)'}}>Floor {u.floor != null ? u.floor : '—'} · {ua.length} file{ua.length===1?'':'s'}</span>
+                          </div>
+                          {/* Per-unit Upload-new picker, one per kind */}
+                          <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
+                            {['photo','title_deed','layout','other'].map(k => (
+                              <button key={k} type="button" className="btn btn-sm"
+                                style={{padding:'3px 9px',fontSize:10,letterSpacing:'0.04em',textTransform:'uppercase'}}
+                                title={'Upload a ' + (kindLabel[k] || k).toLowerCase() + ' for this unit'}
+                                onClick={() => {
+                                  if (!addInputRef.current) return;
+                                  addInputRef.current.dataset.unitId = u.id;
+                                  addInputRef.current.dataset.kind = k;
+                                  // Match accept filter to the kind for a slightly better UX.
+                                  addInputRef.current.accept = k === 'photo' ? 'image/*' : (k === 'other' ? '*/*' : '.pdf,image/*');
+                                  addInputRef.current.click();
+                                }}>+ {kindLabel[k] || k}</button>
+                            ))}
+                          </div>
                         </div>
-                        <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill, minmax(260px, 1fr))',gap:6}}>
-                          {ua.map(a => (
-                            <div key={a.id} onClick={() => openAttachment(a)}
-                              style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:10,padding:'8px 10px',background:'#fff',border:'1px solid var(--border-light)',borderRadius:6,cursor:'pointer',transition:'background 0.12s'}}
-                              onMouseEnter={e => e.currentTarget.style.background='#FAFAFA'}
-                              onMouseLeave={e => e.currentTarget.style.background='#fff'}>
-                              <div style={{minWidth:0,flex:1}}>
-                                <div style={{fontSize:12,fontWeight:500,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{a.filename}</div>
-                                <div style={{fontSize:10,color:'var(--text-muted)',marginTop:2}}>{fmtDate(a.created_at)}</div>
+                        {ua.length > 0 && (
+                          <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill, minmax(280px, 1fr))',gap:6}}>
+                            {ua.map(a => (
+                              <div key={a.id}
+                                style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8,padding:'8px 10px',background:'#fff',border:'1px solid var(--border-light)',borderRadius:6,transition:'background 0.12s'}}
+                                onMouseEnter={e => e.currentTarget.style.background='#FAFAFA'}
+                                onMouseLeave={e => e.currentTarget.style.background='#fff'}>
+                                <div onClick={() => openAttachment(a)} style={{minWidth:0,flex:1,cursor:'pointer'}} title="Open in a new tab">
+                                  <div style={{fontSize:12,fontWeight:500,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{a.filename}</div>
+                                  <div style={{fontSize:10,color:'var(--text-muted)',marginTop:2}}>{fmtDate(a.created_at)}</div>
+                                </div>
+                                <span style={{fontSize:9,letterSpacing:'0.05em',textTransform:'uppercase',color:'#fff',background:kindColor[a.kind] || '#61707D',padding:'2px 7px',borderRadius:3,fontWeight:600,whiteSpace:'nowrap'}}>{kindLabel[a.kind] || a.kind}</span>
+                                <div style={{display:'flex',gap:4}}>
+                                  <button type="button" title="Download" onClick={e => { e.stopPropagation(); downloadAttachment(a); }}
+                                    style={{border:'none',background:'transparent',cursor:'pointer',padding:4,color:'var(--text-secondary)'}}>
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                                  </button>
+                                  <button type="button" title="Replace this file" onClick={e => {
+                                    e.stopPropagation();
+                                    if (!replaceInputRef.current) return;
+                                    replaceInputRef.current.dataset.attId = a.id;
+                                    replaceInputRef.current.accept = a.kind === 'photo' ? 'image/*' : '.pdf,image/*,*/*';
+                                    replaceInputRef.current.click();
+                                  }} style={{border:'none',background:'transparent',cursor:'pointer',padding:4,color:'var(--text-secondary)'}}>
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/></svg>
+                                  </button>
+                                  <button type="button" title="Delete" onClick={e => { e.stopPropagation(); deleteAttachment(a); }}
+                                    style={{border:'none',background:'transparent',cursor:'pointer',padding:4,color:'#8b4a42'}}>
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg>
+                                  </button>
+                                </div>
                               </div>
-                              <span style={{fontSize:9,letterSpacing:'0.05em',textTransform:'uppercase',color:'#fff',background:kindColor[a.kind] || '#61707D',padding:'2px 7px',borderRadius:3,fontWeight:600,whiteSpace:'nowrap'}}>{kindLabel[a.kind] || a.kind}</span>
-                            </div>
-                          ))}
-                        </div>
+                            ))}
+                          </div>
+                        )}
                       </div>
                     );
                   })}
