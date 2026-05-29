@@ -307,6 +307,163 @@ const BuildingDrillModal = ({ building, view, onClose, setPage }) => {
   );
 };
 
+// ---- PortfolioBillingDrillModal -------------------------------------------
+// Opens when a KPI tile on the Summary tab is clicked. Shows the underlying
+// records for the four portfolio views: Billed / Collected / Outstanding /
+// Future. Single shared table layout with a building filter on top.
+const PortfolioBillingDrillModal = ({ view, allInvoices, futureProjections, buildings, onClose }) => {
+  const fmt = (n) => 'AED ' + Math.round(Number(n) || 0).toLocaleString();
+  const [buildingFilter, setBuildingFilter] = useState('all');
+  const [sort, setSort] = useState({ key: 'amount_aed', dir: 'desc' });
+  const toggleSort = (key) => setSort(p => p.key === key ? { key, dir: p.dir === 'asc' ? 'desc' : 'asc' } : { key, dir: 'desc' });
+  const Arrow = ({ col }) => sort.key !== col ? <span style={{opacity:0.25,marginLeft:4}}>↕</span> : <span style={{marginLeft:4}}>{sort.dir === 'asc' ? '↑' : '↓'}</span>;
+
+  // Esc closes
+  useEffect(() => {
+    const onKey = (e) => { if (e.key === 'Escape') onClose(); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
+
+  const isFuture = view === 'future';
+  const titles = {
+    billed:      'Total Revenue Billed',
+    collected:   'Collected',
+    outstanding: 'Outstanding',
+    future:      'Future revenue · next 12 months',
+  };
+
+  let rows;
+  if (isFuture) {
+    rows = (futureProjections || []).filter(r => buildingFilter === 'all' || r.building_id === buildingFilter);
+    rows = [...rows].sort((a, b) => {
+      const k = sort.key === 'amount_aed' ? 'projected' : sort.key;
+      const av = a[k] ?? ''; const bv = b[k] ?? '';
+      if (av < bv) return sort.dir === 'asc' ? -1 : 1;
+      if (av > bv) return sort.dir === 'asc' ? 1 : -1;
+      return 0;
+    });
+  } else {
+    rows = (allInvoices || []).filter(i => {
+      if (view === 'collected'   && i.effective_status !== 'Paid') return false;
+      if (view === 'outstanding' && !['Pending','Upcoming','Future'].includes(i.effective_status)) return false;
+      if (buildingFilter !== 'all' && i.building_id !== buildingFilter) return false;
+      return true;
+    });
+    rows = [...rows].sort((a, b) => {
+      const av = a[sort.key] ?? ''; const bv = b[sort.key] ?? '';
+      if (av < bv) return sort.dir === 'asc' ? -1 : 1;
+      if (av > bv) return sort.dir === 'asc' ? 1 : -1;
+      return 0;
+    });
+  }
+  const total = isFuture
+    ? rows.reduce((s, r) => s + Number(r.projected || 0), 0)
+    : rows.reduce((s, r) => s + Number(r.amount_aed || 0), 0);
+
+  const statusStyles = {
+    'Paid':     { bg:'#e6efe1', fg:'#5a6b4f' },
+    'Pending':  { bg:'#fdf2f1', fg:'#8b4a42' },
+    'Upcoming': { bg:'#fdf2dc', fg:'#7a5a1f' },
+    'Future':   { bg:'#E6EAE9', fg:'#61707D' },
+    'Cancelled':{ bg:'#E6EAE9', fg:'#61707D' },
+  };
+
+  return (
+    <div className="modal-overlay" onClick={onClose} style={{zIndex:1100}}>
+      <div className="modal modal-wide" onClick={e => e.stopPropagation()} style={{maxWidth:1180, maxHeight:'88vh', overflowY:'auto'}}>
+        <div className="modal-header">
+          <div>
+            <div style={{fontSize:11,letterSpacing:'0.08em',textTransform:'uppercase',color:'var(--text-muted)',marginBottom:4}}>Portfolio</div>
+            <h2>{titles[view] || 'Records'}</h2>
+            <div className="modal-sub">{rows.length} {isFuture ? (rows.length === 1 ? 'lease' : 'leases') : (rows.length === 1 ? 'invoice' : 'invoices')} · {fmt(total)}</div>
+          </div>
+          <button className="modal-close" onClick={onClose}>×</button>
+        </div>
+
+        {/* Building filter */}
+        <div style={{padding:'10px 16px 14px', display:'flex', gap:10, alignItems:'center', flexWrap:'wrap', borderBottom:'1px solid var(--border-light)'}}>
+          <span style={{fontSize:11, color:'var(--text-muted)', letterSpacing:'0.04em', textTransform:'uppercase'}}>Building</span>
+          <select value={buildingFilter} onChange={e => setBuildingFilter(e.target.value)} style={{padding:'6px 10px', fontSize:12, border:'1px solid var(--border-light)', borderRadius:6, background:'#fff', cursor:'pointer'}}>
+            <option value="all">All buildings</option>
+            {(buildings || []).map(b => (<option key={b.id} value={b.id}>{b.name}</option>))}
+          </select>
+          {buildingFilter !== 'all' && (
+            <button onClick={() => setBuildingFilter('all')} style={{padding:'6px 10px', fontSize:11, background:'transparent', border:'1px solid var(--border-light)', borderRadius:6, cursor:'pointer', color:'var(--text-muted)'}}>Clear</button>
+          )}
+        </div>
+
+        {rows.length === 0 ? (
+          <div style={{padding:32,color:'var(--text-muted)',fontSize:13,textAlign:'center'}}>
+            {isFuture ? 'No future lease revenue projected.' : view === 'collected' ? 'No paid invoices.' : view === 'outstanding' ? 'Nothing outstanding ✓' : 'No invoices in this period.'}
+          </div>
+        ) : isFuture ? (
+          <table className="data-table" style={{fontSize:12}}>
+            <thead>
+              <tr>
+                <th style={{width:'22%', cursor:'pointer'}} onClick={() => toggleSort('building_name')}>Building<Arrow col="building_name"/></th>
+                <th style={{width:'8%'}}>Unit</th>
+                <th style={{width:'22%'}}>Tenant</th>
+                <th style={{width:'14%', textAlign:'right', cursor:'pointer'}} onClick={() => toggleSort('monthly')}>Monthly<Arrow col="monthly"/></th>
+                <th style={{width:'12%', cursor:'pointer'}} onClick={() => toggleSort('lease_end')}>Lease end<Arrow col="lease_end"/></th>
+                <th style={{width:'10%', textAlign:'right', cursor:'pointer'}} onClick={() => toggleSort('monthsRemaining')}>Months<Arrow col="monthsRemaining"/></th>
+                <th style={{width:'14%', textAlign:'right', cursor:'pointer'}} onClick={() => toggleSort('amount_aed')}>Projected<Arrow col="amount_aed"/></th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((r, idx) => (
+                <tr key={r.building_id + '_' + r.unit_number + '_' + idx}>
+                  <td style={{fontWeight:500}}>{r.building_name}</td>
+                  <td>{r.unit_number}</td>
+                  <td>{r.tenant_name || '—'}</td>
+                  <td style={{textAlign:'right'}}>{fmt(r.monthly)}</td>
+                  <td style={{whiteSpace:'nowrap'}}>{r.lease_end || '—'}</td>
+                  <td style={{textAlign:'right'}}>{r.monthsRemaining}</td>
+                  <td style={{textAlign:'right', fontWeight:600}}>{fmt(r.projected)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        ) : (
+          <table className="data-table" style={{fontSize:12}}>
+            <thead>
+              <tr>
+                <th style={{width:'18%', cursor:'pointer'}} onClick={() => toggleSort('building_name')}>Building<Arrow col="building_name"/></th>
+                <th style={{width:'8%'}}>Unit</th>
+                <th style={{width:'12%', cursor:'pointer'}} onClick={() => toggleSort('invoice_number')}>Invoice #<Arrow col="invoice_number"/></th>
+                <th style={{width:'24%'}}>Description</th>
+                <th style={{width:'10%', cursor:'pointer'}} onClick={() => toggleSort('due_date')}>Due<Arrow col="due_date"/></th>
+                <th style={{width:'10%', cursor:'pointer'}} onClick={() => toggleSort('effective_status')}>Status<Arrow col="effective_status"/></th>
+                <th style={{width:'14%', textAlign:'right', cursor:'pointer'}} onClick={() => toggleSort('amount_aed')}>Amount<Arrow col="amount_aed"/></th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map(i => {
+                const c = statusStyles[i.effective_status] || { bg:'#E6EAE9', fg:'#61707D' };
+                return (
+                  <tr key={i.id}>
+                    <td style={{fontWeight:500}}>{i.building_name}</td>
+                    <td>{i.unit_number}</td>
+                    <td style={{fontWeight:500}}>{i.invoice_number || '—'}</td>
+                    <td style={{maxWidth:0, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}} title={i.description}>{i.description}</td>
+                    <td style={{whiteSpace:'nowrap'}}>{i.due_date || '—'}</td>
+                    <td style={{whiteSpace:'nowrap'}}>
+                      <span style={{display:'inline-block',padding:'2px 8px',borderRadius:4,fontSize:10,fontWeight:500,background:c.bg,color:c.fg}}>
+                        {i.effective_status}
+                      </span>
+                    </td>
+                    <td style={{textAlign:'right', fontWeight:600, whiteSpace:'nowrap'}}>{fmt(i.amount_aed)}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        )}
+      </div>
+    </div>
+  );
+};
+
 const PMCPropertiesPage = ({ setPage }) => {
   const { selectedProperties = [], timeRange, setTimeRange, customStart, setCustomStart, customEnd, setCustomEnd } = useApp();
   const [buildings, setBuildings] = useState(null);
@@ -316,6 +473,9 @@ const PMCPropertiesPage = ({ setPage }) => {
   // Al Qurm View trial: the consolidated Total Billed tile opens this
   // slide-in financial panel instead of the usual BuildingDrillModal.
   const [financialAsset, setFinancialAsset] = useState(null);
+  // Portfolio-level drill modal — Summary tab KPIs (Billed / Collected /
+  // Outstanding / Future) open this with the matching view.
+  const [portfolioDrill, setPortfolioDrill] = useState(null);
   const [showDownload, setShowDownload] = useState(false);
   // Inner tab selector — the four asset types used to stack; now they
   // sit behind tabs so the user can focus on one type at a time.
@@ -326,7 +486,7 @@ const PMCPropertiesPage = ({ setPage }) => {
       const fromOverview = sessionStorage.getItem('vars:scroll-to-asset-type');
       if (fromOverview) {
         sessionStorage.removeItem('vars:scroll-to-asset-type');
-        if (['Residential','Commercial','Villa','Commercial Land'].includes(fromOverview)) return fromOverview;
+        if (['Summary','Residential','Commercial','Villa','Commercial Land'].includes(fromOverview)) return fromOverview;
       }
     } catch (_) {}
     return 'Summary';
@@ -728,6 +888,42 @@ const PMCPropertiesPage = ({ setPage }) => {
             const overduePast = allInvoices.filter(i => i.effective_status === 'Pending').reduce((s, i) => s + Number(i.amount_aed || 0), 0);
             const collectionRate = billed > 0 ? Math.round((collected / billed) * 100) : 0;
 
+            // Future revenue = next 12 months of contracted lease income
+            // from active tenants. Anchored to today, capped at horizon
+            // so a 5-year lease doesn't drown the rest of the KPIs.
+            const futureProjections = (() => {
+              const today = new Date();
+              const horizonEnd = new Date(today.getFullYear() + 1, today.getMonth(), today.getDate());
+              const rows = [];
+              (buildings || []).forEach(b => {
+                (b.tenants || []).filter(t => t.lease_end && Number(t.monthly_payment_aed) > 0).forEach(t => {
+                  const end = new Date(t.lease_end);
+                  if (isNaN(end.getTime()) || end <= today) return;
+                  const effectiveEnd = end < horizonEnd ? end : horizonEnd;
+                  const monthsRemaining = Math.max(0,
+                    (effectiveEnd.getFullYear() - today.getFullYear()) * 12 +
+                    (effectiveEnd.getMonth() - today.getMonth())
+                  );
+                  if (monthsRemaining === 0) return;
+                  const monthly = Number(t.monthly_payment_aed);
+                  rows.push({
+                    building_id: b.id, building_name: b.name, property_type: b.property_type,
+                    unit_number: t.unit_number, tenant_name: t.resident_name, tenant_phone: t.resident_phone,
+                    monthly, monthsRemaining, lease_end: t.lease_end, projected: monthly * monthsRemaining,
+                  });
+                });
+              });
+              return rows;
+            })();
+            const futureRevenue = futureProjections.reduce((s, r) => s + r.projected, 0);
+
+            // Outstanding suffix — fix duplicate-number bug. If overdue
+            // equals the whole outstanding total, show "all overdue"
+            // instead of repeating the amount.
+            const outstandingSuffix = overduePast > 0
+              ? (overduePast >= outstanding ? '  ·  all overdue' : '  ·  ' + fmtMoney(overduePast) + ' overdue')
+              : '';
+
             // Revenue by construction type — billed + collected per type
             // so the user can compare which segment converts best.
             const typeBreakdown = [
@@ -774,11 +970,20 @@ const PMCPropertiesPage = ({ setPage }) => {
                   <span style={{color:'var(--text-muted)',fontWeight:400,letterSpacing:0,textTransform:'none',fontSize:13}}>· {buildings.length} {buildings.length === 1 ? 'asset' : 'assets'} across {typeBreakdown.filter(t => t.list.length > 0).length} types</span>
                 </div>
 
-                {/* 3 portfolio KPI tiles */}
-                <div style={{display:'grid',gridTemplateColumns:'repeat(3, minmax(0, 1fr))',gap:12,marginBottom:24}}>
-                  <PMCStat label="Total Revenue Billed" value={fmtMoney(billed)} hint={'Sum across all ' + buildings.length + ' assets in the selected period.'}/>
-                  <PMCStat label="Collected"            value={fmtMoney(collected) + ' · ' + collectionRate + '%'} color="#5a6b4f" hint="Paid invoices in the selected period."/>
-                  <PMCStat label="Outstanding"          value={fmtMoney(outstanding) + (overduePast > 0 ? '  ·  ' + fmtMoney(overduePast) + ' overdue' : '')} color={overduePast > 0 ? '#8b4a42' : 'var(--text-dark)'} hint="Pending + Upcoming + Future invoices."/>
+                {/* 4 portfolio KPI tiles — all clickable, open the portfolio drill modal */}
+                <div style={{display:'grid',gridTemplateColumns:'repeat(4, minmax(0, 1fr))',gap:12,marginBottom:24}}>
+                  <PMCStat label="Total Revenue Billed" value={fmtMoney(billed)}
+                    onClick={() => setPortfolioDrill({ view: 'billed', allInvoices, futureProjections })}
+                    hint="Every billed invoice across the portfolio in the selected period."/>
+                  <PMCStat label="Collected" value={fmtMoney(collected) + ' · ' + collectionRate + '%'} color="#5a6b4f"
+                    onClick={() => setPortfolioDrill({ view: 'collected', allInvoices, futureProjections })}
+                    hint="Paid invoices in the selected period."/>
+                  <PMCStat label="Outstanding" value={fmtMoney(outstanding) + outstandingSuffix} color={overduePast > 0 ? '#8b4a42' : 'var(--text-dark)'}
+                    onClick={() => setPortfolioDrill({ view: 'outstanding', allInvoices, futureProjections })}
+                    hint="Pending + Upcoming + Future invoices — unpaid."/>
+                  <PMCStat label="Future · next 12 months" value={fmtMoney(futureRevenue)} color="#a07d3c"
+                    onClick={() => setPortfolioDrill({ view: 'future', allInvoices, futureProjections })}
+                    hint="Projected revenue from active leases — monthly × remaining months, capped at 12."/>
                 </div>
 
                 {/* Revenue by construction type */}

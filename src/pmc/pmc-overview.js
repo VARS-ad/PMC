@@ -580,8 +580,20 @@ const PMCOverviewPage = ({ setPage }) => {
             ? customStart + ' → ' + customEnd
             : timeRange === '1m' ? new Date().toLocaleString('en-GB', { month: 'long', year: 'numeric' })
             : 'Last ' + monthsBack + ' months';
-          const Stat = ({ label, value, color, sub }) => (
-            <div style={{flex:'1 1 200px',minWidth:180}}>
+          // Hero tiles are now clickable — all three land on Assets →
+          // Summary, where the portfolio breakdown lives (KPIs, revenue
+          // by type, top contributors, main outstanding invoices). The
+          // sessionStorage flag tells the Assets page which tab to open.
+          const navToSummary = () => {
+            try { sessionStorage.setItem('vars:scroll-to-asset-type', 'Summary'); } catch (_) {}
+            if (setPage) setPage('properties');
+          };
+          const Stat = ({ label, value, color, sub, onClick }) => (
+            <div onClick={onClick}
+              title={onClick ? 'View the portfolio breakdown in Assets → Summary' : ''}
+              style={{flex:'1 1 200px', minWidth:180, padding:'2px 4px', borderRadius:8, cursor: onClick ? 'pointer' : 'default', transition:'background 0.15s, transform 0.15s'}}
+              onMouseEnter={e => { if (onClick) { e.currentTarget.style.background = 'rgba(122,90,31,0.06)'; } }}
+              onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}>
               <div style={{fontSize:11,letterSpacing:'0.06em',textTransform:'uppercase',color:'var(--text-secondary)',fontWeight:600,marginBottom:6}}>{label}</div>
               <div style={{fontSize:30,fontWeight:600,letterSpacing:'-0.02em',color:color || 'var(--text-dark)',lineHeight:1}}>{value}</div>
               {sub && <div style={{fontSize:11,color:'var(--text-muted)',marginTop:6}}>{sub}</div>}
@@ -594,11 +606,14 @@ const PMCOverviewPage = ({ setPage }) => {
               </div>
               <div style={{display:'flex',gap:24,flexWrap:'wrap'}}>
                 <Stat label="Collected"           value={fmt(stats.headlineCollected)} color="#5a6b4f"
-                      sub={'For the selected period · last month ' + fmt(stats.headlineLastMonth)}/>
+                      sub={'For the selected period · last month ' + fmt(stats.headlineLastMonth)}
+                      onClick={navToSummary}/>
                 <Stat label="Overdue"             value={fmt(stats.headlineOverdue)}  color="#8b4a42"
-                      sub="Past due, still unpaid"/>
+                      sub="Past due, still unpaid"
+                      onClick={navToSummary}/>
                 <Stat label="Upcoming · 30 days"  value={fmt(stats.headlineUpcoming)} color="#a07d3c"
-                      sub="Due within the next 30 days"/>
+                      sub="Due within the next 30 days"
+                      onClick={navToSummary}/>
               </div>
             </div>
           );
@@ -627,11 +642,20 @@ const PMCOverviewPage = ({ setPage }) => {
                 <div className="card" style={{padding:0,marginBottom:0,overflow:'hidden'}}>
                   {items.map((it, idx) => {
                     const t = tones[it.severity] || tones.yellow;
+                    // All attention rows now route to Assets → Summary
+                    // so the user lands on the consolidated breakdown
+                    // (KPIs · revenue by type · top contributors ·
+                    // main outstanding invoices) and drills from there.
+                    const goToSummary = () => {
+                      try { sessionStorage.setItem('vars:scroll-to-asset-type', 'Summary'); } catch (_) {}
+                      if (setPage) setPage('properties');
+                    };
                     return (
                       <div key={idx}
-                        onClick={() => it.page && setPage && setPage(it.page)}
-                        style={{display:'flex',alignItems:'center',gap:14,padding:'14px 20px',cursor: it.page ? 'pointer' : 'default',background:'#fff',borderBottom: idx === items.length - 1 ? 'none' : '1px solid var(--border-light)',transition:'background 0.12s'}}
-                        onMouseEnter={e => { if (it.page) e.currentTarget.style.background = t.bg; }}
+                        onClick={goToSummary}
+                        title="Open the portfolio breakdown in Assets → Summary"
+                        style={{display:'flex',alignItems:'center',gap:14,padding:'14px 20px',cursor:'pointer',background:'#fff',borderBottom: idx === items.length - 1 ? 'none' : '1px solid var(--border-light)',transition:'background 0.12s'}}
+                        onMouseEnter={e => { e.currentTarget.style.background = t.bg; }}
                         onMouseLeave={e => { e.currentTarget.style.background = '#fff'; }}>
                         <span style={{width:10,height:10,borderRadius:'50%',background:t.dot,flexShrink:0}}/>
                         <div style={{flex:1,minWidth:0}}>
@@ -639,9 +663,7 @@ const PMCOverviewPage = ({ setPage }) => {
                           <div style={{fontSize:12,color:'var(--text-muted)',marginTop:3}}>{it.detail}</div>
                         </div>
                         <span style={{fontSize:10,letterSpacing:'0.05em',textTransform:'uppercase',color:t.dot,fontWeight:700,whiteSpace:'nowrap'}}>{t.label}</span>
-                        {it.page && (
-                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#8a98a2" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
-                        )}
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#8a98a2" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
                       </div>
                     );
                   })}
