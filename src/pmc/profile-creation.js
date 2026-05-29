@@ -3109,6 +3109,264 @@ const ContractDetailModal = ({ contract, onClose }) => {
 // the function gates on the user's configured cadence / days / time so the
 // digest only fires inside the configured window (and at most once per day).
 const DOW_LIST = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+
+// ---- Digest content categories ----
+// The same six-category selection drives THREE surfaces:
+//   1. The contracts-reminders composer above (filters the visible list)
+//   2. The in-app bell (topbar reads `reminder_settings.digest_categories`)
+//   3. The reminders-digest Edge Function (PDF + email body — follow-up)
+// Defaults to all six ON; persisted to reminder_settings.digest_categories.
+const DIGEST_CATEGORIES = [
+  { id: 'money',      icon: '$', label: 'Money',
+    desc: 'Overdue invoices + Upcoming 30 days.' },
+  { id: 'leases',     icon: '⌂', label: 'Leases',
+    desc: 'Leases expiring within 60 days.' },
+  { id: 'srs',        icon: '!', label: 'Service requests',
+    desc: 'Urgent open + open > 7 days.' },
+  { id: 'contracts',  icon: '§', label: 'Maintenance contracts',
+    desc: 'Expiring within 90 days + outstanding vendor invoices.' },
+  { id: 'ops',        icon: '◷', label: 'Today’s ops',
+    desc: 'Visitors expected today, move-in/out, guard shift handovers.' },
+  { id: 'compliance', icon: '✓', label: 'Compliance certificates',
+    desc: 'Expiring within 90 days.' },
+];
+const DIGEST_DEFAULT = DIGEST_CATEGORIES.map(c => c.id);
+
+const DigestCategorySelector = ({ value, onChange, saving }) => {
+  const selected = Array.isArray(value) && value.length > 0 ? value : DIGEST_DEFAULT;
+  const toggle = (id) => {
+    if (saving) return;
+    const has = selected.includes(id);
+    const next = has ? selected.filter(x => x !== id) : [...selected, id];
+    // Keep canonical ordering — makes the persisted array easy to scan.
+    onChange(DIGEST_DEFAULT.filter(d => next.includes(d)));
+  };
+  return (
+    <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit, minmax(220px, 1fr))',gap:10}}>
+      {DIGEST_CATEGORIES.map(c => {
+        const on = selected.includes(c.id);
+        return (
+          <div key={c.id} onClick={() => toggle(c.id)}
+            style={{padding:'12px 14px',border:'1px solid ' + (on ? '#3E4C59' : 'var(--border-light)'),borderRadius:8,background: on ? '#f6f9f3' : '#fff',cursor: saving ? 'default' : 'pointer',display:'flex',gap:10,alignItems:'flex-start',transition:'background .15s,border-color .15s',opacity: saving ? 0.7 : 1}}>
+            <input type="checkbox" checked={on} readOnly style={{marginTop:3,width:14,height:14,accentColor:'#3E4C59',flexShrink:0}}/>
+            <div style={{minWidth:0,flex:1}}>
+              <div style={{fontSize:13,fontWeight:600,color:'var(--text-dark)',display:'flex',alignItems:'center',gap:6}}>
+                <span style={{display:'inline-flex',alignItems:'center',justifyContent:'center',width:18,height:18,borderRadius:4,background:'#E6EAE9',color:'#3E4C59',fontSize:11,fontWeight:700,fontFamily:'inherit'}}>{c.icon}</span>
+                {c.label}
+              </div>
+              <div style={{fontSize:11,color:'var(--text-muted)',marginTop:4,lineHeight:1.4}}>{c.desc}</div>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+};
+
+// Map a reminder.source_type to a digest category id. Used by the embedded
+// composer below to honour the saved selection.
+const _reminderToCategory = (r) => {
+  if (r.source_type === 'lease')    return 'leases';
+  if (r.source_type === 'vendor')   return 'contracts';
+  if (r.source_type === 'contract') return 'contracts';
+  return null;
+};
+
+// ---- Embedded contracts-reminders composer ----
+// Trimmed reimplementation of PMCRemindersPage (src/pmc/reminders.js) without
+// the page-header / TimeRangePicker chrome, so it embeds cleanly inside a tab.
+// The standalone Reminders page is still routed at /reminders for deep links;
+// this embed reuses the same buildReminders() helper that's already global.
+const EmbeddedRemindersComposer = ({ digestCategories }) => {
+  const [leases, setLeases]             = useState(null);
+  const [vendorsList, setVendorsList]   = useState([]);
+  const [contractsList, setContractsList] = useState([]);
+  const [dismissals, setDismissals]     = useState([]);
+  const [error, setError]               = useState(null);
+  const [typeFilter, setTypeFilter]     = useState('all');
+  const [leadFilter, setLeadFilter]     = useState('all');
+  const [dismissTarget, setDismissTarget] = useState(null);
+  const [dismissNote, setDismissNote]   = useState('');
+
+  const reload = async () => {
+    setError(null);
+    if (!supabaseClient) return;
+    try {
+      const [{ data: ras }, { data: vs }, { data: cs }, { data: ds }, { data: us }, { data: bs }, { data: profs }] = await Promise.all([
+        supabaseClient.from('resident_assignments').select('profile_id,unit_id,tenure,lease_end').not('lease_end','is',null),
+        supabaseClient.from('vendors').select('id,name,service_category,contract_end').not('contract_end','is',null),
+        supabaseClient.from('contracts').select('id,name,counterparty,contract_type,end_date,building_id'),
+        supabaseClient.from('reminder_dismissals').select('id,source_type,source_id,lead_days,dismissal_anchor,dismissed_at,dismissed_by,note'),
+        supabaseClient.from('units').select('id,unit_number,floor,building_id'),
+        supabaseClient.from('buildings').select('id,name,address,property_type'),
+        supabaseClient.from('profiles').select('id,full_name').eq('role','resident'),
+      ]);
+      const uMap = Object.fromEntries((us || []).map(u => [u.id, u]));
+      const bMap = Object.fromEntries((bs || []).map(b => [b.id, b]));
+      const pMap = Object.fromEntries((profs || []).map(p => [p.id, p]));
+      const leasesEnriched = (ras || []).map(r => ({
+        ...r,
+        resident_name: pMap[r.profile_id]?.full_name || '—',
+        unit_number:   uMap[r.unit_id]?.unit_number || '—',
+        building_name: uMap[r.unit_id] && bMap[uMap[r.unit_id].building_id] ? bMap[uMap[r.unit_id].building_id].name : '—',
+      }));
+      setLeases(leasesEnriched);
+      setVendorsList(vs || []);
+      setContractsList(cs || []);
+      setDismissals(ds || []);
+    } catch (e) { setError(e.message || String(e)); }
+  };
+  useEffect(() => { reload(); }, []);
+
+  const reminders = (leases !== null && typeof buildReminders === 'function')
+    ? buildReminders({ leases, vendors: vendorsList, contracts: contractsList, dismissals })
+    : [];
+
+  const cats = (digestCategories && digestCategories.length > 0) ? digestCategories : DIGEST_DEFAULT;
+  const filtered = reminders.filter(r => {
+    const cat = _reminderToCategory(r);
+    if (cat && !cats.includes(cat)) return false;
+    if (typeFilter !== 'all' && r.source_type !== typeFilter) return false;
+    if (leadFilter !== 'all' && r.lead_days !== Number(leadFilter)) return false;
+    return true;
+  });
+
+  const submitDismiss = async () => {
+    const r = dismissTarget;
+    if (!r || !supabaseClient) { setDismissTarget(null); return; }
+    const { data: u } = await supabaseClient.auth.getUser();
+    const { error: e } = await supabaseClient.from('reminder_dismissals').insert([{
+      source_type:      r.source_type,
+      source_id:        r.source_id,
+      lead_days:        r.lead_days,
+      dismissal_anchor: r.end_date,
+      dismissed_by:     u?.user?.id || null,
+      note:             dismissNote || null,
+    }]);
+    if (e) setError(e.message);
+    setDismissTarget(null); setDismissNote('');
+    reload();
+  };
+  const fmtRemain = (d) => d < 0
+    ? Math.abs(d) + ' days overdue'
+    : d === 0 ? 'Due today' : d + ' day' + (d === 1 ? '' : 's') + ' remaining';
+
+  // Type-badge / lead-badge helpers are defined in reminders.js (_typeBadge,
+  // _leadBadge) and present on the global scope by load order. Fall back
+  // gracefully if they aren't.
+  const tb = (t) => (typeof _typeBadge === 'function') ? _typeBadge(t) : { label: t, bg:'#E6EAE9', fg:'#61707D' };
+  const lb = (l) => (typeof _leadBadge === 'function') ? _leadBadge(l) : { label: 'Window', bg:'#E6EAE9', fg:'#61707D' };
+
+  return (
+    <div className="card" style={{marginBottom:18}}>
+      <div style={{marginBottom:14}}>
+        <div style={{fontSize:14,fontWeight:600,color:'var(--text-dark)'}}>Open contract reminders</div>
+        <div style={{fontSize:12,color:'var(--text-muted)',marginTop:4}}>
+          Leases, vendor contracts and generic contracts expiring within the next 90 days. Mark handled once renewed or actioned.
+        </div>
+      </div>
+
+      <div style={{display:'flex',gap:14,flexWrap:'wrap',alignItems:'flex-end',marginBottom:14}}>
+        <div style={{flex:'1 1 160px'}}>
+          <label style={{fontSize:10,letterSpacing:'0.06em',textTransform:'uppercase',color:'var(--text-secondary)',marginBottom:6,display:'block',fontWeight:500}}>Type</label>
+          <select className="form-input" value={typeFilter} onChange={e => setTypeFilter(e.target.value)}>
+            <option value="all">All types</option>
+            <option value="lease">Leases</option>
+            <option value="vendor">Vendors</option>
+            <option value="contract">Contracts</option>
+          </select>
+        </div>
+        <div style={{flex:'1 1 160px'}}>
+          <label style={{fontSize:10,letterSpacing:'0.06em',textTransform:'uppercase',color:'var(--text-secondary)',marginBottom:6,display:'block',fontWeight:500}}>Window</label>
+          <select className="form-input" value={leadFilter} onChange={e => setLeadFilter(e.target.value)}>
+            <option value="all">All windows</option>
+            <option value="0">Overdue</option>
+            <option value="7">Urgent (≤7d)</option>
+            <option value="30">Action (≤30d)</option>
+            <option value="60">Planning (≤60d)</option>
+            <option value="90">Heads-up (≤90d)</option>
+          </select>
+        </div>
+        <button className="btn btn-sm" onClick={() => { setTypeFilter('all'); setLeadFilter('all'); }}>Clear</button>
+        <button className="btn btn-sm" onClick={reload} style={{marginLeft:'auto'}}>Refresh</button>
+      </div>
+
+      {error && <div style={{padding:10,background:'#fdf2f1',color:'#8b4a42',borderRadius:6,fontSize:12,marginBottom:14}}>{error}</div>}
+      {leases === null ? (
+        <div style={{padding:24,color:'var(--text-muted)',fontSize:13}}>Loading…</div>
+      ) : filtered.length === 0 ? (
+        <div style={{padding:24,color:'var(--text-muted)',fontSize:13,textAlign:'center'}}>
+          {reminders.length === 0
+            ? 'Nothing expiring in the next 90 days ✓'
+            : 'No reminders match the current filters / categories.'}
+        </div>
+      ) : (
+        <table className="data-table" style={{fontSize:13,tableLayout:'fixed',width:'100%'}}>
+          <thead>
+            <tr>
+              <th style={{width:'10%'}}>Type</th>
+              <th style={{width:'28%'}}>What</th>
+              <th style={{width:'22%'}}>Context</th>
+              <th style={{width:'12%'}}>Expires</th>
+              <th style={{width:'16%'}}>Remaining</th>
+              <th style={{width:'12%',textAlign:'right'}}>Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {filtered.slice(0, 25).map(r => {
+              const tBadge = tb(r.source_type);
+              const remColor = r.lead_days === 0 ? '#8b4a42' : r.lead_days <= 7 ? '#7a5a1f' : 'var(--text-dark)';
+              return (
+                <tr key={r.key}>
+                  <td><span style={{display:'inline-block',padding:'2px 8px',borderRadius:4,fontSize:10,fontWeight:500,background:tBadge.bg,color:tBadge.fg,whiteSpace:'nowrap'}}>{tBadge.label}</span></td>
+                  <td style={{fontWeight:500,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{r.title}</td>
+                  <td style={{color:'var(--text-secondary)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{r.subtitle}</td>
+                  <td style={{whiteSpace:'nowrap'}}>{r.end_date}</td>
+                  <td style={{whiteSpace:'nowrap',color:remColor,fontWeight:500}}>{fmtRemain(r.days_until)}</td>
+                  <td style={{textAlign:'right',whiteSpace:'nowrap'}}>
+                    <button className="btn btn-sm" style={{padding:'4px 10px',fontSize:11}} onClick={() => setDismissTarget(r)} title="Mark this reminder as handled">Handled</button>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      )}
+      {filtered.length > 25 && (
+        <div style={{padding:'10px 0 0',fontSize:11,color:'var(--text-muted)',textAlign:'center'}}>
+          Showing first 25 of {filtered.length}. Open the standalone Reminders view for the full list.
+        </div>
+      )}
+
+      {dismissTarget && (
+        <div className="modal-overlay" onClick={() => setDismissTarget(null)}>
+          <div className="modal" onClick={e => e.stopPropagation()} style={{maxWidth:480}}>
+            <div className="modal-header">
+              <div>
+                <div style={{fontSize:11,letterSpacing:'0.08em',textTransform:'uppercase',color:'var(--text-muted)',marginBottom:4}}>Mark Handled</div>
+                <h2 style={{fontSize:17}}>{dismissTarget.title}</h2>
+                <div className="modal-sub">{dismissTarget.subtitle} · expires {dismissTarget.end_date}</div>
+              </div>
+              <button className="modal-close" onClick={() => setDismissTarget(null)}>×</button>
+            </div>
+            <div style={{padding:'4px 0 14px',fontSize:13,color:'var(--text-secondary)'}}>
+              This will suppress the reminder for this contract. If the end date changes later (renewal), the reminder will re-open automatically.
+            </div>
+            <div style={{marginBottom:14}}>
+              <label style={{fontSize:10,letterSpacing:'0.06em',textTransform:'uppercase',color:'var(--text-secondary)',marginBottom:6,display:'block',fontWeight:500}}>Note (optional)</label>
+              <textarea className="form-input" rows={3} placeholder="e.g. Renewal agreed verbally, signing next week" value={dismissNote} onChange={e => setDismissNote(e.target.value)}/>
+            </div>
+            <div style={{display:'flex',justifyContent:'flex-end',gap:8}}>
+              <button className="btn btn-sm" onClick={() => setDismissTarget(null)}>Cancel</button>
+              <button className="btn btn-primary btn-sm" onClick={submitDismiss}>Mark handled</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
 const ReminderSettingsSection = () => {
   const [settings, setSettings] = useState(null);
   const [draftEmail, setDraftEmail] = useState('');
@@ -3128,6 +3386,7 @@ const ReminderSettingsSection = () => {
       id: 1, email_enabled: false, email_recipients: [],
       digest_cadence: 'daily', digest_days_of_week: [...DOW_LIST],
       digest_time_local: '09:00', digest_timezone: 'Asia/Dubai',
+      digest_categories: [...DIGEST_DEFAULT],
     });
   };
   useEffect(() => { load(); }, []);
@@ -3144,6 +3403,7 @@ const ReminderSettingsSection = () => {
       digest_days_of_week: next.digest_days_of_week,
       digest_time_local:   next.digest_time_local,
       digest_timezone:     next.digest_timezone,
+      digest_categories:   next.digest_categories || DIGEST_DEFAULT,
       updated_at:          new Date().toISOString(),
     }).eq('id', 1);
     if (e) setError(e.message);
@@ -3233,6 +3493,25 @@ const ReminderSettingsSection = () => {
   })();
 
   return (
+    <div>
+      {/* ---- Embedded composer (was the standalone Reminders page) ---- */}
+      <EmbeddedRemindersComposer digestCategories={settings.digest_categories || DIGEST_DEFAULT}/>
+
+      {/* ---- Digest content selector ---- */}
+      <div className="card" style={{marginBottom:18}}>
+        <div style={{marginBottom:14}}>
+          <div style={{fontSize:14,fontWeight:600,color:'var(--text-dark)'}}>What goes into the digest</div>
+          <div style={{fontSize:12,color:'var(--text-muted)',marginTop:4}}>
+            Pick which categories appear in the in-app bell and in the daily reminder email. Defaults to all six — toggle any off if a category is noise for your portfolio.
+          </div>
+        </div>
+        <DigestCategorySelector
+          value={settings.digest_categories || DIGEST_DEFAULT}
+          saving={saving}
+          onChange={(next) => patch({ digest_categories: next })}
+        />
+      </div>
+
     <div className="card">
       <div style={{marginBottom:18}}>
         <div style={{fontSize:14,fontWeight:600,color:'var(--text-dark)'}}>Reminder email</div>
@@ -3365,6 +3644,7 @@ const ReminderSettingsSection = () => {
           )}
         </div>
       </div>
+    </div>
     </div>
   );
 };

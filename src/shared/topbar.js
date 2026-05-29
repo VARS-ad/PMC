@@ -112,6 +112,19 @@ const TopBar = ({ onCreateClick, onMenuToggle, onLogout, onNavigate }) => {
   // ===== Notifications =====
   const [showNotifications, setShowNotifications] = useState(false);
   const [notifs, setNotifs] = useState({ srs: [], invoices: [], visits: [], reminders: [] });
+  // Six-category selection (from Database → Reminder Email). Drives which
+  // groups appear in the bell — toggling a category off in Settings hides
+  // those items everywhere. Default to all six ON so the bell behaves the
+  // same as before for users who haven't visited the new settings yet.
+  // Category → bell-group mapping:
+  //   money     → invoices
+  //   leases    → reminders where source_type === 'lease'
+  //   srs       → srs
+  //   contracts → reminders where source_type === 'vendor' OR 'contract'
+  //   ops       → visits (visitors expected today + move-ins/outs + shift handovers)
+  //   compliance→ (no current source — included for forward compat)
+  const TOPBAR_DIGEST_DEFAULT = ['money','leases','srs','contracts','ops','compliance'];
+  const [digestCats, setDigestCats] = useState(TOPBAR_DIGEST_DEFAULT);
   // Persisted "last marked-as-read" timestamp. When user clicks the
   // "Mark all read" link we store now(); the bell's red dot only shows
   // when at least one item was created after that timestamp.
@@ -128,6 +141,12 @@ const TopBar = ({ onCreateClick, onMenuToggle, onLogout, onNavigate }) => {
     let mounted = true;
     (async () => {
       try {
+        // Load the saved digest-categories selection so the bell honours
+        // the same toggles configured in Database → Reminder Email.
+        const { data: rs } = await supabaseClient.from('reminder_settings').select('digest_categories').eq('id', 1).maybeSingle();
+        if (mounted && rs && Array.isArray(rs.digest_categories) && rs.digest_categories.length > 0) {
+          setDigestCats(rs.digest_categories);
+        }
         const filterB = selectedProperties.length > 0 ? selectedProperties : null;
         const { data: units } = await supabaseClient.from('units').select('id,building_id,unit_number');
         const filteredUnits = (units || []).filter(u => !filterB || filterB.includes(u.building_id));
@@ -168,7 +187,24 @@ const TopBar = ({ onCreateClick, onMenuToggle, onLogout, onNavigate }) => {
     })();
     return () => { mounted = false; };
   }, [selectedProperties.join(',')]);
-  const notifTotal = notifs.srs.length + notifs.invoices.length + notifs.visits.length + notifs.reminders.length;
+  // Apply the digest-category filter so the bell mirrors the Reminder Email
+  // tab's six toggles. Reminders are tagged by source_type:
+  //   lease    → 'leases'
+  //   vendor   → 'contracts'  (maintenance contracts)
+  //   contract → 'contracts'  (generic contracts share the same toggle)
+  const _activeCats = digestCats || TOPBAR_DIGEST_DEFAULT;
+  const visibleNotifs = {
+    srs:       _activeCats.includes('srs')   ? notifs.srs      : [],
+    invoices:  _activeCats.includes('money') ? notifs.invoices : [],
+    visits:    _activeCats.includes('ops')   ? notifs.visits   : [],
+    reminders: notifs.reminders.filter(r => {
+      if (r.source_type === 'lease')    return _activeCats.includes('leases');
+      if (r.source_type === 'vendor')   return _activeCats.includes('contracts');
+      if (r.source_type === 'contract') return _activeCats.includes('contracts');
+      return true;
+    }),
+  };
+  const notifTotal = visibleNotifs.srs.length + visibleNotifs.invoices.length + visibleNotifs.visits.length + visibleNotifs.reminders.length;
   // "Unread" = at least one item became actionable after the last mark-as-read
   // timestamp. For SR / invoice / visit we compare to `created_at`. For a
   // reminder, the "fire moment" is end_date − lead_days (the day today
@@ -182,8 +218,8 @@ const TopBar = ({ onCreateClick, onMenuToggle, onLogout, onNavigate }) => {
     return d.toISOString();
   };
   const hasUnread = !notifReadAt
-    || [...notifs.srs, ...notifs.invoices, ...notifs.visits].some(item => (item.created_at || '') > notifReadAt)
-    || notifs.reminders.some(r => reminderFiredAt(r) > notifReadAt);
+    || [...visibleNotifs.srs, ...visibleNotifs.invoices, ...visibleNotifs.visits].some(item => (item.created_at || '') > notifReadAt)
+    || visibleNotifs.reminders.some(r => reminderFiredAt(r) > notifReadAt);
   const showDot = notifTotal > 0 && hasUnread;
   const fmtAED = (n) => 'AED ' + Math.round(Number(n) || 0).toLocaleString();
   const goTo = (page) => { setShowNotifications(false); if (onNavigate) onNavigate(page); };
@@ -318,13 +354,13 @@ const TopBar = ({ onCreateClick, onMenuToggle, onLogout, onNavigate }) => {
                     </div>
                   ) : (
                     <>
-                      {notifs.reminders.length > 0 && (
+                      {visibleNotifs.reminders.length > 0 && (
                         <div>
                           <div style={{padding:'10px 16px 6px',fontSize:10,letterSpacing:'0.08em',textTransform:'uppercase',color:'#61707D',fontWeight:600,background:'#F4EEE4',display:'flex',justifyContent:'space-between',alignItems:'center'}}>
-                            <span>Contract Reminders · {notifs.reminders.length}</span>
+                            <span>Contract Reminders · {visibleNotifs.reminders.length}</span>
                             <span onClick={() => goTo('reminders')} style={{fontSize:10,color:'var(--accent-warm-dark)',cursor:'pointer',textTransform:'none',letterSpacing:0,fontWeight:500}}>View all →</span>
                           </div>
-                          {notifs.reminders.slice(0, 5).map(r => {
+                          {visibleNotifs.reminders.slice(0, 5).map(r => {
                             const dotColor = r.lead_days === 0 ? '#8b4a42' : r.lead_days <= 7 ? '#a07d3c' : '#61707D';
                             const remainTxt = r.days_until < 0
                               ? Math.abs(r.days_until) + ' days overdue'
@@ -344,12 +380,12 @@ const TopBar = ({ onCreateClick, onMenuToggle, onLogout, onNavigate }) => {
                           })}
                         </div>
                       )}
-                      {notifs.srs.length > 0 && (
+                      {visibleNotifs.srs.length > 0 && (
                         <div>
                           <div style={{padding:'10px 16px 6px',fontSize:10,letterSpacing:'0.08em',textTransform:'uppercase',color:'#61707D',fontWeight:600,background:'#F4EEE4'}}>
-                            Service Requests · {notifs.srs.length}
+                            Service Requests · {visibleNotifs.srs.length}
                           </div>
-                          {notifs.srs.slice(0, 5).map(s => (
+                          {visibleNotifs.srs.slice(0, 5).map(s => (
                             <div key={s.id} onClick={() => goTo('service')} style={{padding:'10px 16px',borderBottom:'1px solid #E6EAE9',cursor:'pointer',display:'flex',gap:10,alignItems:'flex-start'}}
                               onMouseEnter={e => e.currentTarget.style.background='#F4EEE4'}
                               onMouseLeave={e => e.currentTarget.style.background='transparent'}>
@@ -363,12 +399,12 @@ const TopBar = ({ onCreateClick, onMenuToggle, onLogout, onNavigate }) => {
                           ))}
                         </div>
                       )}
-                      {notifs.invoices.length > 0 && (
+                      {visibleNotifs.invoices.length > 0 && (
                         <div>
                           <div style={{padding:'10px 16px 6px',fontSize:10,letterSpacing:'0.08em',textTransform:'uppercase',color:'#61707D',fontWeight:600,background:'#F4EEE4'}}>
-                            Overdue Invoices · {notifs.invoices.length}
+                            Overdue Invoices · {visibleNotifs.invoices.length}
                           </div>
-                          {notifs.invoices.slice(0, 5).map(i => (
+                          {visibleNotifs.invoices.slice(0, 5).map(i => (
                             <div key={i.id} onClick={() => goTo('payment')} style={{padding:'10px 16px',borderBottom:'1px solid #E6EAE9',cursor:'pointer',display:'flex',gap:10,alignItems:'flex-start'}}
                               onMouseEnter={e => e.currentTarget.style.background='#F4EEE4'}
                               onMouseLeave={e => e.currentTarget.style.background='transparent'}>
@@ -382,12 +418,12 @@ const TopBar = ({ onCreateClick, onMenuToggle, onLogout, onNavigate }) => {
                           ))}
                         </div>
                       )}
-                      {notifs.visits.length > 0 && (
+                      {visibleNotifs.visits.length > 0 && (
                         <div>
                           <div style={{padding:'10px 16px 6px',fontSize:10,letterSpacing:'0.08em',textTransform:'uppercase',color:'#61707D',fontWeight:600,background:'#F4EEE4'}}>
-                            Today's Visitors · {notifs.visits.length}
+                            Today's Visitors · {visibleNotifs.visits.length}
                           </div>
-                          {notifs.visits.slice(0, 5).map(v => (
+                          {visibleNotifs.visits.slice(0, 5).map(v => (
                             <div key={v.id} onClick={() => goTo('visitors')} style={{padding:'10px 16px',borderBottom:'1px solid #E6EAE9',cursor:'pointer',display:'flex',gap:10,alignItems:'flex-start'}}
                               onMouseEnter={e => e.currentTarget.style.background='#F4EEE4'}
                               onMouseLeave={e => e.currentTarget.style.background='transparent'}>
