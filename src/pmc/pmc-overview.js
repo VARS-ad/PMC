@@ -46,16 +46,21 @@ const PMCOverviewPage = ({ setPage }) => {
       try {
         const filterB = selectedProperties.length > 0 ? selectedProperties : null;
         const { data: buildings } = await supabaseClient.from('buildings').select('id,name,address,property_type');
-        const { data: units } = await supabaseClient.from('units').select('id,building_id,unit_number,floor');
+        // Also pull the denormalised tenant_* fields so the Needs-Attention
+        // card can spot vacant units and leases ending soon for non-
+        // residential property types.
+        const { data: units } = await supabaseClient.from('units').select('id,building_id,unit_number,floor,tenant_name,tenant_lease_end');
         const filteredUnits = (units || []).filter(u => !filterB || filterB.includes(u.building_id));
         const fIds = filteredUnits.map(u => u.id);
         const probe = fIds.length ? fIds : ['00000000-0000-0000-0000-000000000000'];
 
-        const [{ data: ras }, { data: invoices }, { data: srs }, { data: visits }] = await Promise.all([
-          supabaseClient.from('resident_assignments').select('profile_id,unit_id').in('unit_id', probe),
-          supabaseClient.from('invoices').select('id,amount_aed,status,due_date,unit_id,created_at').in('unit_id', probe),
+        const [{ data: ras }, { data: invoices }, { data: srs }, { data: visits }, { data: attsForAttention }] = await Promise.all([
+          supabaseClient.from('resident_assignments').select('profile_id,unit_id,lease_end,tenure').in('unit_id', probe),
+          supabaseClient.from('invoices').select('id,amount_aed,status,due_date,unit_id,created_at,resident_profile_id').in('unit_id', probe),
           supabaseClient.from('service_requests').select('id,category,description,status,priority,created_at,resolved_at,unit_id,resident_profile_id').in('unit_id', probe).order('created_at', { ascending: false }),
           supabaseClient.from('visits').select('id,visit_date,status,visitor_name,type').in('unit_id', probe),
+          // For the 'missing title deed' attention row.
+          supabaseClient.from('unit_attachments').select('unit_id,kind').eq('kind', 'title_deed'),
         ]);
         if (!mounted) return;
 
@@ -192,6 +197,99 @@ const PMCOverviewPage = ({ setPage }) => {
         // -------- Recent Service Requests (all-status) for the SR section table --------
         const srRecent = (srs || []).slice(0, 10);
 
+        // -------- "Needs your attention" exception list ---------------
+        // A ranked watchlist for the landlord — the things they'd want to
+        // see first thing on opening the app. Each item carries a
+        // severity (red / orange / yellow), a short headline, a detail
+        // string, and a `page` route the user can click through to.
+        const attention = [];
+        const dayMsLocal = 24 * 60 * 60 * 1000;
+        const nowLocal = new Date();
+
+        // Overdue invoices = effectiveStatus 'Overdue' (past due AND not paid).
+        const overdueInvs = (invoices || []).filter(i => i._eff === 'Overdue');
+        if (overdueInvs.length > 0) {
+          const overdueTotal = overdueInvs.reduce((s, i) => s + Number(i.amount_aed), 0);
+          const overdueUnits = new Set(overdueInvs.map(i => i.unit_id)).size;
+          // Worst offender — longest-overdue, biggest-amount.
+          const worst = overdueInvs.slice().sort((a, b) => (a.due_date || '').localeCompare(b.due_date || ''))[0];
+          const wU = uMap[worst.unit_id]; const wB = wU ? bMap[wU.building_id] : null;
+          const dayLag = worst.due_date ? Math.max(0, Math.floor((nowLocal - new Date(worst.due_date)) / dayMsLocal)) : 0;
+          attention.push({
+            severity: 'red',
+            title: overdueUnits + ' tenant' + (overdueUnits===1?'':'s') + ' overdue · ' + fmt(overdueTotal) + ' at risk',
+            detail: 'Worst: ' + (wU ? (wU.unit_number + (wB ? ' · ' + wB.name : '')) : '—') + (dayLag ? ' · ' + dayLag + 'd late' : ''),
+            page: 'payment',
+          });
+        }
+
+        // High-priority service requests still open.
+        const urgentSrs = (srs || []).filter(s => ['New','Acknowledged','In Progress'].includes(s.status) && ['High','Urgent'].includes(s.priority));
+        if (urgentSrs.length > 0) {
+          const top = urgentSrs[0];
+          const tU = uMap[top.unit_id]; const tB = tU ? bMap[tU.building_id] : null;
+          attention.push({
+            severity: urgentSrs.some(s => s.priority === 'Urgent') ? 'red' : 'orange',
+            title: urgentSrs.length + ' high-priority service request' + (urgentSrs.length===1?'':'s') + ' open',
+            detail: 'Latest: ' + (top.category || 'SR') + (tU ? ' · ' + tU.unit_number + (tB ? ' · ' + tB.name : '') : ''),
+            page: 'service',
+          });
+        }
+
+        // Leases expiring in the next 60 days (residential assignments +
+        // non-residential tenant_lease_end). 30 days = orange, ≤30 = red.
+        const cutoff60 = new Date(nowLocal.getTime() + 60 * dayMsLocal).toISOString().slice(0, 10);
+        const cutoff30 = new Date(nowLocal.getTime() + 30 * dayMsLocal).toISOString().slice(0, 10);
+        const today10 = nowLocal.toISOString().slice(0, 10);
+        const resLeasesEndingSoon = (ras || []).filter(r => r.lease_end && r.lease_end >= today10 && r.lease_end <= cutoff60 && r.tenure === 'Tenant');
+        const tenLeasesEndingSoon = filteredUnits.filter(u => u.tenant_lease_end && u.tenant_lease_end >= today10 && u.tenant_lease_end <= cutoff60);
+        const endingSoonCount = resLeasesEndingSoon.length + tenLeasesEndingSoon.length;
+        if (endingSoonCount > 0) {
+          const within30 = resLeasesEndingSoon.filter(r => r.lease_end <= cutoff30).length
+                         + tenLeasesEndingSoon.filter(u => u.tenant_lease_end <= cutoff30).length;
+          attention.push({
+            severity: within30 > 0 ? 'red' : 'orange',
+            title: endingSoonCount + ' lease' + (endingSoonCount===1?'':'s') + ' expiring within 60 days',
+            detail: within30 > 0 ? within30 + ' within the next 30 days' : 'All beyond 30 days',
+            page: 'reminders',
+          });
+        }
+
+        // Vacant units = no resident assignment AND no tenant_name. The
+        // landlord usually wants to chase a re-let; calling this out so
+        // the gap doesn't sit silently.
+        const assignedUnitIds = new Set((ras || []).map(r => r.unit_id));
+        const vacantUnits = filteredUnits.filter(u => !assignedUnitIds.has(u.id) && !u.tenant_name);
+        if (vacantUnits.length > 0) {
+          attention.push({
+            severity: vacantUnits.length > 5 ? 'orange' : 'yellow',
+            title: vacantUnits.length + ' vacant unit' + (vacantUnits.length===1?'':'s'),
+            detail: 'Across ' + new Set(vacantUnits.map(u => u.building_id)).size + ' asset(s)',
+            page: 'properties',
+          });
+        }
+
+        // Missing title deed on at least one unit of an asset. Important
+        // for compliance / refinancing — landlords should know.
+        const unitsWithDeed = new Set((attsForAttention || []).map(a => a.unit_id));
+        const assetsMissingDeed = (buildings || []).filter(b => {
+          if (filterB && !filterB.includes(b.id)) return false;
+          const bUnits = filteredUnits.filter(u => u.building_id === b.id);
+          if (bUnits.length === 0) return false;
+          return !bUnits.some(u => unitsWithDeed.has(u.id));
+        });
+        if (assetsMissingDeed.length > 0) {
+          attention.push({
+            severity: 'yellow',
+            title: assetsMissingDeed.length + ' asset' + (assetsMissingDeed.length===1?'':'s') + ' missing title deed',
+            detail: assetsMissingDeed.slice(0, 2).map(b => b.name).join(', ') + (assetsMissingDeed.length > 2 ? ' +' + (assetsMissingDeed.length - 2) + ' more' : ''),
+            page: 'profileCreation',
+          });
+        }
+
+        const severityRank = { red: 0, orange: 1, yellow: 2 };
+        attention.sort((a, b) => severityRank[a.severity] - severityRank[b.severity]);
+
         setStats({
           // Portfolio Summary KPIs
           selectedPropsCount, totalUnits, occupied, occupancyRate, lastMonthCollected, pendingSCAmount, upcomingSCAmount,
@@ -207,6 +305,8 @@ const PMCOverviewPage = ({ setPage }) => {
           totalArrears:      Object.values(pendingByUnit).reduce((s, a) => s + a.amount, 0),
           // Service Requests table
           srRecent,
+          // Landlord watchlist
+          attention,
         });
       } catch (e) {
         if (mounted) setError(String(e.message || e));
@@ -304,6 +404,53 @@ const PMCOverviewPage = ({ setPage }) => {
       {!stats ? (
         <div className="card"><div style={{padding:24,color:'var(--text-muted)',fontSize:13}}>Loading…</div></div>
       ) : (<>
+        {/* ============ NEEDS YOUR ATTENTION ============ */}
+        {(() => {
+          const items = stats.attention || [];
+          const tones = {
+            red:    { dot:'#8b4a42', label:'Urgent',     bg:'#fdf2f1', border:'#f0d9d6' },
+            orange: { dot:'#a07d3c', label:'Soon',       bg:'#fdf5e6', border:'#efe1be' },
+            yellow: { dot:'#7a5a1f', label:'Heads up',   bg:'#fbf6e9', border:'#ebe1c1' },
+          };
+          return (
+            <>
+              <div style={groupEyebrow}>Needs Your Attention</div>
+              {items.length === 0 ? (
+                <div className="card" style={{padding:'18px 22px',display:'flex',alignItems:'center',gap:12,background:'#e6efe1',border:'1px solid #c8d4be',marginBottom:0}}>
+                  <span style={{fontSize:18,color:'#5a6b4f'}}>✓</span>
+                  <div>
+                    <div style={{fontSize:14,fontWeight:600,color:'#5a6b4f'}}>All caught up.</div>
+                    <div style={{fontSize:12,color:'#6f7d65',marginTop:2}}>Nothing requires your attention right now across the selected assets.</div>
+                  </div>
+                </div>
+              ) : (
+                <div className="card" style={{padding:0,marginBottom:0,overflow:'hidden'}}>
+                  {items.map((it, idx) => {
+                    const t = tones[it.severity] || tones.yellow;
+                    return (
+                      <div key={idx}
+                        onClick={() => it.page && setPage && setPage(it.page)}
+                        style={{display:'flex',alignItems:'center',gap:14,padding:'14px 20px',cursor: it.page ? 'pointer' : 'default',background:'#fff',borderBottom: idx === items.length - 1 ? 'none' : '1px solid var(--border-light)',transition:'background 0.12s'}}
+                        onMouseEnter={e => { if (it.page) e.currentTarget.style.background = t.bg; }}
+                        onMouseLeave={e => { e.currentTarget.style.background = '#fff'; }}>
+                        <span style={{width:10,height:10,borderRadius:'50%',background:t.dot,flexShrink:0}}/>
+                        <div style={{flex:1,minWidth:0}}>
+                          <div style={{fontSize:14,fontWeight:600,color:'var(--text-dark)',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{it.title}</div>
+                          <div style={{fontSize:12,color:'var(--text-muted)',marginTop:3}}>{it.detail}</div>
+                        </div>
+                        <span style={{fontSize:10,letterSpacing:'0.05em',textTransform:'uppercase',color:t.dot,fontWeight:700,whiteSpace:'nowrap'}}>{t.label}</span>
+                        {it.page && (
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#8a98a2" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </>
+          );
+        })()}
+
         {/* ============ PORTFOLIO SUMMARY ============ */}
         <div style={groupEyebrow}>Portfolio Summary</div>
         <div className="kpi-row" style={{gridTemplateColumns:'repeat(5, minmax(0, 1fr))',marginBottom:0}}>
