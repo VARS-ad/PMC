@@ -31,30 +31,32 @@ const PMCStat = ({ label, value, color, onClick, hint }) => (
 // the building id so each asset always lands the same photo, but
 // different assets of the same type don't repeat. URLs are Unsplash
 // CDN-hosted, free for commercial demo use.
+// Each URL was visually vetted (landscape-friendly, on-theme, loads from the
+// Unsplash CDN) so any deterministic pick below lands a real-looking cover.
 const STOCK_BUILDING_PHOTOS = {
   'Residential': [
-    'https://images.unsplash.com/photo-1545324418-cc1a3fa10c00?w=1600&auto=format&fit=crop&q=85',
-    'https://images.unsplash.com/photo-1512453979798-5ea266f8880c?w=1600&auto=format&fit=crop&q=85',
-    'https://images.unsplash.com/photo-1582407947304-fd86f028f716?w=1600&auto=format&fit=crop&q=85',
-    'https://images.unsplash.com/photo-1486325212027-8081e485255e?w=1600&auto=format&fit=crop&q=85',
+    'https://images.unsplash.com/photo-1512453979798-5ea266f8880c?w=1600&auto=format&fit=crop&q=85', // Dubai skyline at sunset
+    'https://images.unsplash.com/photo-1502672260266-1c1ef2d93688?w=1600&auto=format&fit=crop&q=85', // warm, plant-filled living room
+    'https://images.unsplash.com/photo-1460317442991-0ec209397118?w=1600&auto=format&fit=crop&q=85', // modern apartment balconies
+    'https://images.unsplash.com/photo-1493809842364-78817add7ffb?w=1600&auto=format&fit=crop&q=85', // bright apartment interior
   ],
   'Commercial': [
-    'https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?w=1600&auto=format&fit=crop&q=85',
-    'https://images.unsplash.com/photo-1577415124269-fc1140a69e91?w=1600&auto=format&fit=crop&q=85',
-    'https://images.unsplash.com/photo-1497366754035-f200968a6e72?w=1600&auto=format&fit=crop&q=85',
-    'https://images.unsplash.com/photo-1554435493-93422e8220c8?w=1600&auto=format&fit=crop&q=85',
+    'https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?w=1600&auto=format&fit=crop&q=85', // glass office towers, looking up
+    'https://images.unsplash.com/photo-1518780664697-55e3ad937233?w=1600&auto=format&fit=crop&q=85', // white modern office block
+    'https://images.unsplash.com/photo-1554469384-e58fac16e23a?w=1600&auto=format&fit=crop&q=85', // blue glass corporate towers
+    'https://images.unsplash.com/photo-1497366754035-f200968a6e72?w=1600&auto=format&fit=crop&q=85', // modern office interior
   ],
   'Villa': [
-    'https://images.unsplash.com/photo-1613490493576-7fde63acd811?w=1600&auto=format&fit=crop&q=85',
-    'https://images.unsplash.com/photo-1568605114967-8130f3a36994?w=1600&auto=format&fit=crop&q=85',
-    'https://images.unsplash.com/photo-1564013799919-ab600027ffc6?w=1600&auto=format&fit=crop&q=85',
-    'https://images.unsplash.com/photo-1600596542815-ffad4c1539a9?w=1600&auto=format&fit=crop&q=85',
+    'https://images.unsplash.com/photo-1613490493576-7fde63acd811?w=1600&auto=format&fit=crop&q=85', // modern white villa + pool
+    'https://images.unsplash.com/photo-1600596542815-ffad4c1539a9?w=1600&auto=format&fit=crop&q=85', // modern grey villa + pool
+    'https://images.unsplash.com/photo-1580587771525-78b9dba3b914?w=1600&auto=format&fit=crop&q=85', // villa with pool and lawn
+    'https://images.unsplash.com/photo-1605276374104-dee2a0ed3cd6?w=1600&auto=format&fit=crop&q=85', // detached family home
   ],
   'Commercial Land': [
-    'https://images.unsplash.com/photo-1581094288338-2314dddb7ece?w=1600&auto=format&fit=crop&q=85',
-    'https://images.unsplash.com/photo-1565008447742-97f6f38c985c?w=1600&auto=format&fit=crop&q=85',
-    'https://images.unsplash.com/photo-1581090700227-1e37b190418e?w=1600&auto=format&fit=crop&q=85',
-    'https://images.unsplash.com/photo-1587293852726-70cdb56c2866?w=1600&auto=format&fit=crop&q=85',
+    'https://images.unsplash.com/photo-1494412651409-8963ce7935a7?w=1600&auto=format&fit=crop&q=85', // aerial container yard
+    'https://images.unsplash.com/photo-1565793298595-6a879b1d9492?w=1600&auto=format&fit=crop&q=85', // aerial logistics depot
+    'https://images.unsplash.com/photo-1578575437130-527eed3abbec?w=1600&auto=format&fit=crop&q=85', // container port terminal
+    'https://images.unsplash.com/photo-1500382017468-9049fed747ef?w=1600&auto=format&fit=crop&q=85', // open development land
   ],
 };
 const pickStockPhoto = (assetId, propertyType) => {
@@ -67,7 +69,7 @@ const pickStockPhoto = (assetId, propertyType) => {
 // renders; when the asset has no uploaded photo we fall back to a
 // curated Unsplash stock photo chosen by property type (see
 // STOCK_BUILDING_PHOTOS above) so every card looks like a real photo.
-const AssetCardPhoto = ({ storagePath, assetId, typeChipColor, propertyType, name, height = 120 }) => {
+const AssetCardPhoto = ({ storagePath, assetId, typeChipColor, propertyType, name, stockUrl, height = 120 }) => {
   const [url, setUrl] = useState(null);
   useEffect(() => {
     let mounted = true;
@@ -81,7 +83,10 @@ const AssetCardPhoto = ({ storagePath, assetId, typeChipColor, propertyType, nam
   // Unsplash rate-limit failures and fall back to the designed cover
   // instead of showing an empty card (`background:url(...)` swallows
   // load errors silently).
-  const candidateUrl = url || pickStockPhoto(assetId, propertyType);
+  // `stockUrl` (when given) is a group-deduped pick from the caller so two
+  // cards in the same property-type row never share a cover; fall back to the
+  // per-asset deterministic pick when no override is supplied.
+  const candidateUrl = url || stockUrl || pickStockPhoto(assetId, propertyType);
   const [imgOk, setImgOk] = useState(true);
   useEffect(() => {
     if (!candidateUrl) { setImgOk(false); return; }
@@ -758,8 +763,15 @@ const PMCOverviewPage = ({ setPage }) => {
         // -------- Photo thumbnail per building (first uploaded photo) ----
         // We keep the storage_path here, not a signed URL — the JSX layer
         // creates signed URLs lazily for the assets actually rendered.
+        // Auto-generated demo placeholders (the striped "Unit X-101" covers
+        // produced by the Document Library bulk-generate sweep) are skipped
+        // so those assets fall through to a curated stock cover instead. They
+        // are uploaded as `{building}-{unit}-photo.jpg`, so the storage_path
+        // always ends with `-photo.jpg`; real uploads keep their own name.
+        const isGeneratedPlaceholder = (path) => /-photo\.jpg$/i.test(path || '');
         const photoByBuilding = {};
         for (const a of (photoAtts || [])) {
+          if (isGeneratedPlaceholder(a.storage_path)) continue;
           const u = filteredUnits.find(uu => uu.id === a.unit_id);
           if (!u) continue;
           if (!photoByBuilding[u.building_id]) photoByBuilding[u.building_id] = a.storage_path;
@@ -1104,8 +1116,23 @@ const PMCOverviewPage = ({ setPage }) => {
                     {/* Period-aware label so the figure on every card matches
                         the time-range pick at the top of the page. */}
                     {(() => null)()}
+                    {/* Group-deduped stock covers: assets without a real photo
+                        get a curated cover, walking the pool from their
+                        deterministic pick to the first one not already used in
+                        this row — so two side-by-side cards never repeat. */}
                     <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill, minmax(280px, 1fr))',gap:14}}>
-                      {list.map(c => {
+                      {(() => {
+                        const usedStock = new Set();
+                        const stockFor = {};
+                        for (const c of list) {
+                          if (c.photo_path) continue; // real photo wins
+                          const pool = STOCK_BUILDING_PHOTOS[c.property_type] || STOCK_BUILDING_PHOTOS['Residential'];
+                          let idx = Math.abs((c.id || '').split('').reduce((a, ch) => a + ch.charCodeAt(0), 0)) % pool.length;
+                          for (let k = 0; k < pool.length && usedStock.has(pool[idx]); k++) idx = (idx + 1) % pool.length;
+                          stockFor[c.id] = pool[idx];
+                          usedStock.add(pool[idx]);
+                        }
+                        return list.map(c => {
                         // Per-property-type vocab for the vacant chip — landlords
                         // want to read 'vacant flats' on a residential card, not
                         // 'vacant units'.
@@ -1129,7 +1156,7 @@ const PMCOverviewPage = ({ setPage }) => {
                             onMouseLeave={e => { e.currentTarget.style.boxShadow = 'none'; e.currentTarget.style.transform = 'none'; }}
                             title="Open this asset on the Assets page">
                             {/* Photo strip — fallback to a deterministic colour-block when none uploaded */}
-                            <AssetCardPhoto storagePath={c.photo_path} assetId={c.id} typeChipColor={typeChip[c.property_type] || '#61707D'} propertyType={c.property_type} name={c.name}/>
+                            <AssetCardPhoto storagePath={c.photo_path} assetId={c.id} typeChipColor={typeChip[c.property_type] || '#61707D'} propertyType={c.property_type} name={c.name} stockUrl={stockFor[c.id]}/>
                             <div style={{padding:'14px 16px',display:'flex',flexDirection:'column',gap:12}}>
                               {/* Name + address */}
                               <div style={{minWidth:0}}>
@@ -1153,7 +1180,8 @@ const PMCOverviewPage = ({ setPage }) => {
                             </div>
                           </div>
                         );
-                      })}
+                        });
+                      })()}
                     </div>
                   </div>
                 );
