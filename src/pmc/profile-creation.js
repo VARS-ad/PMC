@@ -11,19 +11,24 @@
 //   T-* = Tenant columns (commercial — corporate fields only)
 const OWNER_COLS = ['Owner name','Owner phone','Owner email','Owner passport','Owner Emirates ID','Purchase date'];
 // Residential resident columns: per the user, emergency contact fields
-// are dropped (not relevant for billing / records).
+// are dropped (not relevant for billing / records). Only residential
+// residents get a Supabase Auth account, so this is the ONLY template
+// that carries a temp-password column.
 const RESIDENT_COLS = [
   'Resident full name','Resident email','Resident phone','Resident temp password',
   'Resident date of birth','Resident passport','Resident Emirates ID',
   'Resident employer','Resident occupation',
   'Resident tenure','Lease start','Lease end','Monthly payment (AED)','Ownership start','Cheques per year','Contract #',
 ];
+// Villa resident columns: same as RESIDENT_COLS minus the temp password
+// (villa residents do NOT get an Auth account — contact info only).
+const VILLA_RESIDENT_COLS = RESIDENT_COLS.filter(c => c !== 'Resident temp password');
 // Commercial tenant columns: corporate-only. No DOB / Passport / Emirates
 // ID / emergency contact / employer / occupation / ownership_start /
-// cheques. Contract # comes first; tenant block follows; Owner block lives
-// at the very end of the Commercial row.
+// cheques / temp password. Contract # first; tenant block; Owner block at
+// the end of the Commercial row.
 const TENANT_COLS = [
-  'Contract #','Tenant name','Tenant email','Tenant phone','Tenant temp password',
+  'Contract #','Tenant name','Tenant email','Tenant phone',
   'Tenant tenure','Lease start','Lease end','Monthly payment (AED)',
 ];
 // Commercial Land uses "Client" terminology instead of "Tenant". Same
@@ -31,8 +36,9 @@ const TENANT_COLS = [
 // a single plot can have many client rows (yard subdivisions, multi-
 // tenant lease arrangements, etc.) and the parser de-dupes by Contract #
 // or by an auto-incremented slot number when Contract # is blank.
+// No temp password — clients do not get Auth accounts.
 const CLIENT_COLS = [
-  'Contract #','Client name','Client email','Client phone','Client temp password',
+  'Contract #','Client name','Client email','Client phone',
   'Lease start','Lease end','Monthly payment (AED)',
 ];
 
@@ -82,61 +88,20 @@ const BUILDINGS_BY_TYPE = {
     //   Building 2 = 5 floors × 2 offices per floor = 10 rows.
     headers: ['Building name','Property type','Floor','Unit','Address','Notes','Commercial use','Gross leasable area (sqft)','Parking spots', ...TENANT_COLS, ...OWNER_COLS],
     examples: [
-      // === Building 1: Boulevard Plaza Offices — 4 floors × 2 offices ===
-      ['Boulevard Plaza Offices','Commercial',1,'B-101','Sheikh Mohammed bin Rashid Blvd, Downtown Dubai, UAE','Grade A office tower (4 floors, 2 offices per floor).','Office',180000,400,
-        'CMT-BLV-101','TechCorp ME FZ-LLC','tenancy@techcorp.me','+971 4 778 2200','Welcome2026!','Tenant','2026-02-01','2027-01-31',45000,
+      // Compact 4-row example: one building × 2 floors × 2 offices per
+      // floor. Row 1 carries the building-level fields; rows 2-4 leave
+      // them blank (parser inherits). Row 4 shows a vacant unit.
+      ['Boulevard Plaza Offices','Commercial',1,'B-101','Sheikh Mohammed bin Rashid Blvd, Downtown Dubai, UAE','Grade A office tower (2 floors, 2 offices per floor).','Office',180000,400,
+        'CMT-BLV-101','TechCorp ME FZ-LLC','tenancy@techcorp.me','+971 4 778 2200','Tenant','2026-02-01','2027-01-31',45000,
         'Downtown Holding LLC','+971 4 555 1000','contracts@downtownholding.ae','-','-','2013-11-20'],
       ['Boulevard Plaza Offices','Commercial',1,'B-102','','','','','',
-        'CMT-BLV-102','Apex Consulting ME','admin@apexconsulting.ae','+971 4 224 5500','Welcome2026!','Tenant','2026-01-15','2027-01-14',38000,
+        'CMT-BLV-102','Apex Consulting ME','admin@apexconsulting.ae','+971 4 224 5500','Tenant','2026-01-15','2027-01-14',38000,
         '','','','','',''],
       ['Boulevard Plaza Offices','Commercial',2,'B-201','','','','','',
-        'CMT-BLV-201','Sigma Health Group','finance@sigmahealth.ae','+971 4 990 1100','Welcome2026!','Tenant','2026-03-01','2028-02-28',42000,
+        'CMT-BLV-201','Sigma Health Group','finance@sigmahealth.ae','+971 4 990 1100','Tenant','2026-03-01','2028-02-28',42000,
         '','','','','',''],
       ['Boulevard Plaza Offices','Commercial',2,'B-202','','','','','',
-        '','','','','','','','','',
-        '','','','','',''],
-      ['Boulevard Plaza Offices','Commercial',3,'B-301','','','','','',
-        'CMT-BLV-301','Helios Energy Trading','contracts@heliosenergy.ae','+971 4 339 4422','Welcome2026!','Tenant','2026-02-15','2028-02-14',55000,
-        '','','','','',''],
-      ['Boulevard Plaza Offices','Commercial',3,'B-302','','','','','',
-        'CMT-BLV-302','Vertex Law Firm','reception@vertexlaw.ae','+971 4 778 9900','Welcome2026!','Tenant','2026-01-01','2027-12-31',60000,
-        '','','','','',''],
-      ['Boulevard Plaza Offices','Commercial',4,'B-401','','','','','',
-        'CMT-BLV-401','Bloomberg LP (Bureau)','dubai.bureau@bloomberg.net','+971 4 990 2233','Welcome2026!','Tenant','2026-01-01','2030-12-31',75000,
-        '','','','','',''],
-      ['Boulevard Plaza Offices','Commercial',4,'B-402','','','','','',
-        'CMT-BLV-402','PwC Middle East (Annex)','annex.uae@pwc.com','+971 4 224 9911','Welcome2026!','Tenant','2026-01-01','2028-12-31',82000,
-        '','','','','',''],
-      // === Building 2: Marina Trade Centre — 5 floors × 2 offices ===
-      ['Marina Trade Centre','Commercial',1,'M-101','Dubai Marina, Dubai, UAE','Mid-market office building (5 floors, 2 offices per floor).','Office',220000,560,
-        'CMT-MTC-101','Standard Chartered SME','sme.uae@sc.com','+971 4 332 7788','Welcome2026!','Tenant','2026-02-01','2028-01-31',58000,
-        'Marina Plaza Holdings LLC','+971 4 555 7700','contracts@marinaplaza.ae','-','-','2013-04-15'],
-      ['Marina Trade Centre','Commercial',1,'M-102','','','','','',
-        'CMT-MTC-102','Cobalt Engineering Ltd','accounts@cobaltgcc.ae','+971 4 224 7799','Welcome2026!','Tenant','2026-02-01','2027-01-31',32000,
-        '','','','','',''],
-      ['Marina Trade Centre','Commercial',2,'M-201','','','','','',
-        'CMT-MTC-201','Mercury Digital ME','accounts@mercurydigital.ae','+971 4 556 7700','Welcome2026!','Tenant','2026-05-01','2027-04-30',28000,
-        '','','','','',''],
-      ['Marina Trade Centre','Commercial',2,'M-202','','','','','',
-        'CMT-MTC-202','BlueCrest Advisory','ops@bluecrest.ae','+971 4 339 7799','Welcome2026!','Tenant','2026-04-01','2027-03-31',30000,
-        '','','','','',''],
-      ['Marina Trade Centre','Commercial',3,'M-301','','','','','',
-        'CMT-MTC-301','Crescent Capital MENA','admin@crescentcap.ae','+971 4 119 4477','Welcome2026!','Tenant','2026-02-01','2027-01-31',40000,
-        '','','','','',''],
-      ['Marina Trade Centre','Commercial',3,'M-302','','','','','',
-        '','','','','','','','','',
-        '','','','','',''],
-      ['Marina Trade Centre','Commercial',4,'M-401','','','','','',
-        'CMT-MTC-401','Aurora Digital Agency','accounts@auroradigital.ae','+971 4 224 3366','Welcome2026!','Tenant','2026-03-01','2027-02-28',26000,
-        '','','','','',''],
-      ['Marina Trade Centre','Commercial',4,'M-402','','','','','',
-        'CMT-MTC-402','Rosenthal Law Firm','reception@rosenthallaw.ae','+971 4 778 5544','Welcome2026!','Tenant','2026-02-01','2027-01-31',38000,
-        '','','','','',''],
-      ['Marina Trade Centre','Commercial',5,'M-501','','','','','',
-        'CMT-MTC-501','Nimbus Cloud Services','accounts@nimbuscloud.ae','+971 4 224 5588','Welcome2026!','Tenant','2026-04-01','2027-03-31',34000,
-        '','','','','',''],
-      ['Marina Trade Centre','Commercial',5,'M-502','','','','','',
-        'CMT-MTC-502','Falcon Maritime Trading','contracts@falconmaritime.ae','+971 4 556 6644','Welcome2026!','Tenant','2026-03-15','2028-03-14',42000,
+        '','','','','','','','',
         '','','','','',''],
     ],
     filename: 'commercial-template',
@@ -146,6 +111,7 @@ const BUILDINGS_BY_TYPE = {
       'Commercial use must be one of: Office, Retail, Mixed.',
       'Building-level fields (Address, Notes, GLA, Parking, Commercial use) go on the FIRST row of each building.',
       'TENANT block (Contract #, name, email, phone, lease) describes the corporate tenant. Personal fields like DOB / passport / emergency contact intentionally aren’t collected here.',
+      'No Tenant temp password — commercial tenants do NOT get a Supabase Auth account (only Residential residents do).',
       'OWNER block sits at the END — usually a holding company. Fill on the FIRST row of each building; later rows inherit.',
     ],
   },
@@ -154,24 +120,24 @@ const BUILDINGS_BY_TYPE = {
     // One row per individual villa (not per compound). Each villa is its
     // own building record with its own owner + resident. The 'Villa count'
     // column from the old compound shape is gone — each row IS one villa.
-    headers: ['Villa name','Property type','Address','Notes','Bedrooms','Plot area (sqft)', ...OWNER_COLS, ...RESIDENT_COLS],
+    headers: ['Villa name','Property type','Address','Notes','Bedrooms','Plot area (sqft)', ...OWNER_COLS, ...VILLA_RESIDENT_COLS],
     examples: [
       // Palm Jumeirah villa — rented to a tenant.
       ['Palm Frond M-23','Villa','Palm Jumeirah, Frond M, Dubai, UAE','Signature villa, private beach access, 3 floors.',6,12500,
         'Layla Al Maktoum','+971 50 778 9900','layla.maktoum@example.ae','MM1122334','784-1981-1122334-1','2014-09-22',
-        'Stefan Hartmann','stefan.hartmann@example.ae','+971 52 119 8877','Welcome2026!','1979-04-12','DE2233445','','BMW ME','Regional CEO','Tenant','2026-01-01','2027-12-31',38000,'',12,'RNT-PALM-M23'],
+        'Stefan Hartmann','stefan.hartmann@example.ae','+971 52 119 8877','1979-04-12','DE2233445','','BMW ME','Regional CEO','Tenant','2026-01-01','2027-12-31',38000,'',12,'RNT-PALM-M23'],
       // Emirates Hills mansion — owner-occupied.
       ['Emirates Hills V-14','Villa','Emirates Hills, Street 7, Dubai, UAE','Mansion-style villa, golf course frontage, 2 floors.',8,18000,
         'Mohammed Al Habtoor','+971 50 224 5500','mohammed.habtoor@example.ae','HB7788990','784-1972-7788990-5','2009-11-08',
-        'Mohammed Al Habtoor','mohammed.habtoor@example.ae','+971 50 224 5500','Welcome2026!','1972-03-30','HB7788990','784-1972-7788990-5','Al Habtoor Group','Chairman','Owner','','','','2009-11-08','',''],
+        'Mohammed Al Habtoor','mohammed.habtoor@example.ae','+971 50 224 5500','1972-03-30','HB7788990','784-1972-7788990-5','Al Habtoor Group','Chairman','Owner','','','','2009-11-08','',''],
       // Saadiyat villa — rented.
       ['Saadiyat Beach B-7','Villa','Saadiyat Beach Villas, Saadiyat Island, Abu Dhabi, UAE','Aldar Saadiyat Beach community villa, 2 floors.',5,9500,
         'Ahmed Al Marzouqi','+971 50 119 2244','ahmed.marzouqi@example.ae','MZ1122334','784-1977-1122334-3','2017-06-04',
-        'Eric Lambert','eric.lambert@example.ae','+971 55 663 7788','Welcome2026!','1983-11-20','FR4455667','','TotalEnergies','Country GM','Tenant','2026-02-01','2027-01-31',32000,'',4,'RNT-SAAD-B7'],
+        'Eric Lambert','eric.lambert@example.ae','+971 55 663 7788','1983-11-20','FR4455667','','TotalEnergies','Country GM','Tenant','2026-02-01','2027-01-31',32000,'',4,'RNT-SAAD-B7'],
       // Al Barari villa — corporate owner, rented.
       ['Al Barari Forest Villa F-3','Villa','Al Barari, Forest Villas, Dubai, UAE','Forest villa, private pool, 3 floors.',7,15000,
         'Al Barari Investments LLC','+971 4 339 7788','contracts@albarariinv.ae','-','-','2015-03-18',
-        'Patricia Romano','patricia.r@example.ae','+971 56 778 9911','Welcome2026!','1985-07-14','IT2233445','','L Catterton','Partner, Private Equity','Tenant','2026-03-01','2027-02-28',45000,'',12,'RNT-BARARI-F3'],
+        'Patricia Romano','patricia.r@example.ae','+971 56 778 9911','1985-07-14','IT2233445','','L Catterton','Partner, Private Equity','Tenant','2026-03-01','2027-02-28',45000,'',12,'RNT-BARARI-F3'],
     ],
     filename: 'villas-template',
     rules: [
@@ -179,6 +145,7 @@ const BUILDINGS_BY_TYPE = {
       'Bedrooms and Plot area describe THIS villa.',
       'OWNER columns describe whoever holds title to the villa (individual or corporate).',
       'RESIDENT columns describe the current occupant; leave blank for vacant villas.',
+      'No Resident temp password — villa residents do NOT get a Supabase Auth account (only Residential building residents do).',
       'If the Resident email matches the Owner email we automatically flag the villa as owner-occupied.',
     ],
   },
@@ -189,22 +156,20 @@ const BUILDINGS_BY_TYPE = {
     // host multiple clients — each row is one client lease on the plot.
     headers: ['Plot name','Property type','Address','Notes','Plot area (sqft)', ...OWNER_COLS, ...CLIENT_COLS],
     examples: [
-      // Plot 1 — 3 clients (industrial subdivisions / yards).
-      ['Al Quoz Industrial Plot 14','Commercial Land','Al Quoz Industrial Area 3, Dubai, UAE','Industrial plot subdivided into 3 yards, leased to logistics tenants.',85000,
+      // Compact 4-row example: one multi-client plot (2 rows), one vacant
+      // plot, one single-client plot. Demonstrates plot-level field
+      // inheritance on row 2 (blank → carried over from row 1).
+      ['Al Quoz Industrial Plot 14','Commercial Land','Al Quoz Industrial Area 3, Dubai, UAE','Industrial plot subdivided into 2 yards, leased to logistics tenants.',85000,
         'Khalifa Industrial Holdings','+971 4 252 9900','plots@kih.ae','-','-','2009-02-04',
-        'CL-AQ14-A','Aramex Yards','contracts@aramex.com','+971 4 778 1100','Welcome2026!','2026-01-01','2028-12-31',120000],
+        'CL-AQ14-A','Aramex Yards','contracts@aramex.com','+971 4 778 1100','2026-01-01','2028-12-31',120000],
       ['Al Quoz Industrial Plot 14','Commercial Land','','','','','','','','','',
-        'CL-AQ14-B','DHL Express UAE','accounts@dhl.ae','+971 4 224 5511','Welcome2026!','2026-02-01','2027-01-31',95000],
-      ['Al Quoz Industrial Plot 14','Commercial Land','','','','','','','','','',
-        'CL-AQ14-C','GMG Logistics','contracts@gmglogistics.ae','+971 4 339 7700','Welcome2026!','2026-03-01','2028-02-28',88000],
-      // Plot 2 — vacant.
+        'CL-AQ14-B','DHL Express UAE','accounts@dhl.ae','+971 4 224 5511','2026-02-01','2027-01-31',95000],
       ['DIP Phase 2 Plot 38','Commercial Land','Dubai Investment Park, Phase 2, Dubai, UAE','Mixed light-industrial / showroom plot, currently vacant.',45000,
         'Dubai Investments PJSC','+971 4 812 0700','plots@dubaiinvestments.ae','-','-','2003-07-21',
-        '','','','','','','',''],
-      // Plot 3 — single long-term ground lease.
+        '','','','','','',''],
       ['KIZAD South Plot 22','Commercial Land','Khalifa Industrial Zone Abu Dhabi (KIZAD) South, Abu Dhabi, UAE','Heavy-industrial plot, 30-year ground lease.',120000,
         'AD Ports Group','+971 2 695 2000','plots@adports.ae','-','-','2015-10-12',
-        'CL-KZ22-Main','JAFZA-Logistic Co','contracts@jafzalogistic.ae','+971 2 511 3300','Welcome2026!','2025-10-01','2055-09-30',225000],
+        'CL-KZ22-Main','JAFZA-Logistic Co','contracts@jafzalogistic.ae','+971 2 511 3300','2025-10-01','2055-09-30',225000],
     ],
     filename: 'commercial-land-template',
     rules: [
@@ -213,6 +178,7 @@ const BUILDINGS_BY_TYPE = {
       'Each client row must have a unique Contract # — that becomes the slot id under the plot. Leave blank for vacant plots.',
       'OWNER columns describe the title holder (usually a holding company).',
       'CLIENT columns describe whoever is currently leasing the slot; corporate fields only (no DOB / passport / Emirates ID).',
+      'No Client temp password — commercial-land clients do NOT get a Supabase Auth account (only Residential building residents do).',
     ],
   },
 };
@@ -1147,13 +1113,6 @@ const PCBulkUpload = ({ section }) => {
                   <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
                     <button className="btn btn-sm btn-primary" onClick={() => downloadAsXlsx(t.filename, t.headers, t.examples)}>Download .xlsx</button>
                     <button className="btn btn-sm" onClick={() => downloadAsCsv(t.filename, t.headers, t.examples)}>Download .csv</button>
-                    {/* Per-type Upload input. Validates against THIS type's
-                        headers so a Villas file isn't rejected for missing
-                        Commercial / Floor columns. */}
-                    <label className="btn btn-sm" style={{cursor:'pointer'}}>
-                      Upload {t.label.toLowerCase()}
-                      <input type="file" accept=".xlsx,.csv" onChange={handleFileWithHeaders(t.headers)} style={{display:'none'}}/>
-                    </label>
                   </div>
                 </div>
                 <div className="data-table-scroll">
@@ -1167,7 +1126,7 @@ const PCBulkUpload = ({ section }) => {
                 </ul>
               </div>
             ))}
-            <div style={{fontSize:12,color:'var(--text-muted)',fontStyle:'italic'}}>Use the Upload button next to each type so the file is checked against the right column set.</div>
+            <div style={{fontSize:12,color:'var(--text-muted)',fontStyle:'italic'}}>Use the per-type upload pickers in step 2 below so each file is checked against the right column set.</div>
           </div>
         </>
       ) : (
@@ -1237,7 +1196,22 @@ const PCBulkUpload = ({ section }) => {
             </label>
           </div>
         </div>
-        <input ref={fileInputRef} type="file" accept=".xlsx,.csv" onChange={handleFile} style={{fontSize:12}}/>
+        {section === 'buildings' ? (
+          // Four per-type file pickers — each validates the file against
+          // THIS type's column set. The user picks the row that matches
+          // the template they downloaded; the chosen file is then parsed
+          // and previewed in the table below, same as other sections.
+          <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit, minmax(260px, 1fr))',gap:10}}>
+            {Object.entries(BUILDINGS_BY_TYPE).map(([typeKey, t]) => (
+              <label key={typeKey} style={{display:'flex',flexDirection:'column',gap:6,padding:'12px 14px',background:'#fff',border:'1px solid var(--border-light)',borderRadius:8,cursor:'pointer'}}>
+                <span style={{fontSize:11,letterSpacing:'0.06em',textTransform:'uppercase',color:'var(--text-secondary)',fontWeight:600}}>{t.label}</span>
+                <input type="file" accept=".xlsx,.csv" onChange={handleFileWithHeaders(t.headers)} style={{fontSize:12}}/>
+              </label>
+            ))}
+          </div>
+        ) : (
+          <input ref={fileInputRef} type="file" accept=".xlsx,.csv" onChange={handleFile} style={{fontSize:12}}/>
+        )}
         {error && <div style={{color:'#8b4a42',fontSize:12,marginTop:12,padding:10,background:'#fdf2f1',borderRadius:6}}>Error: {error}</div>}
         {parsedRows && (
           <div style={{marginTop:16}}>
@@ -1475,8 +1449,12 @@ async function uploadBuildingsBulk(parsedRows, conflictMode = 'skip') {
           unitsAdded++;
         }
 
-        // Queue resident for bulk-onboard if present.
-        if (u.resident && u.resident.full_name && u.resident.email) {
+        // Queue resident for bulk-onboard if present — ONLY for Residential
+        // property type. Per product spec, Villas, Commercial buildings and
+        // Commercial Land record contact info on the unit row only; no
+        // Supabase Auth account is created for their tenants / clients /
+        // residents. (Their templates also have no temp-password column.)
+        if (propType === 'Residential' && u.resident && u.resident.full_name && u.resident.email) {
           residentRecords.push({
             email:                   u.resident.email,
             password:                u.resident.password || 'Welcome2026!',
