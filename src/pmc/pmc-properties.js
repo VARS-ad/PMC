@@ -254,7 +254,7 @@ const PMCPropertiesPage = ({ setPage }) => {
       if (!supabaseClient) { setError('Supabase not initialized'); return; }
       try {
         const [{ data: bs }, { data: units }, { data: ras }, { data: invoices }, { data: srs }, { data: profiles }] = await Promise.all([
-          supabaseClient.from('buildings').select('id,name,address,notes,property_type,created_at').order('name'),
+          supabaseClient.from('buildings').select('id,name,address,notes,property_type,created_at,purchase_price,current_value,acquired_on').order('name'),
           supabaseClient.from('units').select('id,building_id,floor,unit_number'),
           supabaseClient.from('resident_assignments').select('profile_id,unit_id,tenure,monthly_payment_aed,lease_start,lease_end,ownership_start'),
           supabaseClient.from('invoices').select('id,invoice_number,description,amount_aed,due_date,status,source_type,unit_id,resident_profile_id,created_at'),
@@ -318,6 +318,24 @@ const PMCPropertiesPage = ({ setPage }) => {
           };
         });
         setBuildings(result);
+        // If the user clicked an asset card on Overview, sessionStorage
+        // carries its id — scroll it into view + briefly highlight so
+        // they land on the right card without hunting.
+        try {
+          const scrollId = sessionStorage.getItem('vars:scroll-to-asset');
+          if (scrollId) {
+            sessionStorage.removeItem('vars:scroll-to-asset');
+            setTimeout(() => {
+              const el = document.querySelector('[data-asset-id="' + scrollId + '"]');
+              if (el) {
+                el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                el.style.transition = 'box-shadow 0.4s ease, transform 0.4s ease';
+                el.style.boxShadow = '0 0 0 3px rgba(160, 125, 60, 0.45)';
+                setTimeout(() => { el.style.boxShadow = 'none'; }, 1800);
+              }
+            }, 200);
+          }
+        } catch (_) {}
       } catch (e) { if (mounted) setError(String(e.message || e)); }
     })();
     return () => { mounted = false; };
@@ -426,14 +444,65 @@ const PMCPropertiesPage = ({ setPage }) => {
             const open = () => setSelectedBuilding(b);
             const isCommercial = kind === 'Commercial';
             const cols = isCommercial ? 7 : 6;
+            // Investment summary (purchase / current / appreciation / hold)
+            // for the general-info row directly under the address. Computed
+            // inline; falls back to '—' when the column is empty.
+            const purchase = Number(b.purchase_price) || 0;
+            const current  = Number(b.current_value)  || 0;
+            const gain     = purchase > 0 ? current - purchase : 0;
+            const gainPct  = purchase > 0 ? (gain / purchase) * 100 : null;
+            const acquiredHuman = b.acquired_on
+              ? new Date(b.acquired_on).toLocaleDateString('en-GB', { day:'2-digit', month:'short', year:'numeric' })
+              : null;
+            let holdLabel = null;
+            if (b.acquired_on) {
+              const start = new Date(b.acquired_on);
+              if (!isNaN(start.getTime())) {
+                const months = (new Date().getFullYear() - start.getFullYear()) * 12 + (new Date().getMonth() - start.getMonth());
+                const years = Math.floor(months / 12);
+                const rem   = months % 12;
+                holdLabel = (years ? years + 'y ' : '') + rem + 'm';
+              }
+            }
+            const annualTarget = (b.tenants || []).reduce((s, t) => s + Number(t.monthly_payment_aed || 0), 0) * 12
+                               + (b.units || []).reduce((s, u) => s + Number(u.tenant_monthly_payment_aed || 0), 0) * 12;
+            const yieldPct = purchase > 0 ? (annualTarget / purchase) * 100 : null;
             return (
-              <div key={b.id} className="card">
+              <div key={b.id} className="card" data-asset-id={b.id}>
                 <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:14}}>
                   <div style={{flex:1,minWidth:0,cursor:'pointer'}} onClick={open}>
                     <div style={{fontSize:20,fontWeight:500,color:'var(--text-dark)',letterSpacing:'-0.02em',lineHeight:1.15}}>{b.name}</div>
                     <div style={{fontSize:12,color:'var(--text-muted)',marginTop:4}}>{b.address || '—'}</div>
                   </div>
                 </div>
+                {/* ---- General info strip (Investment + yield). Skipped when
+                       no acquisition data is recorded — keeps the card tidy
+                       for assets the user hasn't filled out yet. */}
+                {(purchase > 0 || b.acquired_on) && (
+                  <div style={{display:'grid',gridTemplateColumns:'repeat(4, minmax(0, 1fr))',gap:14,padding:'12px 14px',background:'var(--bg-page)',borderRadius:8,marginBottom:14}}>
+                    <div>
+                      <div style={{fontSize:10,letterSpacing:'0.06em',textTransform:'uppercase',color:'var(--text-secondary)',fontWeight:600,marginBottom:3}}>Acquired</div>
+                      <div style={{fontSize:13,fontWeight:600,color:'var(--text-dark)'}}>{acquiredHuman || '—'}</div>
+                      {holdLabel && <div style={{fontSize:11,color:'var(--text-muted)',marginTop:2}}>{holdLabel} hold</div>}
+                    </div>
+                    <div>
+                      <div style={{fontSize:10,letterSpacing:'0.06em',textTransform:'uppercase',color:'var(--text-secondary)',fontWeight:600,marginBottom:3}}>Purchase</div>
+                      <div style={{fontSize:13,fontWeight:600,color:'var(--text-dark)'}}>{purchase ? 'AED ' + purchase.toLocaleString() : '—'}</div>
+                    </div>
+                    <div>
+                      <div style={{fontSize:10,letterSpacing:'0.06em',textTransform:'uppercase',color:'var(--text-secondary)',fontWeight:600,marginBottom:3}}>Current value</div>
+                      <div style={{fontSize:13,fontWeight:600,color:'var(--text-dark)'}}>{current ? 'AED ' + current.toLocaleString() : '—'}</div>
+                      {gain !== 0 && (
+                        <div style={{fontSize:11,fontWeight:600,color: gain > 0 ? '#5a6b4f' : '#8b4a42',marginTop:2}}>{gain > 0 ? '▲' : '▼'} {(gainPct > 0 ? '+' : '') + gainPct.toFixed(1) + '%'}</div>
+                      )}
+                    </div>
+                    <div>
+                      <div style={{fontSize:10,letterSpacing:'0.06em',textTransform:'uppercase',color:'var(--text-secondary)',fontWeight:600,marginBottom:3}}>Yield</div>
+                      <div style={{fontSize:13,fontWeight:600,color:'var(--text-dark)'}}>{yieldPct == null ? '—' : yieldPct.toFixed(1) + '%'}</div>
+                      <div style={{fontSize:11,color:'var(--text-muted)',marginTop:2}}>annualised gross</div>
+                    </div>
+                  </div>
+                )}
                 <div style={{display:'grid',gridTemplateColumns:`repeat(${cols}, minmax(0, 1fr))`,gap:8,marginTop:14}}>
                   {/* Custom Units stat. Matches PMCStat exactly so the
                       tile row lines up. The "View floors & units" tail

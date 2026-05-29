@@ -27,6 +27,32 @@ const PMCStat = ({ label, value, color, onClick, hint }) => (
   </div>
 );
 
+// Small per-card photo strip. Lazy-signs a 1h URL the moment the
+// card renders; falls back to a deterministic colour gradient when
+// the asset has no photo uploaded yet. The property-type chip is
+// pinned to the bottom-left of the photo to keep the card body tight.
+const AssetCardPhoto = ({ storagePath, assetId, typeChipColor, propertyType }) => {
+  const [url, setUrl] = useState(null);
+  useEffect(() => {
+    let mounted = true;
+    if (!storagePath || !supabaseClient) return;
+    supabaseClient.storage.from('unit-attachments').createSignedUrl(storagePath, 3600).then(({ data }) => {
+      if (mounted && data) setUrl(data.signedUrl);
+    });
+    return () => { mounted = false; };
+  }, [storagePath]);
+  const hue = Math.abs((assetId || '').split('').reduce((a, c) => a + c.charCodeAt(0), 0)) % 360;
+  const bg = url
+    ? 'url(' + url + ') center/cover no-repeat'
+    : 'linear-gradient(135deg, hsl(' + hue + ', 22%, 78%) 0%, hsl(' + ((hue + 30) % 360) + ', 28%, 56%) 100%)';
+  return (
+    <div style={{position:'relative',height:120,background:bg,borderBottom:'1px solid var(--border-light)'}}>
+      <div style={{position:'absolute',inset:0,background:'linear-gradient(to bottom, transparent 50%, rgba(19,31,35,0.18) 100%)'}}/>
+      <span style={{position:'absolute',bottom:10,left:10,fontSize:9,letterSpacing:'0.05em',textTransform:'uppercase',color:'#fff',background:typeChipColor,padding:'3px 8px',borderRadius:3,fontWeight:600,whiteSpace:'nowrap'}}>{propertyType}</span>
+    </div>
+  );
+};
+
 const PMCOverviewPage = ({ setPage }) => {
   const { selectedProperties = [], timeRange, setTimeRange, customStart, setCustomStart, customEnd, setCustomEnd } = useApp();
   const [stats, setStats] = useState(null);
@@ -58,13 +84,15 @@ const PMCOverviewPage = ({ setPage }) => {
         const fIds = filteredUnits.map(u => u.id);
         const probe = fIds.length ? fIds : ['00000000-0000-0000-0000-000000000000'];
 
-        const [{ data: ras }, { data: invoices }, { data: srs }, { data: visits }, { data: attsForAttention }] = await Promise.all([
+        const [{ data: ras }, { data: invoices }, { data: srs }, { data: visits }, { data: attsForAttention }, { data: photoAtts }] = await Promise.all([
           supabaseClient.from('resident_assignments').select('profile_id,unit_id,lease_end,tenure,monthly_payment_aed').in('unit_id', probe),
           supabaseClient.from('invoices').select('id,amount_aed,status,due_date,unit_id,created_at,resident_profile_id').in('unit_id', probe),
           supabaseClient.from('service_requests').select('id,category,description,status,priority,created_at,resolved_at,unit_id,resident_profile_id').in('unit_id', probe).order('created_at', { ascending: false }),
           supabaseClient.from('visits').select('id,visit_date,status,visitor_name,type').in('unit_id', probe),
           // For the 'missing title deed' attention row.
           supabaseClient.from('unit_attachments').select('unit_id,kind').eq('kind', 'title_deed'),
+          // First photo per unit so each Asset card can show a thumbnail.
+          supabaseClient.from('unit_attachments').select('unit_id,storage_path,created_at').eq('kind', 'photo').order('created_at', { ascending: true }),
         ]);
         if (!mounted) return;
 
@@ -294,20 +322,30 @@ const PMCOverviewPage = ({ setPage }) => {
         const severityRank = { red: 0, orange: 1, yellow: 2 };
         attention.sort((a, b) => severityRank[a.severity] - severityRank[b.severity]);
 
-        // -------- Landlord headline: this-month + prev-month + target -----
-        // Single-line answer to 'how is this month going for me?'.
+        // -------- Landlord headline: 3 cash-flow stats, range-aware ------
+        // Answers in one row: 'what's come in this period · what's late
+        // · what's coming in the next 30 days'. Collected respects the
+        // top-bar time-range picker; Overdue + Upcoming are a snapshot
+        // of the current outstanding state regardless of the range.
         const thisMonthInvoices = (invoices || []).filter(i => (i.created_at || '').slice(0, 10) >= thisMonthStart && (i.created_at || '').slice(0, 10) <= today);
         const lastMonthInvoices = (invoices || []).filter(i => (i.created_at || '').slice(0, 10) >= lastMonthStart && (i.created_at || '').slice(0, 10) <= lastMonthEnd);
-        const headlineCollected     = thisMonthInvoices.filter(i => i.status === 'Paid').reduce((s, i) => s + Number(i.amount_aed), 0);
-        const headlineLastMonth     = lastMonthInvoices.filter(i => i.status === 'Paid').reduce((s, i) => s + Number(i.amount_aed), 0);
-        // Target = total monthly rent across occupied units (residential
-        // assignments + non-residential tenants). What we should be
-        // bringing in if every tenant paid this month.
-        const targetResidential = (ras || []).reduce((s, r) => s + Number(r.monthly_payment_aed || 0), 0);
-        const targetNonResid    = filteredUnits.reduce((s, u) => s + Number(u.tenant_monthly_payment_aed || 0), 0);
-        const headlineTarget = targetResidential + targetNonResid;
-        const headlinePct = headlineTarget > 0 ? Math.round(100 * headlineCollected / headlineTarget) : null;
-        const headlineDelta = headlineCollected - headlineLastMonth;
+        const headlineCollected = periodInvoices.filter(i => i.status === 'Paid').reduce((s, i) => s + Number(i.amount_aed), 0);
+        const headlineOverdue   = (invoices || []).filter(i => i._eff === 'Overdue' || i._eff === 'Pending').reduce((s, i) => s + Number(i.amount_aed), 0);
+        const cutoff30Iso = new Date(now.getTime() + 30 * dayMs).toISOString().slice(0, 10);
+        const headlineUpcoming  = (invoices || []).filter(i => (i._eff === 'Upcoming' || i._eff === 'Pending') && i.due_date && i.due_date >= today && i.due_date <= cutoff30Iso).reduce((s, i) => s + Number(i.amount_aed), 0);
+        // Keep last-month delta computation around for the small caption
+        // even though the big progress bar is gone.
+        const headlineLastMonth = lastMonthInvoices.filter(i => i.status === 'Paid').reduce((s, i) => s + Number(i.amount_aed), 0);
+
+        // -------- Photo thumbnail per building (first uploaded photo) ----
+        // We keep the storage_path here, not a signed URL — the JSX layer
+        // creates signed URLs lazily for the assets actually rendered.
+        const photoByBuilding = {};
+        for (const a of (photoAtts || [])) {
+          const u = filteredUnits.find(uu => uu.id === a.unit_id);
+          if (!u) continue;
+          if (!photoByBuilding[u.building_id]) photoByBuilding[u.building_id] = a.storage_path;
+        }
 
         // -------- Per-asset cards ----------------------------------------
         // One card per selected building so the landlord can compare their
@@ -347,6 +385,7 @@ const PMCOverviewPage = ({ setPage }) => {
               overdue_count: overdueCount,
               expiring_leases_count: expiringLeasesCount,
               raw_building: b,
+              photo_path: photoByBuilding[b.id] || null,
             };
           })
           .sort((a, b) => (b.yield_pct || 0) - (a.yield_pct || 0));
@@ -369,7 +408,7 @@ const PMCOverviewPage = ({ setPage }) => {
           // Landlord watchlist
           attention,
           // Landlord headline + per-asset cards
-          headlineCollected, headlineTarget, headlinePct, headlineDelta, headlineLastMonth,
+          headlineCollected, headlineOverdue, headlineUpcoming, headlineLastMonth,
           assetCards,
         });
       } catch (e) {
@@ -468,49 +507,34 @@ const PMCOverviewPage = ({ setPage }) => {
       {!stats ? (
         <div className="card"><div style={{padding:24,color:'var(--text-muted)',fontSize:13}}>Loading…</div></div>
       ) : (<>
-        {/* ============ HEADLINE — 'How is this month going?' ============ */}
+        {/* ============ HEADLINE — three cash-flow stats, range-aware ===== */}
         {(() => {
-          const delta = stats.headlineDelta || 0;
-          const deltaAbs = Math.abs(delta);
-          const arrow = delta > 0 ? '▲' : delta < 0 ? '▼' : '·';
-          const deltaColor = delta > 0 ? '#5a6b4f' : delta < 0 ? '#8b4a42' : 'var(--text-muted)';
-          const pctColor = stats.headlinePct == null ? 'var(--text-muted)'
-                         : stats.headlinePct >= 80 ? '#5a6b4f'
-                         : stats.headlinePct >= 50 ? '#a07d3c' : '#8b4a42';
-          const monthName = new Date().toLocaleString('en-GB', { month: 'long' });
+          // Caption reflects the user's time-range pick so 'collected'
+          // means the same thing as the period the rest of the page is
+          // showing. The other two stats are a snapshot of the now.
+          const rangeLabel = timeRange === 'custom' && customStart && customEnd
+            ? customStart + ' → ' + customEnd
+            : timeRange === '1m' ? new Date().toLocaleString('en-GB', { month: 'long', year: 'numeric' })
+            : 'Last ' + monthsBack + ' months';
+          const Stat = ({ label, value, color, sub }) => (
+            <div style={{flex:'1 1 200px',minWidth:180}}>
+              <div style={{fontSize:11,letterSpacing:'0.06em',textTransform:'uppercase',color:'var(--text-secondary)',fontWeight:600,marginBottom:6}}>{label}</div>
+              <div style={{fontSize:30,fontWeight:600,letterSpacing:'-0.02em',color:color || 'var(--text-dark)',lineHeight:1}}>{value}</div>
+              {sub && <div style={{fontSize:11,color:'var(--text-muted)',marginTop:6}}>{sub}</div>}
+            </div>
+          );
           return (
-            <div className="card" style={{padding:'24px 28px',marginBottom:16,background:'linear-gradient(135deg, #fff 0%, #faf7f0 100%)'}}>
-              <div style={{fontSize:11,letterSpacing:'0.08em',textTransform:'uppercase',color:'var(--text-secondary)',fontWeight:600,marginBottom:8}}>
-                {monthName} {new Date().getFullYear()} · So far
+            <div className="card" style={{padding:'22px 26px',marginBottom:16,background:'linear-gradient(135deg, #fff 0%, #faf7f0 100%)'}}>
+              <div style={{fontSize:11,letterSpacing:'0.08em',textTransform:'uppercase',color:'var(--text-secondary)',fontWeight:600,marginBottom:14}}>
+                {rangeLabel}
               </div>
-              <div style={{display:'flex',alignItems:'baseline',flexWrap:'wrap',gap:18}}>
-                <div style={{fontSize:38,fontWeight:600,letterSpacing:'-0.02em',color:'var(--text-dark)',lineHeight:1}}>
-                  {fmt(stats.headlineCollected)}
-                </div>
-                <div style={{fontSize:14,color:'var(--text-muted)',fontWeight:500}}>collected</div>
-                {stats.headlinePct != null && (
-                  <div style={{fontSize:14,fontWeight:600,color:pctColor}}>
-                    {stats.headlinePct}% of target
-                  </div>
-                )}
-                {(stats.headlineLastMonth > 0 || stats.headlineCollected > 0) && (
-                  <div style={{fontSize:14,fontWeight:500,color:deltaColor,display:'flex',alignItems:'center',gap:4}}>
-                    {arrow} {fmt(deltaAbs)} vs last month
-                  </div>
-                )}
-              </div>
-              {stats.headlineTarget > 0 && (
-                <div style={{marginTop:14,height:6,background:'#e6eae9',borderRadius:3,overflow:'hidden'}}>
-                  <div style={{
-                    width: Math.min(100, Math.round(100 * stats.headlineCollected / stats.headlineTarget)) + '%',
-                    height:'100%',
-                    background: pctColor,
-                    transition:'width 0.3s ease',
-                  }}/>
-                </div>
-              )}
-              <div style={{fontSize:12,color:'var(--text-muted)',marginTop:10,letterSpacing:'-0.005em'}}>
-                Target this month {fmt(stats.headlineTarget)} · last month {fmt(stats.headlineLastMonth)} collected
+              <div style={{display:'flex',gap:24,flexWrap:'wrap'}}>
+                <Stat label="Collected"           value={fmt(stats.headlineCollected)} color="#5a6b4f"
+                      sub={'For the selected period · last month ' + fmt(stats.headlineLastMonth)}/>
+                <Stat label="Overdue"             value={fmt(stats.headlineOverdue)}  color="#8b4a42"
+                      sub="Past due, still unpaid"/>
+                <Stat label="Upcoming · 30 days"  value={fmt(stats.headlineUpcoming)} color="#a07d3c"
+                      sub="Due within the next 30 days"/>
               </div>
             </div>
           );
@@ -614,53 +638,33 @@ const PMCOverviewPage = ({ setPage }) => {
                         if (c.expiring_leases_count > 0) issues.push({ label: c.expiring_leases_count + ' lease end', color:'#7a5a1f' });
                         return (
                           <div key={c.id}
-                            onClick={() => setOpenedAsset(c)}
-                            style={{background:'#fff',border:'1px solid var(--border-light)',borderRadius:10,padding:'16px 18px',cursor:'pointer',transition:'box-shadow 0.15s, transform 0.15s',display:'flex',flexDirection:'column',gap:12}}
+                            onClick={() => { try { sessionStorage.setItem('vars:scroll-to-asset', c.id); } catch (_) {} if (setPage) setPage('properties'); }}
+                            style={{background:'#fff',border:'1px solid var(--border-light)',borderRadius:10,padding:0,cursor: setPage ? 'pointer' : 'default',transition:'box-shadow 0.15s, transform 0.15s',display:'flex',flexDirection:'column',overflow:'hidden'}}
                             onMouseEnter={e => { e.currentTarget.style.boxShadow = '0 4px 14px rgba(19,31,35,0.06)'; e.currentTarget.style.transform = 'translateY(-1px)'; }}
                             onMouseLeave={e => { e.currentTarget.style.boxShadow = 'none'; e.currentTarget.style.transform = 'none'; }}
-                            title="Open landlord deep-dive for this asset">
-                            {/* Header line */}
-                            <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',gap:10}}>
-                              <div style={{minWidth:0,flex:1}}>
+                            title="Open this asset on the Assets page">
+                            {/* Photo strip — fallback to a deterministic colour-block when none uploaded */}
+                            <AssetCardPhoto storagePath={c.photo_path} assetId={c.id} typeChipColor={typeChip[c.property_type] || '#61707D'} propertyType={c.property_type}/>
+                            <div style={{padding:'14px 16px',display:'flex',flexDirection:'column',gap:12}}>
+                              {/* Name + address */}
+                              <div style={{minWidth:0}}>
                                 <div style={{fontSize:15,fontWeight:600,letterSpacing:'-0.01em',color:'var(--text-dark)',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{c.name}</div>
                                 <div style={{fontSize:11,color:'var(--text-muted)',marginTop:3,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{c.address || '—'}</div>
                               </div>
-                              <span style={{fontSize:9,letterSpacing:'0.05em',textTransform:'uppercase',color:'#fff',background:typeChip[c.property_type] || '#61707D',padding:'3px 8px',borderRadius:3,fontWeight:600,whiteSpace:'nowrap',flexShrink:0}}>
-                                {c.property_type}
-                              </span>
+                              {/* This month collected — the one number that matters */}
+                              <div style={{paddingTop:10,borderTop:'1px solid var(--border-light)'}}>
+                                <div style={{fontSize:10,letterSpacing:'0.06em',textTransform:'uppercase',color:'var(--text-secondary)',fontWeight:600,marginBottom:4}}>Collected this month</div>
+                                <div style={{fontSize:22,fontWeight:600,color:'#5a6b4f',letterSpacing:'-0.015em',lineHeight:1}}>{fmt(c.this_month_collected)}</div>
+                              </div>
+                              {/* Issue chips */}
+                              {issues.length > 0 && (
+                                <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
+                                  {issues.map((iss, i) => (
+                                    <span key={i} style={{fontSize:10,fontWeight:600,letterSpacing:'0.03em',textTransform:'uppercase',color:iss.color,background:'rgba(0,0,0,0.04)',padding:'3px 8px',borderRadius:3}}>{iss.label}</span>
+                                  ))}
+                                </div>
+                              )}
                             </div>
-                            {/* Yield + occupancy split */}
-                            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
-                              <div>
-                                <div style={{fontSize:10,letterSpacing:'0.06em',textTransform:'uppercase',color:'var(--text-secondary)',fontWeight:600,marginBottom:4}}>Yield</div>
-                                <div style={{fontSize:22,fontWeight:600,color:yieldTone(c.yield_pct),lineHeight:1}}>{c.yield_pct == null ? '—' : c.yield_pct.toFixed(1) + '%'}</div>
-                                <div style={{fontSize:10,color:'var(--text-muted)',marginTop:3}}>annualised gross</div>
-                              </div>
-                              <div>
-                                <div style={{fontSize:10,letterSpacing:'0.06em',textTransform:'uppercase',color:'var(--text-secondary)',fontWeight:600,marginBottom:4}}>Occupancy</div>
-                                <div style={{fontSize:22,fontWeight:600,color:'var(--text-dark)',lineHeight:1}}>{c.occupied_count}<span style={{fontSize:14,color:'var(--text-muted)',fontWeight:400}}> / {c.total_units}</span></div>
-                                <div style={{fontSize:10,color:'var(--text-muted)',marginTop:3}}>{c.occupancy_pct}%</div>
-                              </div>
-                            </div>
-                            {/* This-month collected + footer */}
-                            <div style={{paddingTop:10,borderTop:'1px solid var(--border-light)',display:'flex',justifyContent:'space-between',alignItems:'baseline',gap:10}}>
-                              <div>
-                                <div style={{fontSize:10,letterSpacing:'0.06em',textTransform:'uppercase',color:'var(--text-secondary)',fontWeight:600}}>This month</div>
-                                <div style={{fontSize:15,fontWeight:600,color:'#5a6b4f',marginTop:2}}>{fmt(c.this_month_collected)}</div>
-                              </div>
-                              <div style={{textAlign:'right'}}>
-                                <div style={{fontSize:10,letterSpacing:'0.06em',textTransform:'uppercase',color:'var(--text-secondary)',fontWeight:600}}>Value</div>
-                                <div style={{fontSize:13,fontWeight:600,color:'var(--text-dark)',marginTop:2}}>{c.current_value ? fmt(c.current_value) : '—'}</div>
-                              </div>
-                            </div>
-                            {/* Issue chips */}
-                            {issues.length > 0 && (
-                              <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
-                                {issues.map((iss, i) => (
-                                  <span key={i} style={{fontSize:10,fontWeight:600,letterSpacing:'0.03em',textTransform:'uppercase',color:iss.color,background:'rgba(0,0,0,0.04)',padding:'3px 8px',borderRadius:3}}>{iss.label}</span>
-                                ))}
-                              </div>
-                            )}
                           </div>
                         );
                       })}
@@ -672,146 +676,16 @@ const PMCOverviewPage = ({ setPage }) => {
           );
         })()}
 
-        {/* ============ PORTFOLIO SUMMARY ============ */}
-        <div style={groupEyebrow}>Portfolio Summary</div>
-        <div className="kpi-row" style={{gridTemplateColumns:'repeat(5, minmax(0, 1fr))',marginBottom:0}}>
-          <KpiCard label="Total Assets Selected" value={stats.selectedPropsCount + ' ' + (stats.selectedPropsCount === 1 ? 'asset' : 'assets')} page="properties"/>
-          <KpiCard label="Units Occupied"            value={stats.occupied + ' / ' + stats.totalUnits}        page="properties"/>
-          <KpiCard label="Occupancy Rate"            value={stats.occupancyRate + '%'}                         page="properties"/>
-          <KpiCard label="Operating Income Collected" value={fmt(stats.monthCollected)} color="#5a6b4f" page="payment"/>
-          <KpiCard label="Operating Income Pending"   value={fmt(stats.monthOverdue)}  color="#8b4a42" page="payment"/>
-        </div>
-
-        {/* ============ FINANCIAL SUMMARY ============ */}
-        <div style={groupEyebrow}>Financial Summary</div>
-        <div style={{display:'grid',gridTemplateColumns:'1fr',gap:18,marginBottom:8}}>
-          {/* Operating Income — Collected / Pending / Upcoming / Future for selected period */}
-          <div className="card">
-            <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:16}}>
-              <div style={{fontSize:15,fontWeight:600,color:'var(--text-dark)',letterSpacing:'-0.015em'}}>Operating Income</div>
-              <span onClick={() => setPage && setPage('payment')} style={{fontSize:11,color:'var(--accent-warm-dark)',cursor:'pointer',fontWeight:500}}>View all →</span>
-            </div>
-            <div style={{display:'grid',gridTemplateColumns:'repeat(4, minmax(0, 1fr))',gap:18}}>
-              <div title="Paid invoices in the selected period">
-                <div style={{fontSize:10,letterSpacing:'0.08em',textTransform:'uppercase',color:'var(--text-secondary)',marginBottom:7,fontWeight:600}}>Collected</div>
-                <div style={{fontSize:22,fontWeight:600,color:'#5a6b4f',letterSpacing:'-0.025em',lineHeight:1.1}}>{fmt(stats.monthCollected)}</div>
-              </div>
-              <div title="Past due — not yet paid">
-                <div style={{fontSize:10,letterSpacing:'0.08em',textTransform:'uppercase',color:'var(--text-secondary)',marginBottom:7,fontWeight:600}}>Pending</div>
-                <div style={{fontSize:22,fontWeight:600,color:'#8b4a42',letterSpacing:'-0.025em',lineHeight:1.1}}>{fmt(stats.monthOverdue)}</div>
-              </div>
-              <div title="Due within the next 30 days">
-                <div style={{fontSize:10,letterSpacing:'0.08em',textTransform:'uppercase',color:'var(--text-secondary)',marginBottom:7,fontWeight:600}}>Upcoming</div>
-                <div style={{fontSize:22,fontWeight:600,color:'#a07d3c',letterSpacing:'-0.025em',lineHeight:1.1}}>{fmt(stats.monthPending)}</div>
-              </div>
-              <div title="Scheduled cheques due more than 30 days out">
-                <div style={{fontSize:10,letterSpacing:'0.08em',textTransform:'uppercase',color:'var(--text-secondary)',marginBottom:7,fontWeight:600}}>Future</div>
-                <div style={{fontSize:22,fontWeight:600,color:'#61707D',letterSpacing:'-0.025em',lineHeight:1.1}}>{fmt(stats.monthUpcoming)}</div>
-              </div>
-            </div>
-          </div>
-
-          {/* Unit Payment Activity — Paid (this month) | Pending (all unpaid).
-              Rows lead with the unit number; building-letter avatar is
-              gone (it duplicated the line of building text below). */}
-          <div className="card">
-            <div style={{marginBottom:14}}>
-              <div style={{fontSize:15,fontWeight:600,color:'var(--text-dark)',letterSpacing:'-0.015em'}}>Unit Payment Activity</div>
-              <div style={{fontSize:11,color:'var(--text-muted)',marginTop:2}}>Top units by activity this period.</div>
-            </div>
-            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:24}}>
-              {[
-                { key:'paid',    label:'Paid',    color:'#5a6b4f', list:stats.paidList,    empty:'No paid invoices this period yet.' },
-                { key:'pending', label:'Pending', color:'#8b4a42', list:stats.pendingList, empty:'No pending or overdue invoices ✓' },
-              ].map(col => (
-                <div key={col.key}>
-                  <div style={{fontSize:10,letterSpacing:'0.1em',textTransform:'uppercase',color:col.color,fontWeight:600,marginBottom:10}}>{col.label}</div>
-                  {col.list.length === 0 ? (
-                    <div style={{color:'var(--text-muted)',fontSize:12,padding:'12px 0'}}>{col.empty}</div>
-                  ) : col.list.map((a, i) => {
-                    const isLast = i === col.list.length - 1;
-                    const clickable = a.unit && a.building;
-                    return (
-                      <div key={i}
-                           onClick={() => clickable && setOpenedUnit({ unit: a.unit, building: a.building })}
-                           style={{display:'flex',alignItems:'center',gap:12,padding:'10px 8px',borderRadius:6,borderBottom: isLast ? 'none' : '1px solid var(--border-light)',cursor: clickable ? 'pointer' : 'default',transition:'background 0.15s'}}
-                           onMouseEnter={e => { if (clickable) e.currentTarget.style.background = 'var(--bg-page)'; }}
-                           onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
-                           title={clickable ? 'Open unit detail' : ''}>
-                        <div style={{flex:1,minWidth:0}}>
-                          <div style={{fontSize:13,fontWeight:500,color:'var(--text-dark)',letterSpacing:'-0.01em'}}>{a.unit_number}</div>
-                          <div style={{fontSize:11,color:'var(--text-muted)',marginTop:2,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{a.building_name}{a.floor != null ? ' · Floor ' + a.floor : ''}</div>
-                        </div>
-                        <div style={{textAlign:'right'}}>
-                          <div style={{fontSize:13,fontWeight:600,color:col.color,letterSpacing:'-0.015em'}}>{fmt(a.amount)}</div>
-                          <div style={{fontSize:10,color:'var(--text-muted)',marginTop:2}}>
-                            {col.key === 'paid'
-                              ? (a.count + ' invoice' + (a.count===1?'':'s'))
-                              : (a.oldest_due ? daysOverdue(a.oldest_due) + 'd overdue' : a.count + ' invoice' + (a.count===1?'':'s'))}
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-
-        {/* ============ SERVICE REQUESTS ============ */}
-        <div style={groupEyebrow}>Service Requests</div>
-        <div className="kpi-row" style={{gridTemplateColumns:'repeat(3, minmax(0, 1fr))',marginBottom:18}}>
-          <KpiCard label="Requests Today"  value={stats.todaySRs}        page="service"/>
-          <KpiCard label="Completed Today" value={stats.completedToday}  color="#5a6b4f" page="service"/>
-          <KpiCard label="Pending"         value={stats.pendingRequests} color="#a07d3c" page="service"/>
-        </div>
-        <div className="card">
-          <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:14}}>
-            <div>
-              <div style={{fontSize:14,fontWeight:600,color:'var(--text-dark)'}}>All Service Requests</div>
-              <div style={{fontSize:11,color:'var(--text-muted)',marginTop:2}}>Most recent {stats.srRecent.length} across selected properties</div>
-            </div>
-            <span onClick={() => setPage && setPage('service')} style={{fontSize:11,color:'var(--accent-warm-dark)',cursor:'pointer'}}>View all →</span>
-          </div>
-          {stats.srRecent.length === 0 ? (
-            <div style={{color:'var(--text-muted)',fontSize:13,padding:24,textAlign:'center'}}>No service requests yet.</div>
-          ) : (
-            <table className="data-table">
-              <thead><tr><th style={{width:'16%'}}>Category</th><th style={{width:'44%'}}>Description</th><th style={{width:'12%'}}>Priority</th><th style={{width:'16%'}}>Status</th><th style={{width:'12%'}}>Created</th></tr></thead>
-              <tbody>
-                {stats.srRecent.map(s => (
-                  <tr key={s.id} style={{cursor:'pointer'}} onClick={() => setPage && setPage('service')}>
-                    <td style={{fontWeight:500}}>{s.category}</td>
-                    <td style={{maxWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}} title={s.description}>{s.description}</td>
-                    <td>{s.priority}</td>
-                    <td>{statusBadge(s.status)}</td>
-                    <td>{s.created_at ? new Date(s.created_at).toLocaleDateString() : '—'}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
-        </div>
-
-        {/* ============ VISITORS ============ */}
-        <div style={groupEyebrow}>Visitors</div>
-        <div className="kpi-row" style={{gridTemplateColumns:'repeat(2, minmax(0, 1fr))',marginBottom:0}}>
-          <KpiCard label="Upcoming Visitors" value={stats.upcomingVisits} page="visitors"/>
-          <KpiCard label="Visitors Today"    value={stats.todayVisits}    page="visitors"/>
-        </div>
+        {/* Overview ends after Your Portfolio per landlord product
+            direction — Portfolio Summary / Financial Summary / Unit
+            Payment Activity / Service Requests / Visitors all live on
+            their own dedicated pages now. */}
       </>)}
       {openedUnit && (
         <UnitDetailModal
           unit={openedUnit.unit}
           building={openedUnit.building}
           onClose={() => setOpenedUnit(null)}
-        />
-      )}
-      {openedAsset && (
-        <AssetDetailModal
-          asset={openedAsset}
-          onClose={() => setOpenedAsset(null)}
         />
       )}
     </div>
