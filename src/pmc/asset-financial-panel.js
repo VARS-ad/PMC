@@ -485,24 +485,6 @@ const AssetFinancialPanel = ({ building, onClose }) => {
             {/* 12-month chart */}
             <Section label={'Income Timeline · ' + (series.length === 1 ? '1 month' : series.length + ' months')} right={<span style={{fontSize:11,color:'var(--text-muted)'}}>{periodLabel} · click a bar to filter</span>}>
               <div style={{background:'#fff',border:'1px solid var(--border-light)',borderRadius:10,padding:'18px 22px'}}>
-                {/* Totals strip directly above the chart — same period
-                    as the bars so the headline reads at a glance. */}
-                <div style={{display:'flex',gap:32,alignItems:'baseline',flexWrap:'wrap',paddingBottom:14,marginBottom:14,borderBottom:'1px solid var(--border-light)'}}>
-                  <div>
-                    <div style={{fontSize:10,letterSpacing:'0.08em',textTransform:'uppercase',color:'var(--text-secondary)',fontWeight:600,marginBottom:4}}>Total Billed</div>
-                    <div style={{fontSize:20,fontWeight:600,letterSpacing:'-0.018em',color:'var(--text-dark)',lineHeight:1}}>{fmt(chartBilled)}</div>
-                  </div>
-                  <div style={{width:1,height:36,background:'var(--border-light)'}}/>
-                  <div>
-                    <div style={{fontSize:10,letterSpacing:'0.08em',textTransform:'uppercase',color:'var(--text-secondary)',fontWeight:600,marginBottom:4}}>Collected</div>
-                    <div style={{fontSize:20,fontWeight:600,letterSpacing:'-0.018em',color:'#5a6b4f',lineHeight:1}}>{fmt(chartCollected)}</div>
-                  </div>
-                  <div style={{width:1,height:36,background:'var(--border-light)'}}/>
-                  <div>
-                    <div style={{fontSize:10,letterSpacing:'0.08em',textTransform:'uppercase',color:'var(--text-secondary)',fontWeight:600,marginBottom:4}}>Outstanding</div>
-                    <div style={{fontSize:20,fontWeight:600,letterSpacing:'-0.018em',color: chartOutstanding > 0 ? '#8b4a42' : 'var(--text-dark)',lineHeight:1}}>{fmt(chartOutstanding)}</div>
-                  </div>
-                </div>
                 <TimelineChart data={series} selectedMonth={selectedMonth} onSelectMonth={setSelectedMonth}/>
               </div>
             </Section>
