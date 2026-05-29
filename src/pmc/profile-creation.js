@@ -1081,13 +1081,25 @@ const BuildingDetailModal = ({ building, onClose }) => {
               <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill, minmax(110px, 1fr))',gap:6}}>
                 {byFloor[f].map(u => {
                   const occ = isOccupied(u);
-                  const restBg = occ ? 'var(--bg-surface)' : '#fff';
-                  // Tiny coloured dot in the top-right corner of the chip.
-                  // Warm-green (#5a6b4f) = occupied, warm-amber (#a07d3c) = vacant.
-                  const dotColor = occ ? '#5a6b4f' : '#a07d3c';
+                  // Light tinted backgrounds so occupancy reads at-a-glance:
+                  //   • Occupied — soft warm-green (#e6efe1) with a darker
+                  //     green border + label colour.
+                  //   • Vacant   — soft warm-amber (#fdf5e6) with a darker
+                  //     amber border + label colour.
+                  // Bigger 9×9 dot top-right with a ring against the tint
+                  // so the indicator stays visible on hover.
+                  const restBg     = occ ? '#e6efe1' : '#fdf5e6';
+                  const hoverBg    = occ ? '#d8e6cf' : '#fbeccf';
+                  const borderCol  = occ ? '#c8d4be' : '#efe1be';
+                  const labelCol   = occ ? '#3d4d33' : '#7a5a1f';
+                  const dotColor   = occ ? '#5a6b4f' : '#a07d3c';
                   return (
-                    <div key={u.id} onClick={() => setSelectedUnit(u)} style={{position:'relative',padding:'8px 10px',border:'1px solid var(--border-light)',borderRadius:6,fontSize:12,background: restBg,textAlign:'center',cursor:'pointer',transition:'background 0.15s'}} onMouseEnter={e => e.currentTarget.style.background='var(--accent-warm-light)'} onMouseLeave={e => e.currentTarget.style.background = restBg} title={unitChipTitle(u) + ' · ' + (occ ? 'Occupied' : 'Vacant')}>
-                      <span aria-hidden="true" style={{position:'absolute',top:5,right:5,width:7,height:7,borderRadius:'50%',background:dotColor,boxShadow:'0 0 0 1.5px ' + restBg}}/>
+                    <div key={u.id} onClick={() => setSelectedUnit(u)}
+                      style={{position:'relative',padding:'10px 10px',border:'1px solid ' + borderCol,borderRadius:6,fontSize:12,fontWeight:600,background: restBg,color: labelCol,textAlign:'center',cursor:'pointer',transition:'background 0.15s, border-color 0.15s'}}
+                      onMouseEnter={e => { e.currentTarget.style.background = hoverBg; }}
+                      onMouseLeave={e => { e.currentTarget.style.background = restBg; }}
+                      title={unitChipTitle(u) + ' · ' + (occ ? 'Occupied' : 'Vacant')}>
+                      <span aria-hidden="true" style={{position:'absolute',top:6,right:6,width:9,height:9,borderRadius:'50%',background:dotColor,boxShadow:'0 0 0 2px ' + restBg}}/>
                       {u.unit_number}
                     </div>
                   );
