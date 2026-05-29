@@ -432,6 +432,14 @@ const PCSummary = ({ section }) => {
   // where counts has units / residents / invoices / etc. so the user
   // sees exactly what's about to be erased before confirming.
   const [deleteConfirm, setDeleteConfirm] = useState(null);
+  // Maintenance Companies inline edit / detail. We reuse the global
+  // VendorEditModal + VendorDetailModal from src/pmc/vendors.js so the
+  // Database → Maintenance Companies → Summary surface gets the full
+  // Details · Documents · Payments experience without a sidebar hop.
+  const [editingVendor, setEditingVendor] = useState(null);
+  const [detailVendor, setDetailVendor] = useState(null);
+  const [vendorBuildingsList, setVendorBuildingsList] = useState([]);
+  const [vendorBuildingsMap, setVendorBuildingsMap] = useState({});
 
   const reload = async () => {
     setError(null); setRows(null);
@@ -525,14 +533,23 @@ const PCSummary = ({ section }) => {
         });
       } else if (section === 'vendors') {
         // Maintenance Companies summary — list of every vendor with the
-        // headline fields, sorted alphabetically. The full edit UI still
-        // lives on the dedicated Maintenance Companies page in the sidebar;
-        // this view is a quick at-a-glance check after a bulk upload.
-        const { data: vs, error: ve } = await supabaseClient
-          .from('vendors')
-          .select('id, name, service_category, status, contract_end, contact_person, contact_phone, contact_email')
-          .order('name');
+        // headline fields, sorted alphabetically. Clicking a row opens
+        // VendorDetailModal (Details · Documents · Payments) inline; the
+        // Edit button opens VendorEditModal — both reused from
+        // src/pmc/vendors.js, so this is the same surface as the sidebar
+        // Maintenance Companies page (no navigation hop needed).
+        const [{ data: vs, error: ve }, { data: bs }, { data: vbs }] = await Promise.all([
+          supabaseClient.from('vendors').select('*').order('name'),
+          supabaseClient.from('buildings').select('id,name').order('name'),
+          supabaseClient.from('vendor_buildings').select('vendor_id,building_id'),
+        ]);
         if (ve) throw ve;
+        const vbMap = {};
+        (vbs || []).forEach(vb => {
+          (vbMap[vb.vendor_id] = vbMap[vb.vendor_id] || []).push(vb.building_id);
+        });
+        setVendorBuildingsList(bs || []);
+        setVendorBuildingsMap(vbMap);
         data = vs || [];
       } else if (section === 'amenities') {
         const { data: bookings, error: e1 } = await supabaseClient.from('amenity_bookings').select('id,amenity_name,booking_date,start_time,end_time,guests,status,building_id,unit_id,resident_profile_id,created_at').order('booking_date', { ascending: false });
@@ -880,9 +897,11 @@ const PCSummary = ({ section }) => {
 
   if (section === 'vendors') {
     // Maintenance Companies summary. Mirrors the Assets / Security idiom:
-    // count chip + Refresh on the top row, then a single card with a
-    // compact table. Detail editing still happens on the dedicated
-    // Maintenance Companies page (sidebar).
+    // count chip + Refresh on the top row, a card with a compact table,
+    // every row is click-to-view (opens VendorDetailModal — same Details ·
+    // Documents · Payments tabs as the sidebar page) and an Actions
+    // column with Edit + Delete buttons mirroring the Security summary
+    // (line ~992) and Buildings table (line ~711).
     const statusBadge = (status) => {
       const s = String(status || 'Active');
       const colour = s === 'Active' ? { bg:'#e6efe1', fg:'#5a6b4f' }
@@ -892,20 +911,29 @@ const PCSummary = ({ section }) => {
                    : { bg:'#eef1f3', fg:'#3E4C59' };
       return <span style={{display:'inline-block',padding:'2px 8px',borderRadius:10,background:colour.bg,color:colour.fg,fontSize:10,fontWeight:600,letterSpacing:'0.04em',textTransform:'uppercase'}}>{s}</span>;
     };
-    const openVendorPage = () => {
-      // TODO: ProfileCreationPage doesn't receive setPage. We expose this
-      // global hop so the sidebar's Maintenance Companies entry can be the
-      // canonical destination — wire when app.js gains a navigation event.
-      try { window.alert('Open the "Maintenance Companies" page from the sidebar to edit this record.'); } catch (_) {}
+    const deleteVendor = async (v) => {
+      if (!window.confirm('Delete maintenance company "' + v.name + '" and all its documents and payments? This cannot be undone.')) return;
+      try {
+        const { data: docs } = await supabaseClient.from('vendor_documents').select('storage_path').eq('vendor_id', v.id);
+        if (docs && docs.length) {
+          await supabaseClient.storage.from('maintenance-documents').remove(docs.map(d => d.storage_path));
+        }
+        const { error: de } = await supabaseClient.from('vendors').delete().eq('id', v.id);
+        if (de) { alert('Delete failed: ' + de.message); return; }
+        reload();
+      } catch (e) {
+        alert('Delete failed: ' + (e.message || String(e)));
+      }
     };
     return (
+      <>
       <div className="card">
         <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:12,gap:10,flexWrap:'wrap'}}>
           <div style={{display:'flex',alignItems:'center',gap:10}}>
             <span style={{display:'inline-block',padding:'4px 10px',borderRadius:10,background:'var(--bg-surface)',border:'1px solid var(--border-light)',fontSize:12,fontWeight:600,color:'var(--text-dark)'}}>
               {rows.length} maintenance compan{rows.length === 1 ? 'y' : 'ies'}
             </span>
-            <span style={{fontSize:12,color:'var(--text-muted)'}}>· sorted by name</span>
+            <span style={{fontSize:12,color:'var(--text-muted)'}}>· click a row to view documents & payments</span>
           </div>
           <button className="btn btn-sm" onClick={reload}>Refresh</button>
         </div>
@@ -918,11 +946,11 @@ const PCSummary = ({ section }) => {
               <th>Contact</th>
               <th>Phone</th>
               <th>Contract end</th>
-              <th style={{textAlign:'right'}}>Open</th>
+              <th style={{textAlign:'right'}}>Actions</th>
             </tr></thead>
             <tbody>
               {rows.map(v => (
-                <tr key={v.id}>
+                <tr key={v.id} style={{cursor:'pointer'}} onClick={() => setDetailVendor(v)}>
                   <td style={{fontWeight:500}}>{v.name}</td>
                   <td>{v.service_category || '—'}</td>
                   <td>{statusBadge(v.status)}</td>
@@ -930,7 +958,8 @@ const PCSummary = ({ section }) => {
                   <td>{v.contact_phone || '—'}</td>
                   <td>{v.contract_end || '—'}</td>
                   <td style={{textAlign:'right',whiteSpace:'nowrap'}}>
-                    <button onClick={openVendorPage} style={{padding:'4px 10px',fontSize:11,background:'#fff',border:'1px solid #D0D6D5',borderRadius:4,color:'var(--text-dark)',cursor:'pointer'}} title="Open the Maintenance Companies page from the sidebar">View →</button>
+                    <button onClick={(e) => { e.stopPropagation(); setEditingVendor(v); }} style={{padding:'4px 10px',fontSize:11,background:'#fff',border:'1px solid #D0D6D5',borderRadius:4,color:'var(--text-dark)',cursor:'pointer',marginRight:6}}>Edit</button>
+                    <button onClick={(e) => { e.stopPropagation(); deleteVendor(v); }} style={{padding:'4px 10px',fontSize:11,background:'#fff',border:'1px solid #D0D6D5',borderRadius:4,color:'#8b4a42',cursor:'pointer'}}>Delete</button>
                   </td>
                 </tr>
               ))}
@@ -938,6 +967,27 @@ const PCSummary = ({ section }) => {
           </table>
         </div>
       </div>
+      {editingVendor && (
+        <VendorEditModal
+          vendor={editingVendor}
+          buildings={vendorBuildingsList}
+          vendorBuildingIds={editingVendor?.id ? (vendorBuildingsMap[editingVendor.id] || []) : []}
+          onSaved={async () => { setEditingVendor(null); await reload(); }}
+          onClose={() => setEditingVendor(null)}
+        />
+      )}
+      {detailVendor && !editingVendor && (
+        <VendorDetailModal
+          vendor={detailVendor}
+          buildings={vendorBuildingsList}
+          vendorBuildingIds={vendorBuildingsMap[detailVendor.id] || []}
+          onClose={() => setDetailVendor(null)}
+          onEdit={() => setEditingVendor(detailVendor)}
+          onDeleted={async () => { setDetailVendor(null); await reload(); }}
+          onChanged={reload}
+        />
+      )}
+      </>
     );
   }
 
