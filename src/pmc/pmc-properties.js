@@ -510,8 +510,14 @@ const PMCPropertiesPage = ({ setPage }) => {
         // attachments back onto their building so each card can show
         // the first available hero shot.
         const unitToBuilding = Object.fromEntries((units || []).map(u => [u.id, u.building_id]));
+        // Skip the auto-generated demo covers (the striped "Unit X-101"
+        // placeholders from the Document Library bulk-generate sweep; their
+        // storage_path ends with `-photo.jpg`) so those assets fall through
+        // to a curated stock hero instead of the placeholder. Real uploads
+        // keep their own filename and are used as-is.
         const photoByBuilding = {};
         for (const a of (photoAtts || [])) {
+          if (/-photo\.jpg$/i.test(a.storage_path || '')) continue;
           const bId = unitToBuilding[a.unit_id];
           if (bId && !photoByBuilding[bId]) photoByBuilding[bId] = a.storage_path;
         }
@@ -727,7 +733,7 @@ const PMCPropertiesPage = ({ setPage }) => {
           // Render a single building card. `kind` controls whether
           // Commercial gets the extra Monthly Run-Rate column (6 cards
           // instead of 5).
-          const renderBuildingCard = (b, kind) => {
+          const renderBuildingCard = (b, kind, stockUrl) => {
             const occupancyPct = b.unitCount > 0 ? Math.round((b.occupiedCount / b.unitCount) * 100) : 0;
             const totalBilled = b.collected + b.pending + b.upcoming + b.future;
             const open = () => setSelectedBuilding(b);
@@ -756,7 +762,7 @@ const PMCPropertiesPage = ({ setPage }) => {
               <div key={b.id} className="card" data-asset-id={b.id} style={{padding:0,overflow:'hidden'}}>
                 {/* Hero photo strip — real upload → Unsplash stock → designed cover */}
                 <div onClick={open} style={{cursor:'pointer'}}>
-                  <AssetCardPhoto storagePath={b.photo_path} assetId={b.id} typeChipColor={typeChip} propertyType={b.property_type} name={b.name} height={160}/>
+                  <AssetCardPhoto storagePath={b.photo_path} assetId={b.id} typeChipColor={typeChip} propertyType={b.property_type} name={b.name} stockUrl={stockUrl} height={160}/>
                 </div>
                 <div style={{padding:'18px 20px'}}>
                 <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:14}}>
@@ -826,7 +832,23 @@ const PMCPropertiesPage = ({ setPage }) => {
                 <div className="card"><div style={{padding:32,color:'var(--text-muted)',fontSize:13,textAlign:'center'}}>No {label.toLowerCase()} buildings yet. Add via <strong>Profile Creation → Buildings</strong>.</div></div>
               ) : (
                 <div style={{display:'grid',gridTemplateColumns:'1fr',gap:18}}>
-                  {list.map(b => renderBuildingCard(b, kind))}
+                  {(() => {
+                    // Group-deduped stock covers: assets without a real photo
+                    // get a curated cover, walking the pool from their
+                    // deterministic pick to the first one not already used in
+                    // this section — so stacked cards never repeat a cover.
+                    const usedStock = new Set();
+                    const stockFor = {};
+                    for (const b of list) {
+                      if (b.photo_path) continue; // real upload wins
+                      const pool = STOCK_BUILDING_PHOTOS[b.property_type] || STOCK_BUILDING_PHOTOS['Residential'];
+                      let idx = Math.abs((b.id || '').split('').reduce((a, ch) => a + ch.charCodeAt(0), 0)) % pool.length;
+                      for (let k = 0; k < pool.length && usedStock.has(pool[idx]); k++) idx = (idx + 1) % pool.length;
+                      stockFor[b.id] = pool[idx];
+                      usedStock.add(pool[idx]);
+                    }
+                    return list.map(b => renderBuildingCard(b, kind, stockFor[b.id]));
+                  })()}
                 </div>
               )}
             </div>
