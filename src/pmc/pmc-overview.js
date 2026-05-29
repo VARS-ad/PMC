@@ -151,6 +151,20 @@ const AttentionDrillModal = ({ kind, title, items, onClose, navigate }) => {
     return () => window.removeEventListener('keydown', onKey);
   }, [onClose]);
   const list = items || [];
+  // Vacant kind: cascading building + floor dropdowns, then floor-
+  // grouped chip grid (same idiom as BuildingDetailModal). All chips
+  // are vacant so they share the warm-amber tint.
+  const [vacantBuilding, setVacantBuilding] = useState('all');
+  const [vacantFloor, setVacantFloor]       = useState('all');
+  const vacantBuildings = kind === 'vacant'
+    ? Array.from(new Map(list.map(i => [i.building_id, i.building_name])).entries()).sort((a, b) => (a[1] || '').localeCompare(b[1] || ''))
+    : [];
+  const vacantFloors = kind === 'vacant'
+    ? Array.from(new Set(list.filter(i => vacantBuilding === 'all' || i.building_id === vacantBuilding).map(i => i.floor))).sort((a, b) => (a == null) - (b == null) || (Number(a) - Number(b)))
+    : [];
+  const vacantFiltered = kind === 'vacant'
+    ? list.filter(i => (vacantBuilding === 'all' || i.building_id === vacantBuilding) && (vacantFloor === 'all' || i.floor === vacantFloor))
+    : list;
   // Per-kind row renderer. Kept inline so the whole modal stays in
   // one place rather than fanning out into more inline components.
   const renderRow = (it, idx) => {
@@ -232,7 +246,66 @@ const AttentionDrillModal = ({ kind, title, items, onClose, navigate }) => {
           >×</button>
         </div>
         <div style={{flex:1,overflowY:'auto'}}>
-          {list.length === 0 ? (
+          {kind === 'vacant' ? (
+            <div style={{padding:'14px 20px 18px'}}>
+              {/* Building + Floor dropdowns */}
+              <div style={{display:'flex', gap:10, marginBottom:14, flexWrap:'wrap'}}>
+                <div style={{flex:'1 1 200px'}}>
+                  <label style={{fontSize:10,letterSpacing:'0.08em',textTransform:'uppercase',color:'var(--text-muted)',fontWeight:600,marginBottom:5,display:'block'}}>Asset</label>
+                  <select value={vacantBuilding} onChange={e => { setVacantBuilding(e.target.value); setVacantFloor('all'); }}
+                    className="form-input" style={{width:'100%'}}>
+                    <option value="all">All assets</option>
+                    {vacantBuildings.map(([id, nm]) => <option key={id} value={id}>{nm}</option>)}
+                  </select>
+                </div>
+                <div style={{flex:'1 1 140px'}}>
+                  <label style={{fontSize:10,letterSpacing:'0.08em',textTransform:'uppercase',color:'var(--text-muted)',fontWeight:600,marginBottom:5,display:'block'}}>Floor</label>
+                  <select value={vacantFloor} onChange={e => setVacantFloor(e.target.value)} className="form-input" style={{width:'100%'}}>
+                    <option value="all">All floors</option>
+                    {vacantFloors.map(f => <option key={f == null ? 'none' : f} value={f == null ? '' : f}>{f == null ? '—' : 'Floor ' + f}</option>)}
+                  </select>
+                </div>
+              </div>
+              {vacantFiltered.length === 0 ? (
+                <div style={{padding:'28px 0',textAlign:'center',color:'var(--text-muted)',fontSize:13}}>No vacant units match these filters.</div>
+              ) : (() => {
+                // Group filtered vacant units by floor for chip display
+                const byFloor = {};
+                vacantFiltered.forEach(u => {
+                  const k = u.floor == null ? 'No floor' : ('Floor ' + u.floor);
+                  if (!byFloor[k]) byFloor[k] = [];
+                  byFloor[k].push(u);
+                });
+                const floorKeys = Object.keys(byFloor).sort((a, b) => {
+                  const na = parseInt(a.replace('Floor ', ''), 10);
+                  const nb = parseInt(b.replace('Floor ', ''), 10);
+                  if (isNaN(na)) return 1;
+                  if (isNaN(nb)) return -1;
+                  return na - nb;
+                });
+                return floorKeys.map(fk => (
+                  <div key={fk} style={{marginBottom:18}}>
+                    <div style={{fontSize:11, letterSpacing:'0.06em', textTransform:'uppercase', fontWeight:600, color:'var(--text-secondary)', marginBottom:8}}>
+                      {fk}
+                      <span style={{fontSize:11, color:'var(--text-muted)', fontWeight:400, marginLeft:8, letterSpacing:0, textTransform:'none'}}>· {byFloor[fk].length} {byFloor[fk].length === 1 ? 'unit' : 'units'}</span>
+                    </div>
+                    <div style={{display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(110px, 1fr))', gap:6}}>
+                      {byFloor[fk].map(u => (
+                        <div key={u.id} onClick={() => navigate && navigate(u)}
+                          style={{position:'relative', padding:'10px 10px', border:'1px solid #efe1be', borderRadius:6, fontSize:12, fontWeight:600, background:'#fdf5e6', color:'#7a5a1f', textAlign:'center', cursor:'pointer', transition:'background 0.15s, border-color 0.15s'}}
+                          onMouseEnter={e => { e.currentTarget.style.background = '#fbeccf'; }}
+                          onMouseLeave={e => { e.currentTarget.style.background = '#fdf5e6'; }}
+                          title={u.building_name + ' · ' + (u.unit_number || '—') + ' · Vacant'}>
+                          <span aria-hidden="true" style={{position:'absolute', top:6, right:6, width:9, height:9, borderRadius:'50%', background:'#a07d3c', boxShadow:'0 0 0 2px #fdf5e6'}}/>
+                          {u.unit_number || '—'}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ));
+              })()}
+            </div>
+          ) : list.length === 0 ? (
             <div style={{padding:'28px 20px',textAlign:'center',color:'var(--text-muted)',fontSize:13}}>Nothing to show.</div>
           ) : list.map((it, idx) => (
             <div
