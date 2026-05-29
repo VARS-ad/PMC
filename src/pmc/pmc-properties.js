@@ -39,6 +39,18 @@ const BuildingDrillModal = ({ building, view, onClose, setPage }) => {
   // the parent page.
   const [localInvoices, setLocalInvoices] = useState(building.invoices || []);
   useEffect(() => { setLocalInvoices(building.invoices || []); }, [building.id]);
+
+  // SR interactivity — row click opens the detail modal, plus
+  // priority / status / date filters and sortable headers. Mirrors the
+  // invoice table inside AssetFinancialPanel so the behavior matches.
+  const [openSr, setOpenSr] = useState(null);
+  const [srPriorityFilter, setSrPriorityFilter] = useState('all');
+  const [srStatusFilter, setSrStatusFilter] = useState('all');
+  const [srDateStart, setSrDateStart] = useState('');
+  const [srDateEnd, setSrDateEnd] = useState('');
+  const [srSort, setSrSort] = useState({ key: 'created_at', dir: 'desc' });
+  const toggleSrSort = (key) => setSrSort(p => p.key === key ? { key, dir: p.dir === 'asc' ? 'desc' : 'asc' } : { key, dir: 'asc' });
+  const SrSortArrow = ({ col }) => srSort.key !== col ? <span style={{opacity:0.25,marginLeft:4}}>↕</span> : <span style={{marginLeft:4}}>{srSort.dir === 'asc' ? '↑' : '↓'}</span>;
   useEffect(() => {
     const handler = (e) => {
       const { invoice_id, new_status } = (e && e.detail) || {};
@@ -70,8 +82,27 @@ const BuildingDrillModal = ({ building, view, onClose, setPage }) => {
     if (view === 'upcoming')  rows = rows.filter(r => r.effective_status === 'Upcoming');
     if (view === 'future')    rows = rows.filter(r => r.effective_status === 'Future');
   } else if (v.kind === 'srs') {
+    // Start from the building's full SR list — drill view picks the
+    // "open" subset, then user-facing filters narrow further.
     rows = (building.srs || []).filter(s => ['New','Acknowledged','In Progress'].includes(s.status));
     if (view === 'srs-urgent') rows = rows.filter(s => ['High','Urgent'].includes(s.priority));
+    if (srPriorityFilter !== 'all') rows = rows.filter(s => s.priority === srPriorityFilter);
+    if (srStatusFilter   !== 'all') rows = rows.filter(s => s.status   === srStatusFilter);
+    if (srDateStart)   rows = rows.filter(s => (s.created_at || '').slice(0,10) >= srDateStart);
+    if (srDateEnd)     rows = rows.filter(s => (s.created_at || '').slice(0,10) <= srDateEnd);
+    // Sort
+    const priorityRank = { 'Urgent':0, 'High':1, 'Normal':2, 'Low':3 };
+    const statusRank   = { 'New':0, 'Acknowledged':1, 'In Progress':2, 'Done':3, 'Closed':4, 'Rejected':5 };
+    rows = [...rows].sort((a, b) => {
+      const k = srSort.key;
+      let av, bv;
+      if (k === 'priority') { av = priorityRank[a.priority] ?? 99; bv = priorityRank[b.priority] ?? 99; }
+      else if (k === 'status') { av = statusRank[a.status] ?? 99; bv = statusRank[b.status] ?? 99; }
+      else { av = a[k] || ''; bv = b[k] || ''; }
+      if (av < bv) return srSort.dir === 'asc' ? -1 : 1;
+      if (av > bv) return srSort.dir === 'asc' ? 1 : -1;
+      return 0;
+    });
   } else if (v.kind === 'tenants') {
     rows = (building.tenants || []);
     if (view === 'leases-expiring') {
@@ -122,30 +153,91 @@ const BuildingDrillModal = ({ building, view, onClose, setPage }) => {
              : 'No matching invoices for this building ✓'}
           </div>
         ) : v.kind === 'srs' ? (
-          <table className="data-table" style={{fontSize:12}}>
-            <thead>
-              <tr>
-                <th style={{width:'18%'}}>Category</th>
-                <th style={{width:'36%'}}>Description</th>
-                <th style={{width:'14%'}}>Resident</th>
-                <th style={{width:'10%'}}>Unit</th>
-                <th style={{width:'10%'}}>Priority</th>
-                <th style={{width:'12%'}}>Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map(s => (
-                <tr key={s.id}>
-                  <td style={{fontWeight:500}}>{s.category}</td>
-                  <td style={{maxWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}} title={s.description}>{s.description}</td>
-                  <td>{s.resident_name}</td>
-                  <td>{s.unit_number}</td>
-                  <td>{s.priority}</td>
-                  <td>{s.status}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <div>
+            {/* Filter bar */}
+            <div style={{display:'flex', gap:10, alignItems:'center', padding:'10px 16px 14px', flexWrap:'wrap', borderBottom:'1px solid var(--border-light)'}}>
+              <div style={{display:'flex', alignItems:'center', gap:6}}>
+                <span style={{fontSize:11, color:'var(--text-muted)', letterSpacing:'0.04em', textTransform:'uppercase'}}>Priority</span>
+                <select value={srPriorityFilter} onChange={e => setSrPriorityFilter(e.target.value)} style={{padding:'6px 10px', fontSize:12, border:'1px solid var(--border-light)', borderRadius:6, background:'#fff', cursor:'pointer'}}>
+                  <option value="all">All</option>
+                  <option value="Urgent">Urgent</option>
+                  <option value="High">High</option>
+                  <option value="Normal">Normal</option>
+                  <option value="Low">Low</option>
+                </select>
+              </div>
+              <div style={{display:'flex', alignItems:'center', gap:6}}>
+                <span style={{fontSize:11, color:'var(--text-muted)', letterSpacing:'0.04em', textTransform:'uppercase'}}>Status</span>
+                <select value={srStatusFilter} onChange={e => setSrStatusFilter(e.target.value)} style={{padding:'6px 10px', fontSize:12, border:'1px solid var(--border-light)', borderRadius:6, background:'#fff', cursor:'pointer'}}>
+                  <option value="all">All</option>
+                  <option value="New">New</option>
+                  <option value="Acknowledged">Acknowledged</option>
+                  <option value="In Progress">In Progress</option>
+                </select>
+              </div>
+              <div style={{display:'flex', alignItems:'center', gap:6}}>
+                <span style={{fontSize:11, color:'var(--text-muted)', letterSpacing:'0.04em', textTransform:'uppercase'}}>Created</span>
+                <input type="date" value={srDateStart} onChange={e => setSrDateStart(e.target.value)} style={{padding:'6px 8px', fontSize:12, border:'1px solid var(--border-light)', borderRadius:6, background:'#fff'}}/>
+                <span style={{fontSize:11, color:'var(--text-muted)'}}>→</span>
+                <input type="date" value={srDateEnd} onChange={e => setSrDateEnd(e.target.value)} style={{padding:'6px 8px', fontSize:12, border:'1px solid var(--border-light)', borderRadius:6, background:'#fff'}}/>
+              </div>
+              {(srPriorityFilter !== 'all' || srStatusFilter !== 'all' || srDateStart || srDateEnd) && (
+                <button onClick={() => { setSrPriorityFilter('all'); setSrStatusFilter('all'); setSrDateStart(''); setSrDateEnd(''); }} style={{padding:'6px 10px', fontSize:11, background:'transparent', border:'1px solid var(--border-light)', borderRadius:6, cursor:'pointer', color:'var(--text-muted)'}}>Clear</button>
+              )}
+              <div style={{flex:1}}/>
+              <div style={{fontSize:11, color:'var(--text-muted)'}}>{rows.length} {rows.length === 1 ? 'request' : 'requests'}</div>
+            </div>
+
+            {rows.length === 0 ? (
+              <div style={{padding:32,color:'var(--text-muted)',fontSize:13,textAlign:'center'}}>No requests match the current filters.</div>
+            ) : (
+              <table className="data-table" style={{fontSize:12}}>
+                <thead>
+                  <tr>
+                    <th style={{width:'18%', cursor:'pointer', userSelect:'none'}} onClick={() => toggleSrSort('category')}>Category<SrSortArrow col="category"/></th>
+                    <th style={{width:'30%'}}>Description</th>
+                    <th style={{width:'14%'}}>Resident</th>
+                    <th style={{width:'8%'}}>Unit</th>
+                    <th style={{width:'10%', cursor:'pointer', userSelect:'none'}} onClick={() => toggleSrSort('priority')}>Priority<SrSortArrow col="priority"/></th>
+                    <th style={{width:'10%', cursor:'pointer', userSelect:'none'}} onClick={() => toggleSrSort('status')}>Status<SrSortArrow col="status"/></th>
+                    <th style={{width:'10%', cursor:'pointer', userSelect:'none'}} onClick={() => toggleSrSort('created_at')}>Created<SrSortArrow col="created_at"/></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {rows.map(s => {
+                    const prChip = ({
+                      'Urgent':{ bg:'#fdf2f1', fg:'#8b4a42' },
+                      'High':  { bg:'#fdf2dc', fg:'#a07d3c' },
+                      'Normal':{ bg:'#E6EAE9', fg:'#3E4C59' },
+                      'Low':   { bg:'#E6EAE9', fg:'#61707D' },
+                    })[s.priority] || { bg:'#E6EAE9', fg:'#61707D' };
+                    const stChip = ({
+                      'New':         { bg:'#fdf5e6', fg:'#7a5a1f' },
+                      'Acknowledged':{ bg:'#E6EAE9', fg:'#3E4C59' },
+                      'In Progress': { bg:'#fdf2dc', fg:'#a07d3c' },
+                    })[s.status] || { bg:'#E6EAE9', fg:'#61707D' };
+                    return (
+                      <tr key={s.id} onClick={() => setOpenSr(s)}
+                        style={{cursor:'pointer', transition:'background 0.12s'}}
+                        onMouseEnter={e => { e.currentTarget.style.background = 'rgba(160,125,60,0.06)'; }}
+                        onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
+                        title="Open full request details">
+                        <td style={{fontWeight:500}}>{s.category}</td>
+                        <td style={{maxWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}} title={s.description}>{s.description}</td>
+                        <td>{s.resident_name}</td>
+                        <td>{s.unit_number}</td>
+                        <td><span style={{display:'inline-block', padding:'2px 8px', borderRadius:4, fontSize:10, fontWeight:600, background:prChip.bg, color:prChip.fg}}>{s.priority || '—'}</span></td>
+                        <td><span style={{display:'inline-block', padding:'2px 8px', borderRadius:4, fontSize:10, fontWeight:600, background:stChip.bg, color:stChip.fg}}>{s.status}</span></td>
+                        <td style={{whiteSpace:'nowrap', color:'var(--text-muted)'}}>{(s.created_at || '').slice(0,10) || '—'}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            )}
+
+            {openSr && <ServiceRequestDetailModal sr={openSr} building={building} onClose={() => setOpenSr(null)}/>}
+          </div>
         ) : v.kind === 'tenants' ? (
           <table className="data-table" style={{fontSize:12}}>
             <thead>
