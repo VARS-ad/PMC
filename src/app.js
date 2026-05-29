@@ -289,6 +289,7 @@ const App = () => {
     switch (page) {
       case 'overview': return <PMCOverviewPage setPage={setPage}/>;
       case 'profileCreation': return <ProfileCreationPage/>;
+      case 'documents': return <DocumentLibraryPage/>;
       case 'payment': return <PMCServiceChargesPage/>;
       case 'visitors': return <PMCVisitorsPage/>;
       case 'service': return <PMCServiceRequestsPage/>;
