@@ -57,10 +57,13 @@ const UnitDetailModal = ({ unit, building, assignment: passedAssignment, profile
       setAssignment(a);
       setProfile(p);
 
-      // Fetch owner record for this unit (separate from resident).
+      // Fetch owner record for this unit (separate from resident). Also pull
+      // the denormalised tenant_* fields used for non-residential property
+      // types (Commercial / Villa / Commercial Land), where the tenant /
+      // client lives on the unit row instead of in auth.users + profiles.
       const { data: u } = await supabaseClient
         .from('units')
-        .select('owner_name,owner_phone,owner_email,owner_passport_number,owner_emirates_id,purchase_date,owner_is_resident')
+        .select('owner_name,owner_phone,owner_email,owner_passport_number,owner_emirates_id,purchase_date,owner_is_resident,tenant_name,tenant_email,tenant_phone,tenant_tenure,tenant_contract_number,tenant_lease_start,tenant_lease_end,tenant_monthly_payment_aed')
         .eq('id', unit.id)
         .maybeSingle();
       if (!mounted) return;
@@ -210,58 +213,111 @@ const UnitDetailModal = ({ unit, building, assignment: passedAssignment, profile
               )}
             </Section>
 
-            <Section label={profile ? 'Resident' : (formerResident ? 'Former Resident' : 'Resident')}>
-              {profile ? (
-                <>
-                  <Field label="Name">
-                    <span
-                      onClick={() => setShowResidentDetail(true)}
-                      style={{color:'#3E4C59',cursor:'pointer',textDecoration:'underline',textDecorationColor:'#E6EAE9',textDecorationThickness:1,textUnderlineOffset:3}}
-                      onMouseEnter={e => { e.currentTarget.style.textDecorationColor = '#3E4C59'; }}
-                      onMouseLeave={e => { e.currentTarget.style.textDecorationColor = '#E6EAE9'; }}
-                      title="Open full resident profile"
-                    >
-                      {profile.full_name}
-                    </span>
-                  </Field>
-                  <Field label="Phone">{profile.phone}</Field>
-                  <Field label="Tenure">{assignment && assignment.tenure}</Field>
-                </>
-              ) : formerResident ? (
-                <>
-                  <div style={{padding:'8px 10px',background:'#fdf2dc',border:'1px solid #f0e2bd',borderRadius:6,fontSize:12,color:'#7a5a1f',marginBottom:12}}>
-                    Unit is currently vacant. Outstanding balance below was billed to the previous resident.
-                  </div>
-                  <Field label="Name">{formerResident.full_name}</Field>
-                  <Field label="Phone">{formerResident.phone}</Field>
-                </>
-              ) : (
-                <div style={{fontSize:13,color:'#61707D',padding:'6px 0'}}>Vacant — no resident assigned to this unit.</div>
-              )}
-            </Section>
+            {(() => {
+              // Section label is "Resident" for Residential / Villa (people
+              // who live in the unit) and "Client" for Commercial / Commercial
+              // Land (corporate tenants who lease the unit). Same data shape,
+              // different vocabulary.
+              const propType   = (building && building.property_type) || 'Residential';
+              const isPersonal = propType === 'Residential' || propType === 'Villa';
+              const occLabel   = isPersonal ? 'Resident' : 'Client';
+              const hasTenantOnUnit = !!(ownerInfo && (ownerInfo.tenant_name || ownerInfo.tenant_email || ownerInfo.tenant_phone));
+              return (
+                <Section label={
+                  isPersonal
+                    ? (profile ? occLabel : (formerResident ? 'Former ' + occLabel : occLabel))
+                    : occLabel
+                }>
+                  {isPersonal ? (
+                    profile ? (
+                      <>
+                        <Field label="Name">
+                          <span
+                            onClick={() => setShowResidentDetail(true)}
+                            style={{color:'#3E4C59',cursor:'pointer',textDecoration:'underline',textDecorationColor:'#E6EAE9',textDecorationThickness:1,textUnderlineOffset:3}}
+                            onMouseEnter={e => { e.currentTarget.style.textDecorationColor = '#3E4C59'; }}
+                            onMouseLeave={e => { e.currentTarget.style.textDecorationColor = '#E6EAE9'; }}
+                            title={'Open full ' + occLabel.toLowerCase() + ' profile'}
+                          >
+                            {profile.full_name}
+                          </span>
+                        </Field>
+                        <Field label="Phone">{profile.phone}</Field>
+                        <Field label="Tenure">{assignment && assignment.tenure}</Field>
+                      </>
+                    ) : formerResident ? (
+                      <>
+                        <div style={{padding:'8px 10px',background:'#fdf2dc',border:'1px solid #f0e2bd',borderRadius:6,fontSize:12,color:'#7a5a1f',marginBottom:12}}>
+                          Unit is currently vacant. Outstanding balance below was billed to the previous {occLabel.toLowerCase()}.
+                        </div>
+                        <Field label="Name">{formerResident.full_name}</Field>
+                        <Field label="Phone">{formerResident.phone}</Field>
+                      </>
+                    ) : (
+                      <div style={{fontSize:13,color:'#61707D',padding:'6px 0'}}>Vacant — no {occLabel.toLowerCase()} assigned to this unit.</div>
+                    )
+                  ) : (
+                    hasTenantOnUnit ? (
+                      <>
+                        <Field label="Name">{ownerInfo.tenant_name}</Field>
+                        <Field label="Email">{ownerInfo.tenant_email}</Field>
+                        <Field label="Phone">{ownerInfo.tenant_phone}</Field>
+                        <Field label="Tenure">{ownerInfo.tenant_tenure}</Field>
+                      </>
+                    ) : (
+                      <div style={{fontSize:13,color:'#61707D',padding:'6px 0'}}>Vacant — no {occLabel.toLowerCase()} assigned to this unit.</div>
+                    )
+                  )}
+                </Section>
+              );
+            })()}
 
-            {assignment && (
-              <Section label={assignment.tenure === 'Owner' ? 'Ownership' : 'Annual Contract'}>
-                {assignment.tenure === 'Owner' ? (
-                  <Field label="Ownership start">{assignment.ownership_start}</Field>
-                ) : (() => {
-                  const monthly = Number(assignment.monthly_payment_aed) || 0;
-                  const cheques = Number(assignment.cheques_per_year) || 1;
-                  const annual  = monthly * 12;
-                  const perCheque = cheques > 0 ? Math.round(annual / cheques) : annual;
-                  return (
-                    <>
-                      <Field label="Annual rent">{annual ? fmt(annual) : '—'}</Field>
-                      <Field label="Cheques per year">{cheques}</Field>
-                      <Field label="Per cheque">{annual ? fmt(perCheque) : '—'}</Field>
-                      <Field label="Contract #">{assignment.contract_number || '—'}</Field>
-                      <Field label="Lease start">{assignment.lease_start}</Field>
-                      <Field label="Lease end">{assignment.lease_end}</Field>
-                    </>
-                  );
-                })()}
-              </Section>
-            )}
+            {(() => {
+              // Two paths for the lease / ownership block: residential uses
+              // resident_assignments (cheques + contract come from there);
+              // non-residential reads from the unit's denormalised tenant_*
+              // fields (no cheques captured for commercial / land yet).
+              const propType   = (building && building.property_type) || 'Residential';
+              const isPersonal = propType === 'Residential' || propType === 'Villa';
+              if (isPersonal && assignment) {
+                return (
+                  <Section label={assignment.tenure === 'Owner' ? 'Ownership' : 'Annual Contract'}>
+                    {assignment.tenure === 'Owner' ? (
+                      <Field label="Ownership start">{assignment.ownership_start}</Field>
+                    ) : (() => {
+                      const monthly = Number(assignment.monthly_payment_aed) || 0;
+                      const cheques = Number(assignment.cheques_per_year) || 1;
+                      const annual  = monthly * 12;
+                      const perCheque = cheques > 0 ? Math.round(annual / cheques) : annual;
+                      return (
+                        <>
+                          <Field label="Annual rent">{annual ? fmt(annual) : '—'}</Field>
+                          <Field label="Cheques per year">{cheques}</Field>
+                          <Field label="Per cheque">{annual ? fmt(perCheque) : '—'}</Field>
+                          <Field label="Contract #">{assignment.contract_number || '—'}</Field>
+                          <Field label="Lease start">{assignment.lease_start}</Field>
+                          <Field label="Lease end">{assignment.lease_end}</Field>
+                        </>
+                      );
+                    })()}
+                  </Section>
+                );
+              }
+              if (!isPersonal && ownerInfo && (ownerInfo.tenant_lease_start || ownerInfo.tenant_lease_end || ownerInfo.tenant_monthly_payment_aed || ownerInfo.tenant_contract_number)) {
+                const monthly = Number(ownerInfo.tenant_monthly_payment_aed) || 0;
+                const annual  = monthly * 12;
+                return (
+                  <Section label={ownerInfo.tenant_tenure === 'Owner' ? 'Ownership' : 'Annual Contract'}>
+                    <Field label="Monthly rent">{monthly ? fmt(monthly) : '—'}</Field>
+                    <Field label="Annual rent">{annual ? fmt(annual) : '—'}</Field>
+                    <Field label="Contract #">{ownerInfo.tenant_contract_number}</Field>
+                    <Field label="Lease start">{ownerInfo.tenant_lease_start}</Field>
+                    <Field label="Lease end">{ownerInfo.tenant_lease_end}</Field>
+                  </Section>
+                );
+              }
+              return null;
+            })()}
 
             {(() => {
               const InvoiceRow = ({ i, accentColor }) => {

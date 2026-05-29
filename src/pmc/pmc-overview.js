@@ -307,7 +307,7 @@ const PMCOverviewPage = ({ setPage }) => {
         {/* ============ PORTFOLIO SUMMARY ============ */}
         <div style={groupEyebrow}>Portfolio Summary</div>
         <div className="kpi-row" style={{gridTemplateColumns:'repeat(5, minmax(0, 1fr))',marginBottom:0}}>
-          <KpiCard label="Total Properties Selected" value={stats.selectedPropsCount + ' ' + (stats.selectedPropsCount === 1 ? 'property' : 'properties')} page="properties"/>
+          <KpiCard label="Total Assets Selected" value={stats.selectedPropsCount + ' ' + (stats.selectedPropsCount === 1 ? 'asset' : 'assets')} page="properties"/>
           <KpiCard label="Units Occupied"            value={stats.occupied + ' / ' + stats.totalUnits}        page="properties"/>
           <KpiCard label="Occupancy Rate"            value={stats.occupancyRate + '%'}                         page="properties"/>
           <KpiCard label="Operating Income Collected" value={fmt(stats.monthCollected)} color="#5a6b4f" page="payment"/>

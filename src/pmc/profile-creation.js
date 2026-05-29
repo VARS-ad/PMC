@@ -1335,10 +1335,14 @@ const PCBulkUpload = ({ section }) => {
 // Export the currently-stored buildings + units for one property type as an
 // xlsx file in the same column shape as BUILDINGS_BY_TYPE[typeKey].headers,
 // so the user can review what's onboarded and (if needed) round-trip via the
-// upload picker. Owner data is read from the unit row. Resident / tenant /
-// client columns are emitted blank (those records aren't stored on the unit
-// — residents live in Supabase Auth, and non-residential types do not get
-// Auth accounts).
+// upload picker.
+//   - Owner block is read from the unit row.
+//   - Residential: Resident block is hydrated from profiles +
+//     resident_assignments + auth.users.email (via the get_emails_for_profiles
+//     RPC). Resident temp password is left blank so re-uploading in Update
+//     mode doesn't reset anyone's password.
+//   - Commercial / Villa / Commercial Land: Tenant/Client/Villa-resident
+//     block is hydrated from the denormalised units.tenant_* columns.
 async function downloadCurrentBuildingsAsXlsx(typeKey) {
   const cfg = BUILDINGS_BY_TYPE[typeKey];
   if (!cfg) return;
@@ -1352,19 +1356,67 @@ async function downloadCurrentBuildingsAsXlsx(typeKey) {
   const ids = buildings.map(b => b.id);
   const { data: units, error: uErr } = await supabaseClient
     .from('units')
-    .select('id, building_id, floor, unit_number, owner_name, owner_phone, owner_email, owner_passport_number, owner_emirates_id, purchase_date')
+    .select('id, building_id, floor, unit_number, owner_name, owner_phone, owner_email, owner_passport_number, owner_emirates_id, purchase_date, tenant_name, tenant_email, tenant_phone, tenant_tenure, tenant_contract_number, tenant_lease_start, tenant_lease_end, tenant_monthly_payment_aed')
     .in('building_id', ids)
     .order('floor', { ascending: true })
     .order('unit_number', { ascending: true });
   if (uErr) { alert('Could not load units: ' + uErr.message); return; }
   const unitsByBuilding = {};
+  const unitIds = [];
   for (const u of (units || [])) {
     (unitsByBuilding[u.building_id] = unitsByBuilding[u.building_id] || []).push(u);
+    unitIds.push(u.id);
   }
+
+  // For Residential we hydrate the Resident block from
+  // resident_assignments + profiles + auth.users.email so the export is a
+  // complete replica of the live DB. unit_id → { ...resident fields } map.
+  const residentByUnit = {};
+  if (typeKey === 'Residential' && unitIds.length > 0) {
+    const { data: assigns } = await supabaseClient
+      .from('resident_assignments')
+      .select('profile_id, unit_id, tenure, lease_start, lease_end, monthly_payment_aed, ownership_start, cheques_per_year, contract_number')
+      .in('unit_id', unitIds);
+    const profileIds = Array.from(new Set((assigns || []).map(a => a.profile_id).filter(Boolean)));
+    let profileById = {};
+    let emailById = {};
+    if (profileIds.length > 0) {
+      const [{ data: profs }, emailsResp] = await Promise.all([
+        supabaseClient.from('profiles').select('id, full_name, phone, date_of_birth, passport_number, emirates_id, employer, occupation').in('id', profileIds),
+        supabaseClient.rpc('get_emails_for_profiles', { p_ids: profileIds }),
+      ]);
+      (profs || []).forEach(p => { profileById[p.id] = p; });
+      // The RPC is PMC-only; if the caller isn't PMC it just returns []. We
+      // tolerate that — emails will be blank but everything else still exports.
+      ((emailsResp && emailsResp.data) || []).forEach(r => { emailById[r.id] = r.email; });
+    }
+    for (const a of (assigns || [])) {
+      const p = profileById[a.profile_id] || {};
+      residentByUnit[a.unit_id] = {
+        full_name:           p.full_name           || '',
+        email:               emailById[a.profile_id] || '',
+        phone:               p.phone               || '',
+        date_of_birth:       p.date_of_birth       || '',
+        passport:            p.passport_number     || '',
+        emirates_id:         p.emirates_id         || '',
+        employer:            p.employer            || '',
+        occupation:          p.occupation          || '',
+        tenure:              a.tenure              || '',
+        lease_start:         a.lease_start         || '',
+        lease_end:           a.lease_end           || '',
+        monthly_payment_aed: a.monthly_payment_aed ?? '',
+        ownership_start:     a.ownership_start     || '',
+        cheques_per_year:    a.cheques_per_year    ?? '',
+        contract_number:     a.contract_number     || '',
+      };
+    }
+  }
+
   // Single source-of-truth row builder: for each column name, return the
   // value for THIS unit row. Building-level fields are emitted only on the
   // first row of each building (mirroring the template style).
   const valueFor = (h, b, u, isFirstRow) => {
+    const r = u ? (residentByUnit[u.id] || null) : null;
     switch (h) {
       // Identity columns differ per type — accept any of the three.
       case 'Building name':
@@ -1389,7 +1441,39 @@ async function downloadCurrentBuildingsAsXlsx(typeKey) {
       case 'Owner passport':     return u && u.owner_passport_number || '';
       case 'Owner Emirates ID':  return u && u.owner_emirates_id || '';
       case 'Purchase date':      return u && u.purchase_date || '';
-      // Everything else (Resident / Tenant / Client / lease cols) — blank.
+
+      // RESIDENT block (Residential / Villa templates). Residential pulls
+      // from resident_assignments + profiles; Villa pulls from units.tenant_*.
+      case 'Resident full name':      return r ? r.full_name : (u && u.tenant_name  || '');
+      case 'Resident email':          return r ? r.email     : (u && u.tenant_email || '');
+      case 'Resident phone':          return r ? r.phone     : (u && u.tenant_phone || '');
+      // Always emit a blank temp password on export so re-uploading in
+      // "Update existing" mode does NOT reset anyone's password.
+      case 'Resident temp password':  return '';
+      case 'Resident date of birth':  return r ? r.date_of_birth   : '';
+      case 'Resident passport':       return r ? r.passport        : '';
+      case 'Resident Emirates ID':    return r ? r.emirates_id     : '';
+      case 'Resident employer':       return r ? r.employer        : '';
+      case 'Resident occupation':     return r ? r.occupation      : '';
+      case 'Resident tenure':         return r ? r.tenure          : (u && u.tenant_tenure || '');
+
+      // TENANT / CLIENT block (Commercial / Commercial Land templates) +
+      // shared lease columns also used by the Resident block above.
+      case 'Tenant name':   return u && u.tenant_name  || '';
+      case 'Tenant email':  return u && u.tenant_email || '';
+      case 'Tenant phone':  return u && u.tenant_phone || '';
+      case 'Tenant tenure': return u && u.tenant_tenure || '';
+      case 'Client name':   return u && u.tenant_name  || '';
+      case 'Client email':  return u && u.tenant_email || '';
+      case 'Client phone':  return u && u.tenant_phone || '';
+
+      case 'Contract #':            return r ? r.contract_number     : (u && u.tenant_contract_number || '');
+      case 'Lease start':           return r ? r.lease_start         : (u && u.tenant_lease_start     || '');
+      case 'Lease end':             return r ? r.lease_end           : (u && u.tenant_lease_end       || '');
+      case 'Monthly payment (AED)': return r ? r.monthly_payment_aed : (u && u.tenant_monthly_payment_aed != null ? u.tenant_monthly_payment_aed : '');
+      case 'Ownership start':       return r ? r.ownership_start     : '';
+      case 'Cheques per year':      return r ? r.cheques_per_year    : '';
+
       default: return '';
     }
   };
@@ -1569,6 +1653,7 @@ async function uploadBuildingsBulk(parsedRows, conflictMode = 'skip') {
     let unitsAdded = 0;
     let unitsSeen  = b.units.length;
     let residentsQueued = 0;
+    let tenantsRecorded = 0;
     if (b.units.length) {
       // Existing units for dedup. For Villa / Commercial Land where unit_number
       // is null, we treat the whole building as one slot (don't dedup).
@@ -1588,13 +1673,31 @@ async function uploadBuildingsBulk(parsedRows, conflictMode = 'skip') {
         // owner_is_resident flag: true if resident email matches owner email.
         const ownerIsResident = !!(u.resident && owner && u.resident.email && owner.email && u.resident.email.toLowerCase() === owner.email.toLowerCase());
 
+        // Non-residential tenant block — Villa / Commercial / Commercial Land
+        // store the tenant/client/villa-resident contact info denormalised on
+        // the unit row itself (no Supabase Auth account is created). For
+        // Residential we leave tenant_* alone; the resident lives in
+        // auth.users + profiles + resident_assignments instead.
+        const tenantPayload = (propType !== 'Residential' && u.resident && (u.resident.full_name || u.resident.email || u.resident.phone)) ? {
+          tenant_name:                 u.resident.full_name         || null,
+          tenant_email:                u.resident.email             || null,
+          tenant_phone:                u.resident.phone             || null,
+          tenant_tenure:               u.resident.tenure            || null,
+          tenant_contract_number:      u.resident.contract_number   || null,
+          tenant_lease_start:          u.resident.lease_start       || null,
+          tenant_lease_end:            u.resident.lease_end         || null,
+          tenant_monthly_payment_aed:  u.resident.monthly_payment_aed != null ? u.resident.monthly_payment_aed : null,
+        } : {};
+        const hasTenantPayload = Object.keys(tenantPayload).length > 0;
+
         const key = u.unit_number || '__solo__';
         const existing = existingByNumber[key];
         let unitId;
         if (existing) {
           unitId = existing.id;
-          if (conflictMode === 'update' || Object.keys(ownerPayload).length) {
-            await supabaseClient.from('units').update({ ...ownerPayload, owner_is_resident: ownerIsResident }).eq('id', unitId);
+          if (conflictMode === 'update' || Object.keys(ownerPayload).length || hasTenantPayload) {
+            await supabaseClient.from('units').update({ ...ownerPayload, ...tenantPayload, owner_is_resident: ownerIsResident }).eq('id', unitId);
+            if (hasTenantPayload) tenantsRecorded++;
           }
         } else {
           // For Villa / Commercial Land we still need a placeholder unit row
@@ -1604,6 +1707,7 @@ async function uploadBuildingsBulk(parsedRows, conflictMode = 'skip') {
             floor: u.floor != null && !isNaN(u.floor) ? u.floor : (isStructure ? null : 1),
             unit_number: u.unit_number || (bname.slice(0, 24) + '-SOLO'),
             ...ownerPayload,
+            ...tenantPayload,
             owner_is_resident: ownerIsResident,
           };
           // Structure rows missing required floor/unit_number are skipped.
@@ -1612,13 +1716,13 @@ async function uploadBuildingsBulk(parsedRows, conflictMode = 'skip') {
           if (uErr) { results.push({ building: bname, ok: false, error: 'unit insert (' + (u.unit_number || 'solo') + '): ' + uErr.message }); continue; }
           unitId = newU.id;
           unitsAdded++;
+          if (hasTenantPayload) tenantsRecorded++;
         }
 
         // Queue resident for bulk-onboard if present — ONLY for Residential
         // property type. Per product spec, Villas, Commercial buildings and
-        // Commercial Land record contact info on the unit row only; no
-        // Supabase Auth account is created for their tenants / clients /
-        // residents. (Their templates also have no temp-password column.)
+        // Commercial Land record contact info on the unit row (tenant_*)
+        // above; no Supabase Auth account is created for them.
         if (propType === 'Residential' && u.resident && u.resident.full_name && u.resident.email) {
           residentRecords.push({
             email:                   u.resident.email,
@@ -1645,7 +1749,7 @@ async function uploadBuildingsBulk(parsedRows, conflictMode = 'skip') {
         }
       }
     }
-    results.push({ building: bname, ok: true, action: buildingAction, property_type: propType, units_added: unitsAdded, units_skipped: unitsSeen - unitsAdded, residents_queued: residentsQueued });
+    results.push({ building: bname, ok: true, action: buildingAction, property_type: propType, units_added: unitsAdded, units_skipped: unitsSeen - unitsAdded, residents_queued: residentsQueued, tenants_recorded: tenantsRecorded });
   }
 
   // Bulk-onboard any residents found on the unit rows. We POST in one batch
