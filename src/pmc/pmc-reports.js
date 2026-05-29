@@ -4,30 +4,42 @@
 // Supabase, scoped to selectedProperties from the top-bar selector.
 
 const PMCReportsPage = () => {
-  const { selectedProperties = [] } = useApp();
+  // Time range now pulls from AppContext for consistency with Overview /
+  // Assets / Service Charges. Reports formerly had its own 6m/24m/YTD/All
+  // dropdown; the shared TimeRangePicker uses 1m/2m/3m/12m/custom, so
+  // users wanting 24m drop into Custom range.
+  const { selectedProperties = [], timeRange, customStart, customEnd } = useApp();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [stats, setStats] = useState(null);
-  const [section, setSection] = useState('finance');
+  const [section, setSection] = useState('portfolio');
   const [showDownload, setShowDownload] = useState(false);
-  const [timeRange, setTimeRange] = useState('12m'); // '3m' | '6m' | '12m' | 'ytd' | '24m'
 
-  // Time-range cutoff for filtering
-  const cutoff = (() => {
-    const d = new Date();
-    if (timeRange === '3m') d.setMonth(d.getMonth() - 3);
-    else if (timeRange === '6m') d.setMonth(d.getMonth() - 6);
-    else if (timeRange === '12m') d.setMonth(d.getMonth() - 12);
-    else if (timeRange === '24m') d.setMonth(d.getMonth() - 24);
-    else if (timeRange === 'ytd') { d.setMonth(0); d.setDate(1); }
-    else return null;
-    return d.toISOString().slice(0, 10);
+  // Cross-filter state — clicking a chart element (a slice / bar / row)
+  // sets these to re-scope the rest of the section's content. Reset
+  // whenever the user switches sections so filters don't bleed across.
+  const [crossFilter, setCrossFilter] = useState({ buildingId: null, propertyType: null, month: null });
+  useEffect(() => { setCrossFilter({ buildingId: null, propertyType: null, month: null }); }, [section]);
+
+  // Period bounds from AppContext.
+  const _monthsBackMap = { '1m': 1, '2m': 2, '3m': 3, '12m': 12 };
+  const monthsBack = timeRange === 'custom' ? null : (_monthsBackMap[timeRange] || 1);
+  const periodBounds = (() => {
+    if (timeRange === 'custom' && customStart && customEnd) return { start: customStart, end: customEnd };
+    const _now = new Date();
+    const start = new Date(_now.getFullYear(), _now.getMonth() - (monthsBack || 1) + 1, 1).toISOString().slice(0, 10);
+    const end   = _now.toISOString().slice(0, 10);
+    return { start, end };
   })();
-  const monthCount = timeRange === '3m' ? 3
-                  : timeRange === '6m' ? 6
-                  : timeRange === '24m' ? 24
-                  : timeRange === 'ytd' ? new Date().getMonth() + 1
-                  : 12;
+  const cutoff = periodBounds.start;
+  const monthCount = (() => {
+    if (timeRange === 'custom') {
+      if (!customStart || !customEnd) return 1;
+      const s = new Date(customStart); const e = new Date(customEnd);
+      return Math.max(1, Math.min(24, (e.getFullYear() - s.getFullYear()) * 12 + (e.getMonth() - s.getMonth()) + 1));
+    }
+    return monthsBack || 1;
+  })();
 
   useEffect(() => {
     let mounted = true;
@@ -36,7 +48,7 @@ const PMCReportsPage = () => {
       if (!supabaseClient) { setError('Supabase not initialized'); setLoading(false); return; }
       try {
         const filterB = selectedProperties.length > 0 ? selectedProperties : null;
-        const { data: buildings } = await supabaseClient.from('buildings').select('id,name');
+        const { data: buildings } = await supabaseClient.from('buildings').select('id,name,property_type');
         const { data: units } = await supabaseClient.from('units').select('id,building_id');
         const filteredUnits = (units || []).filter(u => !filterB || filterB.includes(u.building_id));
         const fIds = filteredUnits.map(u => u.id);
@@ -52,7 +64,10 @@ const PMCReportsPage = () => {
           { data: bookings },
         ] = await Promise.all([
           supabaseClient.from('resident_assignments').select('profile_id,unit_id,tenure,monthly_payment_aed,lease_end').in('unit_id', probeIds),
-          supabaseClient.from('invoices').select('amount_aed,status,due_date,source_type,created_at').in('unit_id', probeIds),
+          // unit_id now included so the Portfolio section can roll up by
+          // building + property_type for the by-type chart and the top-
+          // contributors list.
+          supabaseClient.from('invoices').select('unit_id,amount_aed,status,due_date,source_type,created_at').in('unit_id', probeIds),
           supabaseClient.from('service_requests').select('category,status,priority,created_at').in('unit_id', probeIds),
           supabaseClient.from('visits').select('type,status,visit_date,created_at').in('unit_id', probeIds),
           supabaseClient.from('amenity_bookings').select('amenity_name,status,booking_date,created_at').in('building_id', probeB),
@@ -158,8 +173,53 @@ const PMCReportsPage = () => {
         // Visitor type donut data (top 5)
         const visitTypeSorted = Object.entries(visitsByType).sort((a, b) => b[1] - a[1]).slice(0, 6);
 
+        // ============ Portfolio rollups (Portfolio section) ============
+        // Cross-cut money flows by building + by property_type so the
+        // Portfolio section can render the Revenue-by-type chart and the
+        // Top revenue contributors list (both clickable for cross-filter).
+        const unitToBuilding = Object.fromEntries(filteredUnits.map(u => [u.id, u.building_id]));
+        const buildingMap = Object.fromEntries((buildings || []).map(b => [b.id, b]));
+        // Treat "Pending" + "Overdue" as outstanding here. The Reports page
+        // uses the raw invoice.status field (no due-date re-bucketing) so
+        // the numbers tie back to the source-of-truth invoices table.
+        const isPaid       = (st) => st === 'Paid';
+        const isCollectable= (st) => st !== 'Cancelled';
+        const invByBuilding = {};
+        const revenueByType = {
+          'Residential':     { billed: 0, collected: 0, outstanding: 0, count: 0 },
+          'Commercial':      { billed: 0, collected: 0, outstanding: 0, count: 0 },
+          'Villa':           { billed: 0, collected: 0, outstanding: 0, count: 0 },
+          'Commercial Land': { billed: 0, collected: 0, outstanding: 0, count: 0 },
+        };
+        cutInv.forEach(i => {
+          const bId = unitToBuilding[i.unit_id];
+          if (!bId) return;
+          const amt = Number(i.amount_aed || 0);
+          if (!isCollectable(i.status)) return;
+          if (!invByBuilding[bId]) invByBuilding[bId] = { billed: 0, collected: 0, outstanding: 0, count: 0 };
+          invByBuilding[bId].billed += amt;
+          invByBuilding[bId].count++;
+          if (isPaid(i.status)) invByBuilding[bId].collected += amt;
+          else                  invByBuilding[bId].outstanding += amt;
+          const b = buildingMap[bId];
+          const t = b && revenueByType[b.property_type];
+          if (t) {
+            t.billed += amt; t.count++;
+            if (isPaid(i.status)) t.collected += amt;
+            else                  t.outstanding += amt;
+          }
+        });
+        // Buildings-per-type for the chart's "· N assets" subline
+        const buildingsByType = { 'Residential': 0, 'Commercial': 0, 'Villa': 0, 'Commercial Land': 0 };
+        (buildings || []).forEach(b => { if (buildingsByType[b.property_type] != null) buildingsByType[b.property_type]++; });
+        const topContributors = Object.entries(invByBuilding)
+          .map(([bId, v]) => ({ id: bId, name: buildingMap[bId]?.name || '—', property_type: buildingMap[bId]?.property_type || null, ...v }))
+          .filter(b => b.billed > 0)
+          .sort((a, b) => b.billed - a.billed);
+
         setStats({
           buildings: filterB ? (buildings || []).filter(b => filterB.includes(b.id)) : (buildings || []),
+          unitToBuilding, buildingMap, invByBuilding, revenueByType, buildingsByType, topContributors,
           totalUnits, occupiedUnits, vacant, occupancyRate, owners, tenants,
           monthlyRevenue, totalInvoiced, collected, pending, overdue, collectionRate,
           leasesExpSoon, leasesExpired,
@@ -195,11 +255,19 @@ const PMCReportsPage = () => {
     return 'AED ' + Math.round(n);
   };
 
+  // Restructured Reports sections — Portfolio is the new landing rollup;
+  // Finance & Revenue split into Revenue and Collections so the "where
+  // money comes from" story is separate from "how well we collect it".
+  // Compliance dropped per user direction (rare in landlord use).
+  // NB: revenue / collections / occupancy / operations are stubs in this
+  // milestone — they keep using the old FinanceReports/Occupancy/Operations
+  // components for now. Portfolio is the new template.
   const sections = [
-    { id: 'finance',    label: 'Finance & Revenue' },
-    { id: 'occupancy',  label: 'Occupancy & Leasing' },
-    { id: 'operations', label: 'Operations' },
-    { id: 'compliance', label: 'Compliance' },
+    { id: 'portfolio',   label: 'Portfolio' },
+    { id: 'revenue',     label: 'Revenue' },
+    { id: 'collections', label: 'Collections' },
+    { id: 'occupancy',   label: 'Occupancy' },
+    { id: 'operations',  label: 'Operations' },
   ];
 
   // Build the Download Data dataTypes array. Each report section is one
@@ -378,15 +446,8 @@ const PMCReportsPage = () => {
         <div>
           <h1>Reports</h1>
         </div>
-        <div style={{display:'flex',gap:10,alignItems:'center'}}>
-          <select className="form-input" value={timeRange} onChange={e => setTimeRange(e.target.value)} style={{width:'auto',minWidth:170,padding:'9px 14px',fontSize:13}}>
-            <option value="3m">Last 3 months</option>
-            <option value="6m">Last 6 months</option>
-            <option value="12m">Last 12 months</option>
-            <option value="24m">Last 24 months</option>
-            <option value="ytd">Year to date</option>
-            <option value="all">All time</option>
-          </select>
+        <div style={{display:'flex',gap:10,alignItems:'center',flexWrap:'wrap'}}>
+          <TimeRangePicker/>
           <button className="btn" onClick={() => setShowDownload(true)} disabled={!stats}>Download Data</button>
         </div>
       </div>
@@ -407,10 +468,282 @@ const PMCReportsPage = () => {
 
       {loading || !stats ? (
         <div className="card"><div style={{padding:24,color:'var(--text-muted)',fontSize:13}}>Loading…</div></div>
-      ) : section === 'finance' ? <FinanceReports stats={stats} fmt={fmt} fmtShort={fmtShort}/> :
-          section === 'occupancy' ? <OccupancyReports stats={stats} fmt={fmt}/> :
+      ) : section === 'portfolio' ? <PortfolioReports stats={stats} fmt={fmt} fmtShort={fmtShort} crossFilter={crossFilter} setCrossFilter={setCrossFilter} periodBounds={periodBounds}/> :
+          section === 'revenue'    ? <FinanceReports  stats={stats} fmt={fmt} fmtShort={fmtShort}/> :
+          section === 'collections'? <FinanceReports  stats={stats} fmt={fmt} fmtShort={fmtShort}/> :
+          section === 'occupancy'  ? <OccupancyReports stats={stats} fmt={fmt}/> :
           section === 'operations' ? <OperationsReports stats={stats}/> :
           <ComplianceReports stats={stats}/>}
+    </div>
+  );
+};
+
+// ==================== PORTFOLIO REPORT (new template) ====================
+// Hero KPI strip + Revenue-by-type + Collection trend + Top contributors,
+// all cross-filter wired: clicking a type row / a month bar / a contributor
+// re-scopes the rest of the section. Visual idiom matches AssetFinancialPanel
+// (gradient bars, soft drop shadow, warm palette).
+
+const _PR_TYPE_COLORS = { 'Residential':'#5a6b4f', 'Commercial':'#3E4C59', 'Villa':'#a07d3c', 'Commercial Land':'#61707D' };
+const _PR_TYPE_LABELS = { 'Residential':'Residential', 'Commercial':'Commercial', 'Villa':'Villas', 'Commercial Land':'Lands' };
+
+// Inline timeline chart for the Portfolio collection trend. Same idiom
+// as AssetFinancialPanel.TimelineChart but trimmed for embedding inside
+// a card on the Reports page.
+const PortfolioTrendChart = ({ data, selectedMonth, onSelectMonth }) => {
+  const [hoveredIdx, setHoveredIdx] = useState(null);
+  const W = 1000, H = 260;
+  const padTop = 16, padBottom = 46, padLeft = 56, padRight = 16;
+  const chartW = W - padLeft - padRight, chartH = H - padTop - padBottom;
+  const groupW = chartW / Math.max(1, data.length);
+  const barW = Math.min(36, groupW * 0.58);
+  const maxStacked = Math.max(1, ...data.map(d => d.collected + d.outstanding));
+  const niceStep = (rough) => {
+    const exp = Math.pow(10, Math.floor(Math.log10(Math.max(1, rough))));
+    const f = rough / exp;
+    let r;
+    if (f >= 7) r = 10; else if (f >= 3) r = 5; else if (f >= 1.5) r = 2; else r = 1;
+    return r * exp;
+  };
+  const step = niceStep(maxStacked / 4);
+  const yMax = Math.ceil(maxStacked / step) * step;
+  const ySteps = Math.round(yMax / step);
+  const y = (v) => padTop + chartH - (v / yMax) * chartH;
+  const fmtTick = (v) => v >= 1000000 ? (v/1000000).toFixed(1) + 'M' : v >= 1000 ? Math.round(v/1000) + 'k' : Math.round(v);
+  const showLabel = (i) => data.length <= 18 || i % 2 === 0;
+  const tooltipLeftPct = hoveredIdx != null ? ((padLeft + (hoveredIdx + 0.5) * groupW) / W) * 100 : 0;
+
+  return (
+    <div style={{position:'relative'}}>
+      <svg viewBox={'0 0 ' + W + ' ' + H} preserveAspectRatio="xMidYMid meet" style={{display:'block',width:'100%',height:260,overflow:'visible'}}>
+        <defs>
+          <linearGradient id="prt-grad-col" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#7e8f73"/><stop offset="100%" stopColor="#475641"/></linearGradient>
+          <linearGradient id="prt-grad-col-hi" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#9aa78f"/><stop offset="100%" stopColor="#5a6b4f"/></linearGradient>
+          <linearGradient id="prt-grad-out" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#b87870"/><stop offset="100%" stopColor="#7e3f36"/></linearGradient>
+          <linearGradient id="prt-grad-out-hi" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#c89289"/><stop offset="100%" stopColor="#8b4a42"/></linearGradient>
+          <filter id="prt-shadow" x="-30%" y="-30%" width="160%" height="160%">
+            <feGaussianBlur in="SourceAlpha" stdDeviation="2.2"/>
+            <feOffset dx="0" dy="2.5"/>
+            <feComponentTransfer><feFuncA type="linear" slope="0.18"/></feComponentTransfer>
+            <feMerge><feMergeNode/><feMergeNode in="SourceGraphic"/></feMerge>
+          </filter>
+        </defs>
+        {Array.from({ length: ySteps + 1 }).map((_, i) => {
+          const v = i * step, ly = y(v);
+          return <g key={i}>
+            <line x1={padLeft} x2={W - padRight} y1={ly} y2={ly} stroke="#eef0ec" strokeDasharray={i === 0 ? '0' : '3 4'} strokeWidth="1"/>
+            <text x={padLeft - 10} y={ly + 4} fontSize="12" fill="#8a98a2" textAnchor="end" fontFamily="inherit">{fmtTick(v)}</text>
+          </g>;
+        })}
+        {data.map((d, i) => {
+          const laneX = padLeft + i * groupW;
+          const cx = laneX + (groupW - barW) / 2;
+          const colY = y(d.collected), colH = padTop + chartH - colY;
+          const outY = y(d.collected + d.outstanding), outH = colY - outY;
+          const total = d.collected + d.outstanding;
+          const isHovered = hoveredIdx === i;
+          const isSelected = selectedMonth && selectedMonth === d.month;
+          const dim = (selectedMonth || hoveredIdx != null) && !isHovered && !isSelected;
+          const fillCol = isHovered || isSelected ? 'url(#prt-grad-col-hi)' : 'url(#prt-grad-col)';
+          const fillOut = isHovered || isSelected ? 'url(#prt-grad-out-hi)' : 'url(#prt-grad-out)';
+          return (
+            <g key={i} style={{cursor:'pointer'}}
+              onMouseEnter={() => setHoveredIdx(i)}
+              onMouseLeave={() => setHoveredIdx(null)}
+              onClick={() => onSelectMonth && onSelectMonth(isSelected ? null : d.month)}>
+              {(isHovered || isSelected) && <rect x={laneX + 2} y={padTop - 4} width={groupW - 4} height={chartH + 8} fill={isSelected ? '#3E4C59' : '#131F23'} opacity={isSelected ? 0.07 : 0.04} rx="8"/>}
+              <rect x={laneX} y={padTop - 4} width={groupW} height={chartH + 32} fill="transparent" pointerEvents="all"/>
+              {outH > 0 && <rect x={cx} y={outY} width={barW} height={Math.max(2, outH)} fill={fillOut} opacity={dim ? 0.4 : 0.92} rx="5" ry="5" filter="url(#prt-shadow)" style={{transition:'opacity 0.18s, fill 0.18s'}}/>}
+              {colH > 0 && <rect x={cx} y={colY} width={barW} height={Math.max(2, colH)} fill={fillCol} opacity={dim ? 0.45 : 1} rx="5" ry="5" filter="url(#prt-shadow)" style={{transition:'opacity 0.18s, fill 0.18s'}}/>}
+              {colH > 4 && <rect x={cx + 1.5} y={colY + 1.5} width={Math.max(0, barW - 3)} height={2} fill="#fff" opacity={dim ? 0.04 : 0.18} rx="1.5" pointerEvents="none"/>}
+              {showLabel(i) && <text x={cx + barW/2} y={padTop + chartH + 22} fontSize="12" fill={isSelected ? '#131F23' : '#61707D'} fontWeight={isSelected ? 700 : 500} textAnchor="middle" fontFamily="inherit">{d.label}</text>}
+              {total > 0 && !isHovered && (() => {
+                const inside = outY < padTop + 18;
+                return <text x={cx + barW/2} y={inside ? outY + 14 : outY - 8} fontSize="11" fill={inside ? '#fff' : '#131F23'} textAnchor="middle" fontWeight="700" fontFamily="inherit" opacity={dim ? 0.4 : 1} style={{textShadow: inside ? '0 1px 2px rgba(0,0,0,0.35)' : 'none'}}>{fmtTick(total)}</text>;
+              })()}
+            </g>
+          );
+        })}
+      </svg>
+      {hoveredIdx != null && (
+        <div style={{position:'absolute',top:-2,left:tooltipLeftPct + '%',transform:'translateX(-50%)',background:'#131F23',color:'#fff',padding:'10px 14px',borderRadius:8,fontSize:12,pointerEvents:'none',boxShadow:'0 6px 18px rgba(19,31,35,0.20)',whiteSpace:'nowrap',zIndex:5}}>
+          <div style={{fontWeight:700,marginBottom:4,letterSpacing:'-0.005em'}}>{data[hoveredIdx].label}</div>
+          <div style={{display:'flex',alignItems:'center',gap:8,fontSize:11,color:'#cfd6d4'}}>
+            <span style={{width:8,height:8,background:'#5a6b4f',borderRadius:2}}/>
+            <span style={{flex:1}}>Collected</span>
+            <span style={{fontWeight:600,color:'#fff'}}>AED {Math.round(data[hoveredIdx].collected).toLocaleString()}</span>
+          </div>
+          <div style={{display:'flex',alignItems:'center',gap:8,fontSize:11,color:'#cfd6d4',marginTop:3}}>
+            <span style={{width:8,height:8,background:'#8b4a42',borderRadius:2,opacity:0.82}}/>
+            <span style={{flex:1}}>Outstanding</span>
+            <span style={{fontWeight:600,color:'#fff'}}>AED {Math.round(data[hoveredIdx].outstanding).toLocaleString()}</span>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+const PortfolioKPI = ({ label, value, sub, accent }) => (
+  <div style={{position:'relative', padding:'18px 20px', background:'#fff', border:'1px solid var(--border-light)', borderRadius:10, overflow:'hidden', boxShadow:'0 1px 2px rgba(19,31,35,0.04)'}}>
+    {accent && <div style={{position:'absolute', left:0, top:0, bottom:0, width:3, background:accent}}/>}
+    <div style={{fontSize:10, letterSpacing:'0.1em', textTransform:'uppercase', color:'var(--text-muted)', fontWeight:600, marginBottom:8}}>{label}</div>
+    <div style={{fontSize:22, fontWeight:700, color:'var(--text-dark)', letterSpacing:'-0.025em', lineHeight:1.05}}>{value}</div>
+    {sub && <div style={{fontSize:11, color:'var(--text-muted)', marginTop:6, fontWeight:500}}>{sub}</div>}
+  </div>
+);
+
+const PortfolioReports = ({ stats, fmt, fmtShort, crossFilter, setCrossFilter, periodBounds }) => {
+  // Apply cross-filter — buildingId beats propertyType. The current
+  // rollups (revenueByType, topContributors) come pre-cut by period;
+  // we just narrow them by the active filter for the dependent visuals.
+  const useFiltered = !!(crossFilter.buildingId || crossFilter.propertyType);
+  const filteredBuildings = stats.topContributors.filter(b => {
+    if (crossFilter.buildingId && b.id !== crossFilter.buildingId) return false;
+    if (crossFilter.propertyType && b.property_type !== crossFilter.propertyType) return false;
+    return true;
+  });
+  const filteredTotals = filteredBuildings.reduce((a, b) => ({
+    billed: a.billed + b.billed, collected: a.collected + b.collected, outstanding: a.outstanding + b.outstanding, count: a.count + b.count,
+  }), { billed: 0, collected: 0, outstanding: 0, count: 0 });
+  const billed      = useFiltered ? filteredTotals.billed      : stats.totalInvoiced;
+  const collected   = useFiltered ? filteredTotals.collected   : stats.collected;
+  const outstanding = useFiltered ? filteredTotals.outstanding : (stats.totalInvoiced - stats.collected);
+  const collRate    = billed > 0 ? Math.round((collected / billed) * 100) : 0;
+  const invoiceCount = useFiltered ? filteredTotals.count : stats.filteredInvoiceCount;
+
+  // Revenue-by-type rows (always show all 4 — clicking re-filters)
+  const byTypeRows = ['Residential','Commercial','Villa','Commercial Land']
+    .map(t => ({ key: t, ...stats.revenueByType[t], buildings: stats.buildingsByType[t] || 0 }))
+    .filter(t => t.buildings > 0)
+    .sort((a, b) => b.billed - a.billed);
+  const byTypeMax = Math.max(1, ...byTypeRows.map(t => t.billed));
+
+  // Top contributors — bounded to 8 for readability
+  const topShow = (useFiltered ? filteredBuildings : stats.topContributors).slice(0, 8);
+  const topMax = Math.max(1, ...topShow.map(b => b.billed));
+
+  // Collection trend — portfolio-wide series (filter scoping is a future
+  // milestone once we keep per-month/per-building tallies on stats).
+  const trendData = (stats.monthLabels || []).map((label, i) => ({
+    label, month: label,
+    collected:   stats.invSeries.paid[i] || 0,
+    outstanding: (stats.invSeries.pending[i] || 0) + (stats.invSeries.overdue[i] || 0),
+  }));
+
+  const chipBg = '#fdf6e6', chipBorder = '#efe1be', chipFg = '#7a5a1f';
+  const filterChips = [];
+  if (crossFilter.propertyType) filterChips.push({ label: 'Type: ' + _PR_TYPE_LABELS[crossFilter.propertyType], clear: () => setCrossFilter({ ...crossFilter, propertyType: null }) });
+  if (crossFilter.buildingId)   filterChips.push({ label: 'Building: ' + (stats.topContributors.find(b => b.id === crossFilter.buildingId)?.name || '—'), clear: () => setCrossFilter({ ...crossFilter, buildingId: null }) });
+  if (crossFilter.month)        filterChips.push({ label: 'Month: ' + crossFilter.month, clear: () => setCrossFilter({ ...crossFilter, month: null }) });
+
+  return (
+    <div>
+      {/* Period subline + filter chips */}
+      <div style={{display:'flex', alignItems:'center', gap:10, marginBottom:18, flexWrap:'wrap'}}>
+        <div style={{fontSize:13, color:'var(--text-secondary)', fontWeight:500, letterSpacing:'-0.01em'}}>
+          {periodBounds.start} → {periodBounds.end} · {invoiceCount} {invoiceCount === 1 ? 'invoice' : 'invoices'}
+        </div>
+        {filterChips.length > 0 && (
+          <div style={{display:'flex', gap:6, alignItems:'center', flexWrap:'wrap'}}>
+            {filterChips.map((c, i) => (
+              <span key={i} style={{display:'inline-flex', alignItems:'center', gap:6, padding:'4px 8px 4px 10px', background:chipBg, border:'1px solid ' + chipBorder, borderRadius:14, fontSize:11, color:chipFg, fontWeight:600}}>
+                {c.label}
+                <button onClick={c.clear} style={{background:'transparent', border:'none', color:chipFg, cursor:'pointer', fontSize:14, lineHeight:1, padding:0}}>×</button>
+              </span>
+            ))}
+            <button onClick={() => setCrossFilter({ buildingId: null, propertyType: null, month: null })} style={{padding:'4px 10px', fontSize:11, background:'transparent', border:'1px solid var(--border-light)', borderRadius:14, color:'var(--text-muted)', cursor:'pointer'}}>Clear all</button>
+          </div>
+        )}
+      </div>
+
+      {/* Hero KPI strip */}
+      <div style={{display:'grid', gridTemplateColumns:'repeat(4, minmax(0, 1fr))', gap:12, marginBottom:18}}>
+        <PortfolioKPI label="Total Revenue Billed" value={fmtShort(billed)}      sub={fmt(billed)}                          accent="#3E4C59"/>
+        <PortfolioKPI label="Collected"            value={fmtShort(collected)}   sub={collRate + '% collection rate'}       accent="#5a6b4f"/>
+        <PortfolioKPI label="Outstanding"          value={fmtShort(outstanding)} sub={fmt(outstanding)}                     accent="#8b4a42"/>
+        <PortfolioKPI label="Avg ticket"           value={invoiceCount > 0 ? fmtShort(billed / invoiceCount) : 'AED 0'} sub={invoiceCount + ' invoices'} accent="#a07d3c"/>
+      </div>
+
+      {/* Revenue by construction type */}
+      <div className="card" style={{padding:'20px 24px', marginBottom:18}}>
+        <div style={{display:'flex', alignItems:'baseline', justifyContent:'space-between', marginBottom:14}}>
+          <div style={{fontSize:11, letterSpacing:'0.1em', textTransform:'uppercase', color:'var(--text-muted)', fontWeight:600}}>Revenue by construction type</div>
+          <div style={{fontSize:11, color:'var(--text-muted)'}}>Click a row to focus the section on that type</div>
+        </div>
+        {byTypeRows.length === 0 ? (
+          <div style={{color:'var(--text-muted)', fontSize:13, padding:'8px 0'}}>No revenue recorded in this period.</div>
+        ) : byTypeRows.map(t => {
+          const active = crossFilter.propertyType === t.key;
+          const dim = crossFilter.propertyType && !active;
+          const widthPct = Math.max(2, Math.round((t.billed / byTypeMax) * 100));
+          const collWidthPct = t.billed > 0 ? Math.round((t.collected / t.billed) * widthPct) : 0;
+          const collRate = t.billed > 0 ? Math.round((t.collected / t.billed) * 100) : 0;
+          return (
+            <div key={t.key}
+              onClick={() => setCrossFilter({ ...crossFilter, propertyType: active ? null : t.key, buildingId: null })}
+              style={{display:'grid', gridTemplateColumns:'170px 1fr 130px 100px', gap:14, alignItems:'center', padding:'12px 8px', cursor:'pointer', borderRadius:8, background: active ? 'rgba(19,31,35,0.04)' : 'transparent', opacity: dim ? 0.45 : 1, transition:'background 0.15s, opacity 0.15s'}}>
+              <div style={{display:'flex', alignItems:'center', gap:10}}>
+                <span style={{width:10, height:10, borderRadius:3, background:_PR_TYPE_COLORS[t.key]}}/>
+                <span style={{fontSize:13, fontWeight:600, color:'var(--text-dark)'}}>{_PR_TYPE_LABELS[t.key]}</span>
+                <span style={{fontSize:11, color:'var(--text-muted)'}}>· {t.buildings}</span>
+              </div>
+              <div style={{height:14, background:'#f4f1ec', borderRadius:7, overflow:'hidden', position:'relative'}}>
+                {/* Billed (lighter) bar */}
+                <div style={{position:'absolute', left:0, top:0, bottom:0, width:widthPct + '%', background:_PR_TYPE_COLORS[t.key], opacity:0.28, borderRadius:7, transition:'width 0.3s'}}/>
+                {/* Collected (solid) bar */}
+                <div style={{position:'absolute', left:0, top:0, bottom:0, width:collWidthPct + '%', background:_PR_TYPE_COLORS[t.key], borderRadius:7, transition:'width 0.3s', boxShadow:'inset 0 1px 0 rgba(255,255,255,0.18)'}}/>
+              </div>
+              <div style={{fontSize:13, fontWeight:700, color:'var(--text-dark)', textAlign:'right', letterSpacing:'-0.01em'}}>{fmtShort(t.billed)}</div>
+              <div style={{fontSize:11, color:'var(--text-muted)', textAlign:'right', fontWeight:500}}>{collRate}% coll</div>
+            </div>
+          );
+        })}
+        {/* Legend */}
+        <div style={{display:'flex', gap:14, marginTop:10, paddingTop:10, borderTop:'1px solid #f0f0f0', fontSize:10, color:'var(--text-muted)'}}>
+          <span style={{display:'inline-flex', alignItems:'center', gap:6}}><span style={{width:10, height:10, borderRadius:2, background:'#5a6b4f', opacity:0.28}}/>Billed</span>
+          <span style={{display:'inline-flex', alignItems:'center', gap:6}}><span style={{width:10, height:10, borderRadius:2, background:'#5a6b4f'}}/>Collected</span>
+        </div>
+      </div>
+
+      {/* Two-up: trend + top contributors */}
+      <div style={{display:'grid', gridTemplateColumns:'minmax(0, 1.5fr) minmax(0, 1fr)', gap:18}}>
+        <div className="card" style={{padding:'20px 24px'}}>
+          <div style={{display:'flex', alignItems:'baseline', justifyContent:'space-between', marginBottom:14}}>
+            <div style={{fontSize:11, letterSpacing:'0.1em', textTransform:'uppercase', color:'var(--text-muted)', fontWeight:600}}>Collection trend</div>
+            <div style={{fontSize:11, color:'var(--text-muted)'}}>Click a month to focus</div>
+          </div>
+          <PortfolioTrendChart data={trendData} selectedMonth={crossFilter.month} onSelectMonth={(m) => setCrossFilter({ ...crossFilter, month: m })}/>
+        </div>
+
+        <div className="card" style={{padding:'20px 24px'}}>
+          <div style={{display:'flex', alignItems:'baseline', justifyContent:'space-between', marginBottom:14}}>
+            <div style={{fontSize:11, letterSpacing:'0.1em', textTransform:'uppercase', color:'var(--text-muted)', fontWeight:600}}>Top revenue contributors</div>
+            <div style={{fontSize:11, color:'var(--text-muted)'}}>{topShow.length}/{stats.topContributors.length}</div>
+          </div>
+          {topShow.length === 0 ? (
+            <div style={{color:'var(--text-muted)', fontSize:13, padding:'8px 0'}}>No billed revenue in this period{useFiltered ? ' for the current filter' : ''}.</div>
+          ) : topShow.map(b => {
+            const active = crossFilter.buildingId === b.id;
+            const dim = crossFilter.buildingId && !active;
+            const wPct = Math.max(3, Math.round((b.billed / topMax) * 100));
+            const cColor = _PR_TYPE_COLORS[b.property_type] || '#61707D';
+            return (
+              <div key={b.id}
+                onClick={() => setCrossFilter({ ...crossFilter, buildingId: active ? null : b.id, propertyType: null })}
+                style={{display:'grid', gridTemplateColumns:'1fr 90px', gap:12, alignItems:'center', padding:'9px 6px', cursor:'pointer', borderRadius:6, background: active ? 'rgba(19,31,35,0.04)' : 'transparent', opacity: dim ? 0.4 : 1, transition:'background 0.15s, opacity 0.15s'}}>
+                <div style={{minWidth:0}}>
+                  <div style={{fontSize:12, fontWeight:600, color:'var(--text-dark)', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}>{b.name}</div>
+                  <div style={{height:5, background:'#f4f1ec', borderRadius:3, overflow:'hidden', marginTop:5}}>
+                    <div style={{height:'100%', width:wPct + '%', background:cColor, borderRadius:3}}/>
+                  </div>
+                </div>
+                <div style={{fontSize:12, fontWeight:700, color:'var(--text-dark)', textAlign:'right', letterSpacing:'-0.01em'}}>{fmtShort(b.billed)}</div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
     </div>
   );
 };
