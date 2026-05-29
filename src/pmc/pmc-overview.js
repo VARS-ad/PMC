@@ -35,28 +35,28 @@ const PMCStat = ({ label, value, color, onClick, hint }) => (
 // Unsplash CDN) so any deterministic pick below lands a real-looking cover.
 const STOCK_BUILDING_PHOTOS = {
   'Residential': [
-    'https://images.unsplash.com/photo-1512453979798-5ea266f8880c?w=1600&auto=format&fit=crop&q=85', // Dubai skyline at sunset
-    'https://images.unsplash.com/photo-1502672260266-1c1ef2d93688?w=1600&auto=format&fit=crop&q=85', // warm, plant-filled living room
-    'https://images.unsplash.com/photo-1460317442991-0ec209397118?w=1600&auto=format&fit=crop&q=85', // modern apartment balconies
-    'https://images.unsplash.com/photo-1493809842364-78817add7ffb?w=1600&auto=format&fit=crop&q=85', // bright apartment interior
+    'https://images.unsplash.com/photo-1512453979798-5ea266f8880c?w=900&auto=format&fit=crop&q=70', // Dubai skyline at sunset
+    'https://images.unsplash.com/photo-1502672260266-1c1ef2d93688?w=900&auto=format&fit=crop&q=70', // warm, plant-filled living room
+    'https://images.unsplash.com/photo-1460317442991-0ec209397118?w=900&auto=format&fit=crop&q=70', // modern apartment balconies
+    'https://images.unsplash.com/photo-1493809842364-78817add7ffb?w=900&auto=format&fit=crop&q=70', // bright apartment interior
   ],
   'Commercial': [
-    'https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?w=1600&auto=format&fit=crop&q=85', // glass office towers, looking up
-    'https://images.unsplash.com/photo-1518780664697-55e3ad937233?w=1600&auto=format&fit=crop&q=85', // white modern office block
-    'https://images.unsplash.com/photo-1554469384-e58fac16e23a?w=1600&auto=format&fit=crop&q=85', // blue glass corporate towers
-    'https://images.unsplash.com/photo-1497366754035-f200968a6e72?w=1600&auto=format&fit=crop&q=85', // modern office interior
+    'https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?w=900&auto=format&fit=crop&q=70', // glass office towers, looking up
+    'https://images.unsplash.com/photo-1518780664697-55e3ad937233?w=900&auto=format&fit=crop&q=70', // white modern office block
+    'https://images.unsplash.com/photo-1554469384-e58fac16e23a?w=900&auto=format&fit=crop&q=70', // blue glass corporate towers
+    'https://images.unsplash.com/photo-1497366754035-f200968a6e72?w=900&auto=format&fit=crop&q=70', // modern office interior
   ],
   'Villa': [
-    'https://images.unsplash.com/photo-1613490493576-7fde63acd811?w=1600&auto=format&fit=crop&q=85', // modern white villa + pool
-    'https://images.unsplash.com/photo-1600596542815-ffad4c1539a9?w=1600&auto=format&fit=crop&q=85', // modern grey villa + pool
-    'https://images.unsplash.com/photo-1580587771525-78b9dba3b914?w=1600&auto=format&fit=crop&q=85', // villa with pool and lawn
-    'https://images.unsplash.com/photo-1605276374104-dee2a0ed3cd6?w=1600&auto=format&fit=crop&q=85', // detached family home
+    'https://images.unsplash.com/photo-1613490493576-7fde63acd811?w=900&auto=format&fit=crop&q=70', // modern white villa + pool
+    'https://images.unsplash.com/photo-1600596542815-ffad4c1539a9?w=900&auto=format&fit=crop&q=70', // modern grey villa + pool
+    'https://images.unsplash.com/photo-1580587771525-78b9dba3b914?w=900&auto=format&fit=crop&q=70', // villa with pool and lawn
+    'https://images.unsplash.com/photo-1605276374104-dee2a0ed3cd6?w=900&auto=format&fit=crop&q=70', // detached family home
   ],
   'Commercial Land': [
-    'https://images.unsplash.com/photo-1494412651409-8963ce7935a7?w=1600&auto=format&fit=crop&q=85', // aerial container yard
-    'https://images.unsplash.com/photo-1565793298595-6a879b1d9492?w=1600&auto=format&fit=crop&q=85', // aerial logistics depot
-    'https://images.unsplash.com/photo-1578575437130-527eed3abbec?w=1600&auto=format&fit=crop&q=85', // container port terminal
-    'https://images.unsplash.com/photo-1500382017468-9049fed747ef?w=1600&auto=format&fit=crop&q=85', // open development land
+    'https://images.unsplash.com/photo-1494412651409-8963ce7935a7?w=900&auto=format&fit=crop&q=70', // aerial container yard
+    'https://images.unsplash.com/photo-1565793298595-6a879b1d9492?w=900&auto=format&fit=crop&q=70', // aerial logistics depot
+    'https://images.unsplash.com/photo-1578575437130-527eed3abbec?w=900&auto=format&fit=crop&q=70', // container port terminal
+    'https://images.unsplash.com/photo-1500382017468-9049fed747ef?w=900&auto=format&fit=crop&q=70', // open development land
   ],
 };
 const pickStockPhoto = (assetId, propertyType) => {
