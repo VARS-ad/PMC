@@ -10,7 +10,7 @@
 const VENDOR_DOCS_BUCKET = 'maintenance-documents';
 
 const VENDOR_SLOT_META = {
-  invoice:         { label: 'Invoice',          hint: 'The bill the vendor sent us' },
+  invoice:         { label: 'Invoice',          hint: 'The bill the maintenance company sent us' },
   payment_receipt: { label: 'Proof of payment', hint: 'Our receipt / bank slip for paying them' },
 };
 
@@ -202,9 +202,9 @@ const VendorSlotModal = ({ payment, vendorId, slot, docs, onClose, onChange }) =
       </div>
       {askPaid && (
         <MarkPaidConfirmModal
-          subtitle={'Vendor invoice ' + (payment.invoice_number || '')}
+          subtitle={'Maintenance company invoice ' + (payment.invoice_number || '')}
           title="Mark as Paid?"
-          bodyText={'Payment receipt is attached. Flip this vendor invoice to Paid? It will be timestamped with today’s date.'}
+          bodyText={'Payment receipt is attached. Flip this maintenance company invoice to Paid? It will be timestamped with today’s date.'}
           confirmLabel="Yes, mark as Paid"
           busy={busy}
           onCancel={() => setAskPaid(false)}

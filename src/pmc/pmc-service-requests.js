@@ -85,6 +85,22 @@ const PMCServiceRequestsPage = () => {
     return () => { mounted = false; };
   }, [selectedProperties.join(','), reloadKey]);
 
+  // Consume one-shot prefilter handoff from other pages (e.g. Overview
+  // "high-priority service requests open" row). Single-select UI: status='New'
+  // maps to the Open KPI's existing semantics (filter is strictly single-value).
+  useEffect(() => {
+    try {
+      const raw = sessionStorage.getItem('vars:sr-prefilter');
+      if (!raw) return;
+      sessionStorage.removeItem('vars:sr-prefilter');
+      const f = JSON.parse(raw);
+      if (f && typeof f === 'object') {
+        if (f.priority) setPriorityFilter(f.priority);
+        if (f.status)   setStatusFilter(f.status);
+      }
+    } catch (_) {}
+  }, []);
+
   const filtered = (rows || []).filter(s => {
     if (statusFilter !== 'all' && s.status !== statusFilter) return false;
     if (priorityFilter !== 'all' && s.priority !== priorityFilter) return false;
@@ -207,7 +223,8 @@ const PMCServiceRequestsPage = () => {
           active={statusFilter === 'all' && priorityFilter === 'all' && categoryFilter === 'all' && !dateFrom && !dateTo && !search}
           onClick={() => { setStatusFilter('all'); setPriorityFilter('all'); setCategoryFilter('all'); setDateFrom(''); setDateTo(''); setSearch(''); }}
         />
-        {/* TODO: filter UI is single-select; 'Open' currently maps to status='New' only.
+        {/* Note: filter UI is single-select; 'Open' maps to status='New' only.
+            The Overview prefilter handoff (vars:sr-prefilter) emits status='New' to match.
             A multi-status mode (New + Acknowledged + In Progress) would require turning
             statusFilter into an array and updating the <select> to a multi-select chip group. */}
         <PMCSRKpiTile

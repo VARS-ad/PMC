@@ -4,25 +4,26 @@ const Sidebar = ({ page, setPage, isOpen, onClose, onLogout }) => {
 
   // Three-group sidebar:
   //   Dashboard   — analytical surfaces (Overview, Assets, Reports, Vendors)
-  //   Operational — day-to-day workflow (SRs, Announcements, Visitors,
-  //                 Guards, Reminders)
+  //   Operational — day-to-day workflow (SRs, Announcements, Visitors, Guards)
   //   Settings    — admin / setup (Database)
   // Operating Revenue (formerly under Dashboard) was removed: its content
   // now lives on Assets → Summary. Vendors moved up to Dashboard since
   // the user treats it as analytical rather than day-to-day.
+  // Reminders (formerly under Operational) now lives inside Database →
+  // Reminder Email so the composer sits next to the digest config it drives;
+  // the /reminders route is still routed in app.js so deep links work.
   const groups = [
     { label: 'Dashboard', items: [
       { id: 'overview',    label: 'Overview',          icon: 'overview' },
       { id: 'properties',  label: t('nav.properties'), icon: 'properties' },
       { id: 'reports',     label: t('nav.reports'),    icon: 'reports' },
-      { id: 'vendors',     label: t('nav.vendors'),    icon: 'vendors' },
+      { id: 'vendors',     label: 'Maintenance Companies', icon: 'vendors' },
     ]},
     { label: 'Operational', items: [
       { id: 'service',         label: t('nav.service'),       icon: 'service' },
       { id: 'announcements',   label: t('nav.announcements'), icon: 'announcements' },
       { id: 'visitors',        label: t('nav.visitors'),      icon: 'visitors' },
       { id: 'guards',          label: t('nav.guards'),        icon: 'guards' },
-      { id: 'reminders',       label: 'Reminders',            icon: 'announcements' },
     ]},
     { label: 'Settings', items: [
       { id: 'profileCreation', label: 'Database',              icon: 'reports' },

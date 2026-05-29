@@ -118,6 +118,129 @@ const AssetCardPhoto = ({ storagePath, assetId, typeChipColor, propertyType, nam
   );
 };
 
+// ===== AttentionDrillModal =====
+// Small inline modal that lists the underlying records behind one
+// "Needs Your Attention" row so the user can drill straight to the
+// offending tenant / lease / vacant building from the Overview. Four
+// kinds:
+//   overdue   — overdue tenants → opens Assets w/ that building's
+//                financial panel pre-opened
+//   expiring  — expiring leases → opens Assets w/ that building's
+//                financial panel pre-opened (lease list lives there)
+//   vacant    — vacant-unit buildings → opens Assets scrolled to the
+//                offending asset card
+//   srs       — kept for symmetry; in practice SR rows skip the modal
+//                and go straight to setPage('service'), but the kind
+//                is wired through so we can switch to a modal flow
+//                later without restructuring.
+// Click outside / × / Esc to close. Body scrolls when the list is long.
+const AttentionDrillModal = ({ kind, title, items, onClose, navigate }) => {
+  useEffect(() => {
+    const onKey = (e) => { if (e.key === 'Escape') onClose(); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
+  const list = items || [];
+  // Per-kind row renderer. Kept inline so the whole modal stays in
+  // one place rather than fanning out into more inline components.
+  const renderRow = (it, idx) => {
+    if (kind === 'overdue') {
+      return (
+        <>
+          <div style={{flex:1,minWidth:0}}>
+            <div style={{fontSize:13,fontWeight:600,color:'var(--text-dark)',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{it.resident_name}</div>
+            <div style={{fontSize:11,color:'var(--text-muted)',marginTop:2,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{it.building_name} · {it.unit_number}</div>
+          </div>
+          <div style={{textAlign:'right',marginRight:12,minWidth:0}}>
+            <div style={{fontSize:13,fontWeight:600,color:'#8b4a42',whiteSpace:'nowrap'}}>AED {Math.round(it.amount_aed || 0).toLocaleString()}</div>
+            <div style={{fontSize:11,color:'var(--text-muted)',marginTop:2,whiteSpace:'nowrap'}}>{it.days_late}d late</div>
+          </div>
+        </>
+      );
+    }
+    if (kind === 'expiring') {
+      return (
+        <>
+          <div style={{flex:1,minWidth:0}}>
+            <div style={{fontSize:13,fontWeight:600,color:'var(--text-dark)',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{it.resident_name}</div>
+            <div style={{fontSize:11,color:'var(--text-muted)',marginTop:2,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{it.building_name} · {it.unit_number}</div>
+          </div>
+          <div style={{textAlign:'right',marginRight:12,minWidth:0}}>
+            <div style={{fontSize:13,fontWeight:600,color: it.days_remaining <= 30 ? '#8b4a42' : '#a07d3c',whiteSpace:'nowrap'}}>{it.days_remaining}d left</div>
+            <div style={{fontSize:11,color:'var(--text-muted)',marginTop:2,whiteSpace:'nowrap'}}>ends {it.lease_end}</div>
+          </div>
+        </>
+      );
+    }
+    if (kind === 'vacant') {
+      return (
+        <>
+          <div style={{flex:1,minWidth:0}}>
+            <div style={{fontSize:13,fontWeight:600,color:'var(--text-dark)',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{it.building_name}</div>
+            <div style={{fontSize:11,color:'var(--text-muted)',marginTop:2,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{it.property_type}</div>
+          </div>
+          <div style={{textAlign:'right',marginRight:12,minWidth:0}}>
+            <div style={{fontSize:13,fontWeight:600,color:'#a07d3c',whiteSpace:'nowrap'}}>{it.vacancy_count} vacant</div>
+          </div>
+        </>
+      );
+    }
+    if (kind === 'srs') {
+      return (
+        <>
+          <div style={{flex:1,minWidth:0}}>
+            <div style={{fontSize:13,fontWeight:600,color:'var(--text-dark)',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{it.category || 'Service request'}</div>
+            <div style={{fontSize:11,color:'var(--text-muted)',marginTop:2,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{it.building_name} · {it.unit_number}</div>
+          </div>
+          <div style={{textAlign:'right',marginRight:12,minWidth:0}}>
+            <div style={{fontSize:11,fontWeight:600,color:'#8b4a42',whiteSpace:'nowrap'}}>{it.priority}</div>
+            <div style={{fontSize:11,color:'var(--text-muted)',marginTop:2,whiteSpace:'nowrap'}}>{it.status}</div>
+          </div>
+        </>
+      );
+    }
+    return null;
+  };
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div
+        className="modal"
+        onClick={(e) => e.stopPropagation()}
+        style={{maxWidth:720,width:'92vw',maxHeight:'80vh',display:'flex',flexDirection:'column',padding:0}}
+      >
+        <div className="modal-header" style={{position:'sticky',top:0,background:'#fff',zIndex:2,padding:'16px 20px',borderBottom:'1px solid var(--border-light)',display:'flex',alignItems:'center',gap:12}}>
+          <div style={{flex:1,minWidth:0}}>
+            <div style={{fontSize:15,fontWeight:600,color:'var(--text-dark)',letterSpacing:'-0.01em'}}>{title}</div>
+            <div style={{fontSize:11,color:'var(--text-muted)',marginTop:3}}>{list.length} {list.length === 1 ? 'item' : 'items'}</div>
+          </div>
+          <button
+            className="modal-close"
+            onClick={onClose}
+            aria-label="Close"
+            style={{background:'transparent',border:'none',cursor:'pointer',fontSize:20,color:'var(--text-muted)',padding:6,lineHeight:1}}
+          >×</button>
+        </div>
+        <div style={{flex:1,overflowY:'auto'}}>
+          {list.length === 0 ? (
+            <div style={{padding:'28px 20px',textAlign:'center',color:'var(--text-muted)',fontSize:13}}>Nothing to show.</div>
+          ) : list.map((it, idx) => (
+            <div
+              key={it.id || it.building_id || idx}
+              onClick={() => navigate && navigate(it)}
+              style={{display:'flex',alignItems:'center',gap:10,padding:'12px 20px',cursor:'pointer',borderBottom: idx === list.length - 1 ? 'none' : '1px solid var(--border-light)',background:'#fff',transition:'background 0.12s'}}
+              onMouseEnter={e => { e.currentTarget.style.background = 'var(--accent-warm-light)'; }}
+              onMouseLeave={e => { e.currentTarget.style.background = '#fff'; }}
+            >
+              {renderRow(it, idx)}
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#8a98a2" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{flexShrink:0}}><polyline points="9 18 15 12 9 6"/></svg>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+};
+
 const PMCOverviewPage = ({ setPage }) => {
   const { selectedProperties = [], timeRange, setTimeRange, customStart, setCustomStart, customEnd, setCustomEnd } = useApp();
   const [stats, setStats] = useState(null);
@@ -125,6 +248,10 @@ const PMCOverviewPage = ({ setPage }) => {
   // Clicking a row in Unit Payment Activity opens the same UnitDetailModal
   // used everywhere else (full invoice list, resident, docs slots).
   const [openedUnit, setOpenedUnit] = useState(null); // { unit, building }
+  // When a "Needs Your Attention" row is opened, we show a small drill
+  // modal listing the underlying records (overdue tenants, expiring
+  // leases, vacant buildings). Set to { kind, items, title } when open.
+  const [attentionDrill, setAttentionDrill] = useState(null);
   // Selected period for the financial KPIs and Operating Income card.
   // Lives in AppContext so navigating to Service Charges keeps the choice.
   const monthsBack = ({ '1m': 1, '2m': 2, '3m': 3, '12m': 12 })[timeRange] || 1;
@@ -300,6 +427,22 @@ const PMCOverviewPage = ({ setPage }) => {
         const nowLocal = new Date();
 
         // Overdue invoices = effectiveStatus 'Overdue' (past due AND not paid).
+        // We resolve resident_name via the resident_assignments lookup
+        // (preferred, since invoices.resident_profile_id is more reliable
+        // than the unit's denormalised tenant_name) and fall back to
+        // tenant_name on the unit when no assignment is found.
+        const raByUnit = {};
+        (ras || []).forEach(r => { if (!raByUnit[r.unit_id]) raByUnit[r.unit_id] = r; });
+        // Resident-name resolver: prefer the assignment's profile, fall
+        // back to the unit's denormalised tenant_name. Profile-name
+        // fetching is out of scope here — the resident_assignments row
+        // doesn't carry a name, so we lean on tenant_name and the unit
+        // number as the human label.
+        const residentLabelFor = (unitId) => {
+          const u = uMap[unitId];
+          if (u && u.tenant_name) return u.tenant_name;
+          return 'Tenant';
+        };
         const overdueInvs = (invoices || []).filter(i => i._eff === 'Overdue');
         if (overdueInvs.length > 0) {
           const overdueTotal = overdueInvs.reduce((s, i) => s + Number(i.amount_aed), 0);
@@ -308,11 +451,36 @@ const PMCOverviewPage = ({ setPage }) => {
           const worst = overdueInvs.slice().sort((a, b) => (a.due_date || '').localeCompare(b.due_date || ''))[0];
           const wU = uMap[worst.unit_id]; const wB = wU ? bMap[wU.building_id] : null;
           const dayLag = worst.due_date ? Math.max(0, Math.floor((nowLocal - new Date(worst.due_date)) / dayMsLocal)) : 0;
+          // Build the per-tenant drill list: one row per unit (not per
+          // invoice) so AED is summed and days-late shows the oldest.
+          const byUnit = {};
+          overdueInvs.forEach(i => {
+            if (!byUnit[i.unit_id]) byUnit[i.unit_id] = { amount: 0, oldest_due: null };
+            byUnit[i.unit_id].amount += Number(i.amount_aed);
+            if (!byUnit[i.unit_id].oldest_due || (i.due_date && i.due_date < byUnit[i.unit_id].oldest_due)) {
+              byUnit[i.unit_id].oldest_due = i.due_date;
+            }
+          });
+          const overdueItems = Object.entries(byUnit).map(([uid, v]) => {
+            const u = uMap[uid]; const b = u ? bMap[u.building_id] : null;
+            const daysLate = v.oldest_due ? Math.max(0, Math.floor((nowLocal - new Date(v.oldest_due)) / dayMsLocal)) : 0;
+            return {
+              id: uid,
+              resident_name: residentLabelFor(uid),
+              building_id: b ? b.id : null,
+              building_name: b ? b.name : '—',
+              unit_number: u ? u.unit_number : '—',
+              days_late: daysLate,
+              amount_aed: v.amount,
+            };
+          }).sort((a, b) => b.days_late - a.days_late);
           attention.push({
+            kind: 'overdue',
             severity: 'red',
             title: overdueUnits + ' tenant' + (overdueUnits===1?'':'s') + ' overdue · ' + fmt(overdueTotal) + ' at risk',
             detail: 'Worst: ' + (wU ? (wU.unit_number + (wB ? ' · ' + wB.name : '')) : '—') + (dayLag ? ' · ' + dayLag + 'd late' : ''),
             page: 'payment',
+            items: overdueItems,
           });
         }
 
@@ -322,10 +490,23 @@ const PMCOverviewPage = ({ setPage }) => {
           const top = urgentSrs[0];
           const tU = uMap[top.unit_id]; const tB = tU ? bMap[tU.building_id] : null;
           attention.push({
+            kind: 'srs',
             severity: urgentSrs.some(s => s.priority === 'Urgent') ? 'red' : 'orange',
             title: urgentSrs.length + ' high-priority service request' + (urgentSrs.length===1?'':'s') + ' open',
             detail: 'Latest: ' + (top.category || 'SR') + (tU ? ' · ' + tU.unit_number + (tB ? ' · ' + tB.name : '') : ''),
             page: 'service',
+            items: urgentSrs.map(s => {
+              const u = uMap[s.unit_id]; const b = u ? bMap[u.building_id] : null;
+              return {
+                id: s.id,
+                category: s.category,
+                priority: s.priority,
+                status: s.status,
+                building_id: b ? b.id : null,
+                building_name: b ? b.name : '—',
+                unit_number: u ? u.unit_number : '—',
+              };
+            }),
           });
         }
 
@@ -340,11 +521,44 @@ const PMCOverviewPage = ({ setPage }) => {
         if (endingSoonCount > 0) {
           const within30 = resLeasesEndingSoon.filter(r => r.lease_end <= cutoff30).length
                          + tenLeasesEndingSoon.filter(u => u.tenant_lease_end <= cutoff30).length;
+          // Build a unified expiring-lease list (resident + non-residential
+          // tenant rows). days_remaining sorts ascending so the most
+          // urgent leases land at the top of the drill modal.
+          const expiringItems = [
+            ...resLeasesEndingSoon.map(r => {
+              const u = uMap[r.unit_id]; const b = u ? bMap[u.building_id] : null;
+              const daysRemaining = Math.max(0, Math.floor((new Date(r.lease_end) - nowLocal) / dayMsLocal));
+              return {
+                id: 'ra-' + r.profile_id + '-' + r.unit_id,
+                resident_name: residentLabelFor(r.unit_id),
+                building_id: b ? b.id : null,
+                building_name: b ? b.name : '—',
+                unit_number: u ? u.unit_number : '—',
+                days_remaining: daysRemaining,
+                lease_end: r.lease_end,
+              };
+            }),
+            ...tenLeasesEndingSoon.map(u => {
+              const b = bMap[u.building_id];
+              const daysRemaining = Math.max(0, Math.floor((new Date(u.tenant_lease_end) - nowLocal) / dayMsLocal));
+              return {
+                id: 'u-' + u.id,
+                resident_name: u.tenant_name || 'Tenant',
+                building_id: b ? b.id : null,
+                building_name: b ? b.name : '—',
+                unit_number: u.unit_number,
+                days_remaining: daysRemaining,
+                lease_end: u.tenant_lease_end,
+              };
+            }),
+          ].sort((a, b) => a.days_remaining - b.days_remaining);
           attention.push({
+            kind: 'expiring',
             severity: within30 > 0 ? 'red' : 'orange',
             title: endingSoonCount + ' lease' + (endingSoonCount===1?'':'s') + ' expiring within 60 days',
             detail: within30 > 0 ? within30 + ' within the next 30 days' : 'All beyond 30 days',
             page: 'reminders',
+            items: expiringItems,
           });
         }
 
@@ -354,11 +568,30 @@ const PMCOverviewPage = ({ setPage }) => {
         const assignedUnitIds = new Set((ras || []).map(r => r.unit_id));
         const vacantUnits = filteredUnits.filter(u => !assignedUnitIds.has(u.id) && !u.tenant_name);
         if (vacantUnits.length > 0) {
+          // Roll up vacant units by building so the drill modal shows
+          // one row per asset with a vacancy count, not a long list of
+          // unit numbers.
+          const vacantByBuilding = {};
+          vacantUnits.forEach(u => {
+            if (!vacantByBuilding[u.building_id]) vacantByBuilding[u.building_id] = 0;
+            vacantByBuilding[u.building_id]++;
+          });
+          const vacantItems = Object.entries(vacantByBuilding).map(([bid, count]) => {
+            const b = bMap[bid];
+            return {
+              building_id: bid,
+              building_name: b ? b.name : '—',
+              property_type: b ? b.property_type : '—',
+              vacancy_count: count,
+            };
+          }).sort((a, b) => b.vacancy_count - a.vacancy_count);
           attention.push({
+            kind: 'vacant',
             severity: vacantUnits.length > 5 ? 'orange' : 'yellow',
             title: vacantUnits.length + ' vacant unit' + (vacantUnits.length===1?'':'s'),
             detail: 'Across ' + new Set(vacantUnits.map(u => u.building_id)).size + ' asset(s)',
             page: 'properties',
+            items: vacantItems,
           });
         }
 
@@ -373,6 +606,7 @@ const PMCOverviewPage = ({ setPage }) => {
         });
         if (assetsMissingDeed.length > 0) {
           attention.push({
+            kind: 'deed',
             severity: 'yellow',
             title: assetsMissingDeed.length + ' asset' + (assetsMissingDeed.length===1?'':'s') + ' missing title deed',
             detail: assetsMissingDeed.slice(0, 2).map(b => b.name).join(', ') + (assetsMissingDeed.length > 2 ? ' +' + (assetsMissingDeed.length - 2) + ' more' : ''),
@@ -385,15 +619,16 @@ const PMCOverviewPage = ({ setPage }) => {
 
         // -------- Landlord headline: 3 cash-flow stats, range-aware ------
         // Answers in one row: 'what's come in this period · what's late
-        // · what's coming in the next 30 days'. Collected respects the
-        // top-bar time-range picker; Overdue + Upcoming are a snapshot
-        // of the current outstanding state regardless of the range.
+        // in this period · what's coming due in the next 30 days from
+        // invoices issued in this period'. All three tiles now honour the
+        // top-bar time-range picker so the eyebrow ("MAY 2026" etc.) ties
+        // to every number below, matching Assets → Summary's behaviour.
         const thisMonthInvoices = (invoices || []).filter(i => (i.created_at || '').slice(0, 10) >= thisMonthStart && (i.created_at || '').slice(0, 10) <= today);
         const lastMonthInvoices = (invoices || []).filter(i => (i.created_at || '').slice(0, 10) >= lastMonthStart && (i.created_at || '').slice(0, 10) <= lastMonthEnd);
         const headlineCollected = periodInvoices.filter(i => i.status === 'Paid').reduce((s, i) => s + Number(i.amount_aed), 0);
-        const headlineOverdue   = (invoices || []).filter(i => i._eff === 'Overdue' || i._eff === 'Pending').reduce((s, i) => s + Number(i.amount_aed), 0);
+        const headlineOverdue   = periodInvoices.filter(i => i._eff === 'Overdue' || i._eff === 'Pending').reduce((s, i) => s + Number(i.amount_aed), 0);
         const cutoff30Iso = new Date(now.getTime() + 30 * dayMs).toISOString().slice(0, 10);
-        const headlineUpcoming  = (invoices || []).filter(i => (i._eff === 'Upcoming' || i._eff === 'Pending') && i.due_date && i.due_date >= today && i.due_date <= cutoff30Iso).reduce((s, i) => s + Number(i.amount_aed), 0);
+        const headlineUpcoming  = periodInvoices.filter(i => (i._eff === 'Upcoming' || i._eff === 'Pending') && i.due_date && i.due_date >= today && i.due_date <= cutoff30Iso).reduce((s, i) => s + Number(i.amount_aed), 0);
         // Keep last-month delta computation around for the small caption
         // even though the big progress bar is gone.
         const headlineLastMonth = lastMonthInvoices.filter(i => i.status === 'Paid').reduce((s, i) => s + Number(i.amount_aed), 0);
@@ -609,10 +844,10 @@ const PMCOverviewPage = ({ setPage }) => {
                       sub={'For the selected period · last month ' + fmt(stats.headlineLastMonth)}
                       onClick={navToSummary}/>
                 <Stat label="Overdue"             value={fmt(stats.headlineOverdue)}  color="#8b4a42"
-                      sub="Past due, still unpaid"
+                      sub="Past due, in the selected period"
                       onClick={navToSummary}/>
                 <Stat label="Upcoming · 30 days"  value={fmt(stats.headlineUpcoming)} color="#a07d3c"
-                      sub="Due within the next 30 days"
+                      sub="Due within 30 days, in the selected period"
                       onClick={navToSummary}/>
               </div>
             </div>
@@ -642,18 +877,36 @@ const PMCOverviewPage = ({ setPage }) => {
                 <div className="card" style={{padding:0,marginBottom:0,overflow:'hidden'}}>
                   {items.map((it, idx) => {
                     const t = tones[it.severity] || tones.yellow;
-                    // All attention rows now route to Assets → Summary
-                    // so the user lands on the consolidated breakdown
-                    // (KPIs · revenue by type · top contributors ·
-                    // main outstanding invoices) and drills from there.
-                    const goToSummary = () => {
-                      try { sessionStorage.setItem('vars:scroll-to-asset-type', 'Summary'); } catch (_) {}
-                      if (setPage) setPage('properties');
+                    // Row-specific behaviour. SR rows skip the drill
+                    // modal entirely and go straight to the SR page
+                    // pre-filtered to high-priority + open; the other
+                    // kinds (overdue / expiring / vacant) open the
+                    // AttentionDrillModal so the user can pick a
+                    // specific tenant/lease/building.
+                    const openRow = () => {
+                      if (it.kind === 'srs') {
+                        // TODO(consumer): pmc-service-requests.js should
+                        // read 'vars:sr-prefilter' on mount and apply
+                        // the priority + status filters from it.
+                        try { sessionStorage.setItem('vars:sr-prefilter', JSON.stringify({ priority: 'High', status: 'New' })); } catch (_) {}
+                        if (setPage) setPage('service');
+                        return;
+                      }
+                      if (it.kind === 'deed') {
+                        if (setPage) setPage(it.page || 'profileCreation');
+                        return;
+                      }
+                      if (it.kind === 'overdue' || it.kind === 'expiring' || it.kind === 'vacant') {
+                        setAttentionDrill({ kind: it.kind, items: it.items || [], title: it.title });
+                        return;
+                      }
+                      // Default fallback: route by the item's `page`.
+                      if (setPage && it.page) setPage(it.page);
                     };
                     return (
                       <div key={idx}
-                        onClick={goToSummary}
-                        title="Open the portfolio breakdown in Assets → Summary"
+                        onClick={openRow}
+                        title={it.kind === 'srs' ? 'Open Service Requests filtered to high-priority' : 'Drill into the underlying records'}
                         style={{display:'flex',alignItems:'center',gap:14,padding:'14px 20px',cursor:'pointer',background:'#fff',borderBottom: idx === items.length - 1 ? 'none' : '1px solid var(--border-light)',transition:'background 0.12s'}}
                         onMouseEnter={e => { e.currentTarget.style.background = t.bg; }}
                         onMouseLeave={e => { e.currentTarget.style.background = '#fff'; }}>
@@ -787,6 +1040,40 @@ const PMCOverviewPage = ({ setPage }) => {
           unit={openedUnit.unit}
           building={openedUnit.building}
           onClose={() => setOpenedUnit(null)}
+        />
+      )}
+      {attentionDrill && (
+        <AttentionDrillModal
+          kind={attentionDrill.kind}
+          title={attentionDrill.title}
+          items={attentionDrill.items}
+          onClose={() => setAttentionDrill(null)}
+          navigate={(it) => {
+            // Drill behaviour by kind:
+            //  - overdue / expiring → land on Assets and open the
+            //    building's financial panel (where invoice + lease
+            //    detail live). Consumer reads the storage flag.
+            //  - vacant → land on Assets and scroll to the asset
+            //    card (existing pattern used elsewhere).
+            // TODO(consumer): pmc-properties.js / asset-financial-panel
+            // should honour 'vars:open-asset-financial' on mount and
+            // auto-open the financial panel for that building id.
+            try {
+              if (attentionDrill.kind === 'overdue' || attentionDrill.kind === 'expiring') {
+                if (it && it.building_id) {
+                  sessionStorage.setItem('vars:open-asset-financial', it.building_id);
+                  sessionStorage.setItem('vars:scroll-to-asset', it.building_id);
+                }
+              } else if (attentionDrill.kind === 'vacant') {
+                if (it && it.building_id) {
+                  sessionStorage.setItem('vars:scroll-to-asset', it.building_id);
+                  if (it.property_type) sessionStorage.setItem('vars:scroll-to-asset-type', it.property_type);
+                }
+              }
+            } catch (_) {}
+            setAttentionDrill(null);
+            if (setPage) setPage('properties');
+          }}
         />
       )}
     </div>

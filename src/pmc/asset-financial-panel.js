@@ -387,13 +387,6 @@ const AssetFinancialPanel = ({ building, onClose }) => {
     </svg>
   );
 
-  // ---- Truncate long auto-generated invoice numbers -------------------
-  const shortInv = (n) => {
-    if (!n) return '—';
-    const s = String(n);
-    return s.length > 14 ? s.slice(0, 12) + '…' : s;
-  };
-
   // ---- Shared Section wrapper -----------------------------------------
   const Section = ({ label, children, right }) => (
     <div style={{marginBottom:18}}>
@@ -617,7 +610,7 @@ const AssetFinancialPanel = ({ building, onClose }) => {
                           return (
                             <tr key={i.id} style={{borderBottom:'1px solid #f0f0f0'}}>
                               <td style={{padding:'12px 14px',fontWeight:500,color:'#131F23',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{i.unit_number}{i.floor != null ? ' · F' + i.floor : ''}</td>
-                              <td style={{padding:'12px 14px',fontWeight:500,color:'#131F23',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}} title={i.invoice_number}>{shortInv(i.invoice_number || i.id.slice(0, 8))}</td>
+                              <td style={{padding:'12px 14px',fontWeight:500,color:'#131F23',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}} title={i.invoice_number}>{i.invoice_number || i.id.slice(0, 8)}</td>
                               <td style={{padding:'12px 14px',color:'#61707D',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}} title={i.description}>{i.description || '—'}</td>
                               <td style={{padding:'12px 14px',color:'#61707D',whiteSpace:'nowrap'}}>{fmtDate(i.due_date)}</td>
                               <td style={{padding:'12px 14px',textAlign:'center'}}>

@@ -1303,18 +1303,18 @@ const TRANSLATIONS = {
     'pm.viewDetails': 'View Details',
 
     // === Vendors (maintenance companies) ===
-    'nav.vendors': 'Vendors',
-    'vendors.title': 'Vendors',
+    'nav.vendors': 'Maintenance Companies',
+    'vendors.title': 'Maintenance Companies',
     'vendors.subtitle': 'Maintenance companies under contract — details, documents, and payment tracking.',
-    'vendors.addBtn': '+ Add Vendor',
+    'vendors.addBtn': '+ Add Maintenance Company',
     'vendors.exportBtn': 'Export / Print',
     'vendors.loading': 'Loading…',
     // KPI cards
-    'vendors.kpi.total': 'Total Vendors',
+    'vendors.kpi.total': 'Total companies',
     'vendors.kpi.active': 'Active',
     'vendors.kpi.expiringSoon': 'Expiring Soon',
     'vendors.kpi.expired': 'Expired',
-    'vendors.kpi.outstanding': 'With Outstanding',
+    'vendors.kpi.outstanding': 'With outstanding',
     // Filters
     'vendors.filter.search': 'Search',
     'vendors.filter.searchPlaceholder': 'Name, contact, phone, email…',
@@ -1324,7 +1324,7 @@ const TRANSLATIONS = {
     'vendors.filter.allStatuses': 'All statuses',
     'vendors.filter.outstandingOnly': 'Only with outstanding payments',
     // Table headers
-    'vendors.th.vendor': 'Vendor',
+    'vendors.th.vendor': 'Maintenance Company',
     'vendors.th.category': 'Category',
     'vendors.th.contact': 'Contact',
     'vendors.th.contract': 'Contract',
@@ -1332,8 +1332,8 @@ const TRANSLATIONS = {
     'vendors.th.outstanding': 'Outstanding',
     'vendors.th.status': 'Status',
     // Empty / not-found
-    'vendors.empty.none': 'No vendors yet. Click "Add Vendor" to create the first one.',
-    'vendors.empty.noMatch': 'No vendors match the current filters.',
+    'vendors.empty.none': 'No maintenance companies yet. Click "Add Maintenance Company" to create the first one.',
+    'vendors.empty.noMatch': 'No maintenance companies match the current filters.',
     // Detail modal tabs + fields
     'vendors.tab.details': 'Details',
     'vendors.tab.documents': 'Documents',
@@ -1365,7 +1365,7 @@ const TRANSLATIONS = {
     'vendors.pay.pending': 'Pending',
     'vendors.pay.overdue': 'Overdue',
     'vendors.pay.addBtn': '+ Add Payment',
-    'vendors.pay.empty': 'No payments recorded for this vendor yet.',
+    'vendors.pay.empty': 'No payments recorded for this maintenance company yet.',
     'vendors.pay.th.invoice': 'Invoice #',
     'vendors.pay.th.date': 'Date',
     'vendors.pay.th.description': 'Description',
@@ -1373,15 +1373,15 @@ const TRANSLATIONS = {
     'vendors.pay.th.status': 'Status',
     // Buttons
     'vendors.btn.edit': 'Edit',
-    'vendors.btn.delete': 'Delete Vendor',
+    'vendors.btn.delete': 'Delete Maintenance Company',
     'vendors.btn.renew': 'Renew Contract',
     'vendors.btn.cancel': 'Cancel',
     'vendors.btn.save': 'Save',
     'vendors.btn.saving': 'Saving…',
-    'vendors.btn.create': 'Create Vendor',
+    'vendors.btn.create': 'Create Maintenance Company',
     // Modal titles
-    'vendors.modal.add': 'Add Vendor',
-    'vendors.modal.edit': 'Edit Vendor',
+    'vendors.modal.add': 'Add Maintenance Company',
+    'vendors.modal.edit': 'Edit Maintenance Company',
     'vendors.modal.addPay': 'Add Payment / Invoice',
     'vendors.modal.editPay': 'Edit Payment',
     // Status badges

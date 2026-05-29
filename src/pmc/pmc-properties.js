@@ -614,6 +614,17 @@ const PMCPropertiesPage = ({ setPage }) => {
             }, 200);
           }
         } catch (_) {}
+        // Overview "Needs your attention" drill modals stamp this flag
+        // when the user clicks a row → we auto-open the AssetFinancialPanel
+        // for that building so they land directly on the financial drill.
+        try {
+          const openId = sessionStorage.getItem('vars:open-asset-financial');
+          if (openId) {
+            sessionStorage.removeItem('vars:open-asset-financial');
+            const target = result.find(b => b.id === openId);
+            if (target) setFinancialAsset(target);
+          }
+        } catch (_) {}
       } catch (e) { if (mounted) setError(String(e.message || e)); }
     })();
     return () => { mounted = false; };
@@ -897,6 +908,45 @@ const PMCPropertiesPage = ({ setPage }) => {
               'Future':   { bg:'#E6EAE9', fg:'#61707D' },
             };
 
+            // Future revenue · next 12 months — projected contracted lease
+            // income from active tenants. For each tenant whose lease still
+            // runs past today, we count the months between today and the
+            // earlier of (lease_end, today + 12 months), times their
+            // monthly payment. Sums per building, ranked, top 8 for display.
+            const today = new Date();
+            const horizon = new Date(today.getFullYear(), today.getMonth() + 12, today.getDate());
+            const monthsBetween = (from, to) => {
+              if (!(to > from)) return 0;
+              // Whole-month count from `from` to `to`. We count a month as
+              // elapsed once the day-of-month is reached, so a lease ending
+              // exactly N months from today contributes N months.
+              let months = (to.getFullYear() - from.getFullYear()) * 12 + (to.getMonth() - from.getMonth());
+              if (to.getDate() < from.getDate()) months -= 1;
+              return Math.max(0, months);
+            };
+            const futureByBuilding = (buildings || []).map(b => {
+              let projected = 0;
+              let leases = 0;
+              for (const t of (b.tenants || [])) {
+                const monthly = Number(t.monthly_payment_aed || 0);
+                if (monthly <= 0) continue;
+                if (!t.lease_end) continue;
+                const leaseEnd = new Date(t.lease_end + 'T00:00:00');
+                if (!(leaseEnd > today)) continue;
+                const effEnd = leaseEnd < horizon ? leaseEnd : horizon;
+                const m = monthsBetween(today, effEnd);
+                if (m > 0) {
+                  projected += monthly * m;
+                  leases += 1;
+                }
+              }
+              return { building_id: b.id, building_name: b.name, property_type: b.property_type, projected, contracted_leases_count: leases, ref: b };
+            }).filter(x => x.projected > 0)
+              .sort((a, b) => b.projected - a.projected);
+            const futureRevenueTotal = futureByBuilding.reduce((s, x) => s + x.projected, 0);
+            const futureTop = futureByBuilding.slice(0, 8);
+            const futureMax = futureTop[0]?.projected || 1;
+
             const sectionEyebrowSmall = { fontSize:11, letterSpacing:'0.08em', textTransform:'uppercase', color:'var(--text-secondary)', fontWeight:600, marginBottom:12 };
 
             return (
@@ -1010,6 +1060,41 @@ const PMCPropertiesPage = ({ setPage }) => {
                       );
                     })}
                   </div>
+                </div>
+
+                {/* Future revenue · next 12 months — projected contracted
+                    lease income, ranked by building. Same visual idiom as
+                    Top revenue contributors so the two read as a pair. */}
+                <div className="card" style={{padding:'18px 22px', marginTop:18}}>
+                  <div style={{...sectionEyebrowSmall, display:'flex', alignItems:'baseline', justifyContent:'space-between', gap:12}}>
+                    <span>Future revenue · next 12 months</span>
+                    <span style={{fontSize:12, letterSpacing:0, textTransform:'none', color:'var(--text-muted)', fontWeight:500}}>{fmtMoney(futureRevenueTotal)}</span>
+                  </div>
+                  {futureTop.length === 0 ? (
+                    <div style={{color:'var(--text-muted)', fontSize:13, padding:'8px 0'}}>No active leases project future revenue.</div>
+                  ) : futureTop.map(x => {
+                    const widthPct = Math.max(4, Math.round((x.projected / futureMax) * 100));
+                    const tColor = ({ 'Residential':'#5a6b4f', 'Commercial':'#3E4C59', 'Villa':'#a07d3c', 'Commercial Land':'#61707D' })[x.property_type] || '#61707D';
+                    return (
+                      <div key={x.building_id}
+                        onClick={() => setFinancialAsset(x.ref)}
+                        style={{display:'grid', gridTemplateColumns:'1fr 110px', gap:14, alignItems:'center', padding:'9px 6px', cursor:'pointer', borderRadius:6, transition:'background 0.12s'}}
+                        onMouseEnter={e => { e.currentTarget.style.background = 'rgba(160,125,60,0.06)'; }}
+                        onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
+                        title={'Open the financial summary for ' + x.building_name}>
+                        <div style={{minWidth:0}}>
+                          <div style={{fontSize:13, fontWeight:500, color:'var(--text-dark)', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}>
+                            {x.building_name}
+                            <span style={{fontSize:11, color:'var(--text-muted)', fontWeight:400, marginLeft:6}}>· {x.contracted_leases_count} {x.contracted_leases_count === 1 ? 'lease' : 'leases'}</span>
+                          </div>
+                          <div style={{height:6, background:'#f4f1ec', borderRadius:3, overflow:'hidden', marginTop:5}}>
+                            <div style={{height:'100%', width:(widthPct + '%'), background:tColor, borderRadius:3}}/>
+                          </div>
+                        </div>
+                        <div style={{fontSize:13, fontWeight:600, color:'var(--text-dark)', textAlign:'right'}}>{fmtMoney(x.projected)}</div>
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
             );

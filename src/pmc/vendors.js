@@ -535,7 +535,7 @@ const VendorDetailModal = ({ vendor, buildings, vendorBuildingIds, onClose, onEd
   };
 
   const handleDeleteVendor = async () => {
-    if (!window.confirm('Delete vendor "' + vendor.name + '" and all its documents and payments? This cannot be undone.')) return;
+    if (!window.confirm('Delete maintenance company "' + vendor.name + '" and all its documents and payments? This cannot be undone.')) return;
     const { data: docs } = await supabaseClient.from('vendor_documents').select('storage_path').eq('vendor_id', vendor.id);
     if (docs && docs.length) {
       await supabaseClient.storage.from('maintenance-documents').remove(docs.map(d => d.storage_path));
@@ -817,12 +817,6 @@ const PMCVendorsPage = ({ setPage }) => {
         </div>
         <div className="btn-group">
           <button className="btn" onClick={() => setShowDownload(true)} disabled={!vendors || vendors.length === 0}>Download Data</button>
-          {setPage && (
-            <button className="btn" onClick={() => { try { window._profileCreationInitialSection = 'vendors'; } catch(e) {} setPage('profileCreation'); }}>
-              Bulk Upload…
-            </button>
-          )}
-          <button className="btn btn-primary" onClick={() => setEditingVendor({})}>{t('vendors.addBtn')}</button>
         </div>
       </div>
 
@@ -832,14 +826,14 @@ const PMCVendorsPage = ({ setPage }) => {
         dataTypes={[
           {
             id:           'vendors',
-            label:        'Vendors',
-            title:        'Vendors',
-            sheetName:    'Vendors',
-            filenameBase: 'vendors',
+            label:        'Maintenance Companies',
+            title:        'Maintenance Companies',
+            sheetName:    'Maintenance Companies',
+            filenameBase: 'maintenance-companies',
             dateField:    'contract_start',
             rows:         exportRows,
             columns: [
-              { key: 'name',                header: 'Vendor',           width: 24 },
+              { key: 'name',                header: 'Maintenance Company', width: 24 },
               { key: 'service_category',    header: 'Category',         width: 14 },
               { key: 'contact_person',      header: 'Contact',          width: 18 },
               { key: 'contact_phone',       header: 'Phone',            width: 16 },
@@ -874,7 +868,7 @@ const PMCVendorsPage = ({ setPage }) => {
             dateField:    'contract_start',
             rows: exportRows.filter(v => v.contract_start || v.contract_end || v.contract_value_aed),
             columns: [
-              { key: 'name',               header: 'Vendor',          width: 24 },
+              { key: 'name',               header: 'Maintenance Company', width: 24 },
               { key: 'service_category',   header: 'Category',        width: 14 },
               { key: 'buildings_covered',  header: 'Buildings',       width: 28 },
               { key: 'contract_start',     header: 'Start',           width: 12 },
@@ -896,9 +890,9 @@ const PMCVendorsPage = ({ setPage }) => {
           {
             id:           'payments',
             label:        'Payments',
-            title:        'Vendor Payments',
+            title:        'Maintenance Company Payments',
             sheetName:    'Payments',
-            filenameBase: 'vendor-payments',
+            filenameBase: 'maintenance-company-payments',
             dateField:    'payment_date',
             rows: (() => {
               const visibleVendorIds = new Set((filtered || []).map(v => v.id));
@@ -909,7 +903,7 @@ const PMCVendorsPage = ({ setPage }) => {
             })(),
             columns: [
               { key: 'invoice_number',  header: 'Invoice #',       width: 14 },
-              { key: 'vendor_name',     header: 'Vendor',          width: 24 },
+              { key: 'vendor_name',     header: 'Maintenance Company', width: 24 },
               { key: 'description',     header: 'Description',     width: 30 },
               { key: 'amount_aed',      header: 'Amount (AED)',    width: 14, halign: 'right', numeric: true },
               { key: 'payment_status',  header: 'Status',          width: 12 },
