@@ -21,8 +21,9 @@ const AssetFinancialPanel = ({ building, onClose }) => {
   const [showDownload, setShowDownload] = useState(false);
   const [openUnit, setOpenUnit] = useState(null);    // row click → UnitDetailModal
   const [invoiceSort, setInvoiceSort] = useState({ key: 'due_date', dir: 'desc' });
-  const chartCanvasRef = useRef(null);
-  const chartInstance  = useRef(null);
+  // Chart.js refs replaced by an inline SVG renderer (see TimelineChart
+  // below) — eliminates the canvas-sizing race we were fighting and
+  // gives us a cleaner, more modern look.
   const fmt = (n) => 'AED ' + Math.round(Number(n) || 0).toLocaleString();
   const fmtDate = (s) => { try { return s ? new Date(s).toLocaleDateString('en-GB', { day:'2-digit', month:'short', year:'numeric' }) : '—'; } catch (_) { return s; } };
 
@@ -132,41 +133,93 @@ const AssetFinancialPanel = ({ building, onClose }) => {
     else if (i.effective_status === 'Pending' || i.effective_status === 'Upcoming') bucket.outstanding += Number(i.amount_aed || 0);
   }
 
-  // Chart render — defer one tick so modal layout settles before
-  // Chart.js measures the canvas. This was the 'empty graph' bug.
-  useEffect(() => {
-    if (loading || !window.Chart) return;
-    const t = setTimeout(() => {
-      if (!chartCanvasRef.current) return;
-      if (chartInstance.current) chartInstance.current.destroy();
-      const ctx = chartCanvasRef.current.getContext('2d');
-      chartInstance.current = new window.Chart(ctx, {
-        type: 'bar',
-        data: {
-          labels: series.map(m => m.label),
-          datasets: [
-            { label: 'Collected',   data: series.map(m => Math.round(m.collected)),   backgroundColor: 'rgba(90,107,79,0.9)',  borderRadius: 6, stack: 'rent', maxBarThickness: 36 },
-            { label: 'Outstanding', data: series.map(m => Math.round(m.outstanding)), backgroundColor: 'rgba(139,74,66,0.75)', borderRadius: 6, stack: 'rent', maxBarThickness: 36 },
-          ],
-        },
-        options: {
-          responsive: true,
-          maintainAspectRatio: false,
-          interaction: { mode: 'index', intersect: false },
-          plugins: {
-            legend: { position: 'bottom', labels: { font: { size: 12, family: 'inherit' }, color: '#61707D', boxWidth: 12, boxHeight: 12, padding: 16 } },
-            tooltip: { backgroundColor:'#131F23', padding: 10, cornerRadius: 6, callbacks: { label: (ctx) => ctx.dataset.label + ': AED ' + (ctx.parsed.y || 0).toLocaleString() } },
-          },
-          scales: {
-            x: { grid: { display: false }, ticks: { font: { size: 11 }, color: '#61707D' } },
-            y: { beginAtZero: true, grid: { color: 'rgba(0,0,0,0.04)', drawBorder: false }, ticks: { font: { size: 11 }, color: '#8a98a2', callback: (v) => v >= 1000 ? (v / 1000) + 'k' : v } },
-          },
-          animation: { duration: 350 },
-        },
-      });
-    }, 60);
-    return () => { clearTimeout(t); if (chartInstance.current) { chartInstance.current.destroy(); chartInstance.current = null; } };
-  }, [loading, rawInvoices.length]);
+  // ---- Hand-drawn SVG chart (replaces Chart.js) ----------------------
+  // Why SVG: the canvas sizing race with the modal layout left the
+  // chart visibly empty even with valid data. Inline SVG sidesteps the
+  // entire problem AND gives us pixel-perfect control over the look.
+  const TimelineChart = ({ data }) => {
+    const W = 1000, H = 280;
+    const padTop = 14, padBottom = 50, padLeft = 56, padRight = 16;
+    const chartW = W - padLeft - padRight;
+    const chartH = H - padTop - padBottom;
+    const groupW = chartW / data.length;          // one bar-group per month
+    const barW = Math.min(36, groupW * 0.55);
+    const maxStacked = Math.max(1, ...data.map(d => d.collected + d.outstanding));
+    // 4 gridlines at sensible rounded values
+    const niceStep = (m) => {
+      const exp = Math.pow(10, Math.floor(Math.log10(m)));
+      const f = m / exp;
+      if (f < 1.5) return 0.25 * exp;
+      if (f < 3)   return 0.5  * exp;
+      if (f < 7)   return exp;
+      return 2 * exp;
+    };
+    const step = niceStep(maxStacked / 4);
+    const yMax = Math.ceil(maxStacked / step) * step;
+    const ySteps = Math.round(yMax / step);
+    const y = (v) => padTop + chartH - (v / yMax) * chartH;
+    const fmtTick = (v) => v >= 1000000 ? (v / 1000000).toFixed(1) + 'M' : v >= 1000 ? Math.round(v / 1000) + 'k' : Math.round(v);
+
+    return (
+      <div style={{position:'relative'}}>
+        <svg viewBox={'0 0 ' + W + ' ' + H} preserveAspectRatio="xMidYMid meet" style={{display:'block',width:'100%',height:280}}>
+          {/* Gridlines + Y labels */}
+          {Array.from({ length: ySteps + 1 }).map((_, i) => {
+            const v = i * step;
+            const ly = y(v);
+            return (
+              <g key={i}>
+                <line x1={padLeft} x2={W - padRight} y1={ly} y2={ly} stroke="#eef0ec" strokeWidth="1"/>
+                <text x={padLeft - 10} y={ly + 4} fontSize="12" fill="#8a98a2" textAnchor="end" fontFamily="inherit">{fmtTick(v)}</text>
+              </g>
+            );
+          })}
+          {/* Bars */}
+          {data.map((d, i) => {
+            const cx = padLeft + i * groupW + (groupW - barW) / 2;
+            const colY = y(d.collected);
+            const colH = padTop + chartH - colY;
+            const outY = y(d.collected + d.outstanding);
+            const outH = colY - outY;
+            const monthly = d.collected + d.outstanding;
+            return (
+              <g key={i}>
+                {/* Outstanding (top, slate-red) */}
+                {outH > 0 && (
+                  <rect x={cx} y={outY} width={barW} height={Math.max(2, outH)} fill="#8b4a42" opacity="0.78" rx="4" ry="4">
+                    <title>{d.label}: Outstanding AED {Math.round(d.outstanding).toLocaleString()}</title>
+                  </rect>
+                )}
+                {/* Collected (bottom, slate-green) */}
+                {colH > 0 && (
+                  <rect x={cx} y={colY} width={barW} height={Math.max(2, colH)} fill="#5a6b4f" rx="4" ry="4">
+                    <title>{d.label}: Collected AED {Math.round(d.collected).toLocaleString()}</title>
+                  </rect>
+                )}
+                {/* Month label */}
+                <text x={cx + barW / 2} y={padTop + chartH + 22} fontSize="12" fill="#61707D" textAnchor="middle" fontFamily="inherit">{d.label}</text>
+                {/* Total value above the bar — only when the bar has data, so empty months stay clean */}
+                {monthly > 0 && (
+                  <text x={cx + barW / 2} y={Math.max(padTop + 10, outY - 8)} fontSize="11" fill="#131F23" textAnchor="middle" fontWeight="600" fontFamily="inherit">{fmtTick(monthly)}</text>
+                )}
+              </g>
+            );
+          })}
+        </svg>
+        {/* Legend below */}
+        <div style={{display:'flex',justifyContent:'center',gap:24,marginTop:8,fontSize:12,color:'var(--text-secondary)'}}>
+          <span style={{display:'inline-flex',alignItems:'center',gap:8}}>
+            <span style={{width:12,height:12,background:'#5a6b4f',borderRadius:3,display:'inline-block'}}/>
+            Collected
+          </span>
+          <span style={{display:'inline-flex',alignItems:'center',gap:8}}>
+            <span style={{width:12,height:12,background:'#8b4a42',opacity:0.78,borderRadius:3,display:'inline-block'}}/>
+            Outstanding
+          </span>
+        </div>
+      </div>
+    );
+  };
 
   // ---- Invoice sorting -----------------------------------------------
   const toggleSort = (key) => {
@@ -290,10 +343,8 @@ const AssetFinancialPanel = ({ building, onClose }) => {
 
             {/* 12-month chart */}
             <Section label="Income Timeline · 12 months" right={<span style={{fontSize:11,color:'var(--text-muted)'}}>Collected vs outstanding</span>}>
-              <div style={{background:'#fff',border:'1px solid var(--border-light)',borderRadius:10,padding:'20px 22px'}}>
-                <div style={{height:260,position:'relative'}}>
-                  <canvas ref={chartCanvasRef}/>
-                </div>
+              <div style={{background:'#fff',border:'1px solid var(--border-light)',borderRadius:10,padding:'18px 22px'}}>
+                <TimelineChart data={series}/>
               </div>
             </Section>
 
