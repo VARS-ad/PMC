@@ -21,6 +21,7 @@ const UnitDetailModal = ({ unit, building, assignment: passedAssignment, profile
   // Always shown at the top of the modal; if owner_is_resident is true we
   // render a 'Same as resident' chip rather than duplicating the fields.
   const [ownerInfo, setOwnerInfo] = useState(null);
+  const [showOwnerEdit, setShowOwnerEdit] = useState(false);
   const [invoices, setInvoices]             = useState(null);
   // Map of resident_profile_id -> { full_name, phone } so each invoice row
   // can show who it was billed to (covers both current and former tenants).
@@ -138,9 +139,12 @@ const UnitDetailModal = ({ unit, building, assignment: passedAssignment, profile
   const totalOutstanding    = outstandingInvoices.reduce((s, i) => s + Number(i.amount_aed), 0);
   const totalUpcoming       = upcomingInvoices.reduce((s, i) => s + Number(i.amount_aed), 0);
 
-  const Section = ({ label, children }) => (
+  const Section = ({ label, children, right }) => (
     <div style={{marginBottom:14}}>
-      <div style={{fontSize:10,letterSpacing:'0.1em',textTransform:'uppercase',color:'#61707D',fontWeight:600,marginBottom:8}}>{label}</div>
+      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}}>
+        <div style={{fontSize:10,letterSpacing:'0.1em',textTransform:'uppercase',color:'#61707D',fontWeight:600}}>{label}</div>
+        {right}
+      </div>
       <div style={{background:'#fff',border:'1px solid #E6EAE9',borderRadius:8,padding:'14px 16px'}}>{children}</div>
     </div>
   );
@@ -172,7 +176,18 @@ const UnitDetailModal = ({ unit, building, assignment: passedAssignment, profile
             {/* OWNER SECTION — owns the asset, may or may not also be the
                 resident. Sits above Resident because the user said this is
                 the most important record per unit. */}
-            <Section label="Owner">
+            <Section
+              label="Owner"
+              right={
+                <button
+                  className="btn btn-sm"
+                  onClick={() => setShowOwnerEdit(true)}
+                  style={{padding:'4px 12px',fontSize:11}}
+                >
+                  Edit
+                </button>
+              }
+            >
               {ownerInfo && ownerInfo.owner_is_resident && profile ? (
                 <>
                   <div style={{padding:'8px 10px',background:'#e6efe1',border:'1px solid #c8d4be',borderRadius:6,fontSize:12,color:'#5a6b4f',marginBottom:12}}>
@@ -349,6 +364,15 @@ const UnitDetailModal = ({ unit, building, assignment: passedAssignment, profile
         </div>
       </div>
     </div>
+    {showOwnerEdit && (
+      <UnitOwnerEditModal
+        unit={unit}
+        owner={ownerInfo}
+        residentProfile={profile}
+        onClose={() => setShowOwnerEdit(false)}
+        onSaved={(next) => { setOwnerInfo(next); setShowOwnerEdit(false); }}
+      />
+    )}
     {showAttachments && <UnitAttachmentsModal unit={unit} buildingName={building.name} onClose={() => setShowAttachments(false)}/>}
     {showResidentDetail && profile && (
       <ResidentDetailModal
@@ -369,5 +393,121 @@ const UnitDetailModal = ({ unit, building, assignment: passedAssignment, profile
       />
     )}
     </>
+  );
+};
+
+// ==================== UNIT OWNER EDIT MODAL ====================
+// Opened from the Edit button on the Owner block inside UnitDetailModal.
+// Writes the owner_* columns + owner_is_resident on public.units. When the
+// 'Same as resident' toggle is on, the typed owner fields stay editable
+// so the user can keep the data even when the flag is set (the flag is
+// purely a display hint).
+const UnitOwnerEditModal = ({ unit, owner, residentProfile, onClose, onSaved }) => {
+  const [form, setForm] = useState({
+    owner_name:            (owner && owner.owner_name)            || '',
+    owner_phone:           (owner && owner.owner_phone)           || '',
+    owner_email:           (owner && owner.owner_email)           || '',
+    owner_passport_number: (owner && owner.owner_passport_number) || '',
+    owner_emirates_id:     (owner && owner.owner_emirates_id)     || '',
+    purchase_date:         (owner && owner.purchase_date)         || '',
+    owner_is_resident:     !!(owner && owner.owner_is_resident),
+  });
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState(null);
+  const set = (k) => (e) => setForm(f => ({ ...f, [k]: e && e.target ? e.target.value : e }));
+
+  const copyFromResident = () => {
+    if (!residentProfile) return;
+    setForm(f => ({
+      ...f,
+      owner_name:            residentProfile.full_name || f.owner_name,
+      owner_phone:           residentProfile.phone     || f.owner_phone,
+      owner_is_resident:     true,
+    }));
+  };
+
+  const save = async () => {
+    if (!supabaseClient) { setError('Supabase not initialised'); return; }
+    setBusy(true); setError(null);
+    try {
+      const payload = {
+        owner_name:             form.owner_name.trim()            || null,
+        owner_phone:            form.owner_phone.trim()           || null,
+        owner_email:            form.owner_email.trim()           || null,
+        owner_passport_number:  form.owner_passport_number.trim() || null,
+        owner_emirates_id:      form.owner_emirates_id.trim()     || null,
+        purchase_date:          form.purchase_date || null,
+        owner_is_resident:      !!form.owner_is_resident,
+      };
+      const { error: e } = await supabaseClient.from('units').update(payload).eq('id', unit.id);
+      if (e) throw e;
+      onSaved && onSaved(payload);
+    } catch (e) {
+      setError(e.message || String(e));
+    }
+    setBusy(false);
+  };
+
+  const labelStyle = { fontSize:11, color:'var(--text-secondary)', marginBottom:4, display:'block', fontWeight:500, letterSpacing:'0.04em', textTransform:'uppercase' };
+  const inputStyle = { width:'100%', padding:'10px 12px', border:'1px solid var(--border-light)', borderRadius:6, fontSize:13, fontFamily:'inherit', outline:'none', background:'#fff' };
+
+  return (
+    <div className="modal-overlay" onClick={onClose} style={{zIndex:1100}}>
+      <div className="modal" onClick={e => e.stopPropagation()} style={{maxWidth:560}}>
+        <div className="modal-header">
+          <div>
+            <div style={{fontSize:10,letterSpacing:'0.08em',textTransform:'uppercase',color:'var(--text-muted)',marginBottom:4}}>Edit owner</div>
+            <h2>{unit.unit_number}</h2>
+          </div>
+          <button className="modal-close" onClick={onClose}>×</button>
+        </div>
+
+        {error && <div style={{padding:10,background:'#fdf2f1',color:'#8b4a42',borderRadius:6,fontSize:12,marginBottom:14}}>{error}</div>}
+
+        {residentProfile && (
+          <div style={{padding:'10px 12px',background:'var(--bg-page)',border:'1px solid var(--border-light)',borderRadius:6,marginBottom:18,fontSize:12,display:'flex',alignItems:'center',justifyContent:'space-between',gap:12}}>
+            <div>
+              <label style={{display:'flex',alignItems:'center',gap:8,cursor:'pointer'}}>
+                <input type="checkbox" checked={form.owner_is_resident} onChange={e => setForm(f => ({ ...f, owner_is_resident: e.target.checked }))}/>
+                <span><strong>Owner is the same as the resident</strong> ({residentProfile.full_name})</span>
+              </label>
+            </div>
+            <button type="button" className="btn btn-sm" onClick={copyFromResident}>Copy resident details</button>
+          </div>
+        )}
+
+        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12,marginBottom:14}}>
+          <div>
+            <label style={labelStyle}>Owner name</label>
+            <input style={inputStyle} value={form.owner_name} onChange={set('owner_name')}/>
+          </div>
+          <div>
+            <label style={labelStyle}>Owner phone</label>
+            <input style={inputStyle} value={form.owner_phone} onChange={set('owner_phone')} placeholder="+971 …"/>
+          </div>
+          <div>
+            <label style={labelStyle}>Owner email</label>
+            <input type="email" style={inputStyle} value={form.owner_email} onChange={set('owner_email')}/>
+          </div>
+          <div>
+            <label style={labelStyle}>Purchase date</label>
+            <input type="date" style={inputStyle} value={form.purchase_date} onChange={set('purchase_date')}/>
+          </div>
+          <div>
+            <label style={labelStyle}>Passport number</label>
+            <input style={inputStyle} value={form.owner_passport_number} onChange={set('owner_passport_number')}/>
+          </div>
+          <div>
+            <label style={labelStyle}>Emirates ID</label>
+            <input style={inputStyle} value={form.owner_emirates_id} onChange={set('owner_emirates_id')} placeholder="784-YYYY-NNNNNNN-N"/>
+          </div>
+        </div>
+
+        <div style={{display:'flex',justifyContent:'flex-end',gap:8}}>
+          <button className="btn" onClick={onClose} disabled={busy}>Cancel</button>
+          <button className="btn btn-primary" onClick={save} disabled={busy}>{busy ? 'Saving…' : 'Save owner'}</button>
+        </div>
+      </div>
+    </div>
   );
 };
