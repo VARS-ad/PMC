@@ -17,6 +17,10 @@ const UnitDetailModal = ({ unit, building, assignment: passedAssignment, profile
   // most-recent invoice's resident_profile_id into a profile and show
   // them as the "former resident" responsible for the outstanding balance.
   const [formerResident, setFormerResident] = useState(null);
+  // Owner record on the unit itself (separate from resident assignment).
+  // Always shown at the top of the modal; if owner_is_resident is true we
+  // render a 'Same as resident' chip rather than duplicating the fields.
+  const [ownerInfo, setOwnerInfo] = useState(null);
   const [invoices, setInvoices]             = useState(null);
   // Map of resident_profile_id -> { full_name, phone } so each invoice row
   // can show who it was billed to (covers both current and former tenants).
@@ -51,6 +55,15 @@ const UnitDetailModal = ({ unit, building, assignment: passedAssignment, profile
       if (!mounted) return;
       setAssignment(a);
       setProfile(p);
+
+      // Fetch owner record for this unit (separate from resident).
+      const { data: u } = await supabaseClient
+        .from('units')
+        .select('owner_name,owner_phone,owner_email,owner_passport_number,owner_emirates_id,purchase_date,owner_is_resident')
+        .eq('id', unit.id)
+        .maybeSingle();
+      if (!mounted) return;
+      setOwnerInfo(u || null);
 
       // Unpaid invoices for this unit — include resident_profile_id so we
       // can surface the historical resident when the unit is vacant.
@@ -156,6 +169,32 @@ const UnitDetailModal = ({ unit, building, assignment: passedAssignment, profile
           <div style={{padding:18,fontSize:13,color:'var(--text-muted)'}}>Loading…</div>
         ) : (
           <>
+            {/* OWNER SECTION — owns the asset, may or may not also be the
+                resident. Sits above Resident because the user said this is
+                the most important record per unit. */}
+            <Section label="Owner">
+              {ownerInfo && ownerInfo.owner_is_resident && profile ? (
+                <>
+                  <div style={{padding:'8px 10px',background:'#e6efe1',border:'1px solid #c8d4be',borderRadius:6,fontSize:12,color:'#5a6b4f',marginBottom:12}}>
+                    Owner is the same as the resident below.
+                  </div>
+                  <Field label="Name">{profile.full_name}</Field>
+                  <Field label="Phone">{profile.phone}</Field>
+                </>
+              ) : ownerInfo && (ownerInfo.owner_name || ownerInfo.owner_phone || ownerInfo.owner_email) ? (
+                <>
+                  <Field label="Name">{ownerInfo.owner_name}</Field>
+                  <Field label="Phone">{ownerInfo.owner_phone}</Field>
+                  <Field label="Email">{ownerInfo.owner_email}</Field>
+                  <Field label="Passport">{ownerInfo.owner_passport_number}</Field>
+                  <Field label="Emirates ID">{ownerInfo.owner_emirates_id}</Field>
+                  <Field label="Purchase date">{ownerInfo.purchase_date}</Field>
+                </>
+              ) : (
+                <div style={{fontSize:13,color:'#61707D',padding:'6px 0'}}>No owner record yet — add via the unit edit form or bulk upload.</div>
+              )}
+            </Section>
+
             <Section label={profile ? 'Resident' : (formerResident ? 'Former Resident' : 'Resident')}>
               {profile ? (
                 <>

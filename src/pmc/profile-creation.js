@@ -4,64 +4,115 @@
 // Bulk upload tab. Each one has its own example rows + download buttons.
 // The unified parser (uploadBuildingsBulk) accepts a mix of all four so
 // the single upload box at the bottom can ingest any combination.
+// Column conventions across the four templates:
+//   B-* = Building / unit columns
+//   O-* = Owner columns (always present — owner is the asset record)
+//   R-* = Resident columns (only on types that have a current resident)
+const OWNER_COLS    = ['Owner name','Owner phone','Owner email','Owner passport','Owner Emirates ID','Purchase date'];
+const RESIDENT_COLS = [
+  'Resident full name','Resident email','Resident phone','Resident temp password',
+  'Resident date of birth','Resident passport','Resident Emirates ID',
+  'Resident emergency contact name','Resident emergency contact phone',
+  'Resident employer','Resident occupation',
+  'Resident tenure','Lease start','Lease end','Monthly payment (AED)','Ownership start','Cheques per year','Contract #',
+];
+
 const BUILDINGS_BY_TYPE = {
   Residential: {
     label: 'Residential buildings',
-    headers: ['Building name','Property type','Floor','Unit','Address','Notes'],
+    headers: ['Building name','Property type','Floor','Unit','Address','Notes', ...OWNER_COLS, ...RESIDENT_COLS],
     examples: [
-      ['Aljil Tower','Residential',1,'A-101','Sheikh Zayed Rd, Dubai, UAE','High-rise residential, mixed amenities (pool, gym).'],
-      ['Aljil Tower','Residential',1,'A-102','',''],
-      ['Aljil Tower','Residential',2,'A-201','',''],
-      ['Al Qurm View','Residential',1,'Q-101','Shams Abu Dhabi, Al Reem Island, Abu Dhabi, UAE','Low-rise residential by Aldar Properties.'],
+      // Owner-occupied — owner_is_resident flag should be set by parser when
+      // Owner email matches Resident email.
+      ['Aljil Tower','Residential',1,'A-101','Sheikh Zayed Rd, Dubai, UAE','High-rise residential, mixed amenities (pool, gym).',
+        'Khalid Al Mansoori','+971 50 111 2233','khalid.almansoori@example.ae','AB1234567','784-1980-1234567-1','2018-03-12',
+        'Khalid Al Mansoori','khalid.almansoori@example.ae','+971 50 111 2233','Welcome2026!',
+        '1980-05-14','AB1234567','784-1980-1234567-1','Aisha Al Mansoori','+971 55 998 7766','Emirates NBD','Senior Banker',
+        'Owner','','','','2018-03-12','',''],
+      // Tenant-occupied — owner is different from resident.
+      ['Aljil Tower','Residential',1,'A-102','','',
+        'Mohammed Al Hammadi','+971 55 234 1187','mohammed.alhammadi@example.ae','CD7654321','784-1990-7654321-2','2019-09-01',
+        'Reem Al Suwaidi','reem.alsuwaidi@example.ae','+971 56 887 3300','Welcome2026!',
+        '1992-11-08','EF1122334','784-1992-1122334-3','Salama Al Suwaidi','+971 55 332 4499','Mubadala','HR Analyst',
+        'Tenant','2026-01-01','2026-12-31',12000,'',12,'RNT-2026-A102'],
+      // Vacant unit — owner present, no resident yet.
+      ['Aljil Tower','Residential',2,'A-201','','',
+        'Mohammed Al Hammadi','+971 55 234 1187','mohammed.alhammadi@example.ae','CD7654321','784-1990-7654321-2','2019-09-01',
+        '','','','','','','','','','','','','','','','',''],
+      // New building — Owner only on the FIRST row; later units inherit it on parse.
+      ['Al Qurm View','Residential',1,'Q-101','Shams Abu Dhabi, Al Reem Island, Abu Dhabi, UAE','Low-rise residential by Aldar Properties.',
+        'Hassan Al Awadi','+971 50 808 4040','hassan.awadi@example.ae','GH5566778','784-1975-5566778-9','2015-06-20',
+        'Hassan Al Awadi','hassan.awadi@example.ae','+971 50 808 4040','Welcome2026!',
+        '1975-01-30','GH5566778','784-1975-5566778-9','Mariam Al Awadi','+971 55 660 1234','Self-employed','Real estate investor',
+        'Owner','','','','2015-06-20','',''],
     ],
     filename: 'residential-template',
     rules: [
       'ONE ROW PER UNIT — a 100-unit tower = 100 rows; repeat the Building name on every row.',
       'Floor and Unit are both required.',
-      'Address and Notes live on the FIRST row of each building; later rows can leave them blank.',
+      'Building-level fields (Address, Notes) live on the FIRST row of each building.',
+      'OWNER columns describe the property owner — usually permanent, survives tenant turnover. Required for at least the FIRST unit of each building; later units inherit the owner if blank.',
+      'RESIDENT columns describe the current occupant — leave blank if the unit is vacant.',
+      'If the Resident email matches the Owner email we automatically flag the unit as owner-occupied.',
+      'Resident tenure must be one of: Owner, Tenant.',
     ],
   },
   Commercial: {
     label: 'Commercial buildings',
-    headers: ['Building name','Property type','Floor','Unit','Address','Notes','Commercial use','Gross leasable area (sqft)','Parking spots'],
+    headers: ['Building name','Property type','Floor','Unit','Address','Notes','Commercial use','Gross leasable area (sqft)','Parking spots', ...OWNER_COLS, ...RESIDENT_COLS],
     examples: [
-      ['Boulevard Plaza Offices','Commercial',1,'B-101','Sheikh Mohammed bin Rashid Blvd, Downtown Dubai, UAE','Grade A office tower.','Office',850000,1200],
-      ['Boulevard Plaza Offices','Commercial',1,'B-102','','','','',''],
-      ['Boulevard Plaza Offices','Commercial',2,'B-201','','','','',''],
-      ['Mall of the Emirates Retail Hub','Commercial',1,'R-101','Sheikh Zayed Rd, Al Barsha 1, Dubai, UAE','Anchor retail concourse.','Retail',420000,850],
-      ['Mall of the Emirates Retail Hub','Commercial',1,'R-102','','','','',''],
+      ['Boulevard Plaza Offices','Commercial',1,'B-101','Sheikh Mohammed bin Rashid Blvd, Downtown Dubai, UAE','Grade A office tower.','Office',850000,1200,
+        'Downtown Holding LLC','+971 4 555 1000','contracts@downtownholding.ae','-','-','2013-11-20',
+        'TechCorp ME FZ-LLC','tenancy@techcorp.me','+971 4 778 2200','Welcome2026!','','','','Procurement','+971 50 111 9988','TechCorp HQ','Anchor office tenant','Tenant','2026-02-01','2027-01-31',45000,'',4,'CMT-BLV-101'],
+      ['Boulevard Plaza Offices','Commercial',1,'B-102','','','','','',
+        'Downtown Holding LLC','+971 4 555 1000','contracts@downtownholding.ae','','','',
+        '','','','','','','','','','','','','','','','',''],
+      ['Mall of the Emirates Retail Hub','Commercial',1,'R-101','Sheikh Zayed Rd, Al Barsha 1, Dubai, UAE','Anchor retail concourse.','Retail',420000,850,
+        'Majid Al Futtaim Retail','+971 4 409 9999','leasing@maf.ae','-','-','2005-09-14',
+        'Carrefour UAE','contracts@carrefour.ae','+971 4 295 1010','Welcome2026!','','','','Leasing','+971 50 220 1010','Carrefour HQ','Anchor grocery tenant','Tenant','2026-01-01','2030-12-31',95000,'',1,'CMT-MOE-101'],
     ],
     filename: 'commercial-template',
     rules: [
       'ONE ROW PER UNIT. Floor and Unit are required.',
       'Commercial use must be one of: Office, Retail, Mixed.',
       'Building-level fields (Address, Notes, GLA, Parking, Commercial use) go on the FIRST row of each building.',
+      'OWNER columns describe the landlord — typically a holding company or developer.',
+      'RESIDENT columns describe the commercial tenant when present.',
     ],
   },
   Villa: {
     label: 'Villas',
-    headers: ['Building name','Property type','Address','Notes','Plot area (sqft)','Villa count','Bedrooms per villa'],
+    headers: ['Building name','Property type','Address','Notes','Plot area (sqft)','Villa count','Bedrooms per villa', ...OWNER_COLS, ...RESIDENT_COLS],
     examples: [
-      ['Emirates Hills Estate','Villa','Emirates Hills, Dubai, UAE','Gated villa community by EMAAR with golf course frontage.',60000,8,5],
-      ['Saadiyat Beach Villas','Villa','Saadiyat Island, Abu Dhabi, UAE','Beachfront luxury villa cluster, private beach access.',95000,12,4],
+      ['Emirates Hills Estate','Villa','Emirates Hills, Dubai, UAE','Gated villa community by EMAAR with golf course frontage.',60000,8,5,
+        'Mubadala Real Estate','+971 2 413 0000','assets@mubadalare.ae','-','-','2010-04-01',
+        'Ali Al Naqbi','ali.naqbi@example.ae','+971 50 700 3344','Welcome2026!','1982-07-19','IJ9988776','784-1982-9988776-5','Layla Al Naqbi','+971 55 660 9988','Emirates Investment Authority','Investment Director','Tenant','2026-03-01','2027-02-28',45000,'',4,'RNT-VIL-EH'],
+      ['Saadiyat Beach Villas','Villa','Saadiyat Island, Abu Dhabi, UAE','Beachfront luxury villa cluster, private beach access.',95000,12,4,
+        'Aldar Properties','+971 2 810 5555','assets@aldar.ae','-','-','2018-06-12',
+        'Yusuf Al Marzouqi','yusuf.marzouqi@example.ae','+971 56 901 4477','Welcome2026!','1986-12-02','KL1122334','784-1986-1122334-6','Salma Al Marzouqi','+971 50 410 8877','ADNOC','Process Engineer','Owner','','','','2018-06-12','',''],
     ],
     filename: 'villas-template',
     rules: [
       'ONE ROW per villa compound — no Floor / Unit columns.',
       'Plot area, Villa count, and Bedrooms per villa describe the whole compound.',
+      'OWNER columns describe whoever holds title to the compound (often a developer or holding company).',
+      'RESIDENT columns describe the primary household; leave blank for vacant compounds.',
     ],
   },
   'Commercial Land': {
     label: 'Commercial land',
-    headers: ['Building name','Property type','Address','Notes','Plot area (sqft)'],
+    headers: ['Building name','Property type','Address','Notes','Plot area (sqft)', ...OWNER_COLS],
     examples: [
-      ['Al Quoz Industrial Plot','Commercial Land','Al Quoz Industrial Area 3, Dubai, UAE','Industrial-zoned plot leased to a regional logistics tenant.',35000],
-      ['Reem Island Vacant Plot','Commercial Land','Al Reem Island, Abu Dhabi, UAE','Mixed-use zoned plot held for future tower development.',60000],
+      ['Al Quoz Industrial Plot','Commercial Land','Al Quoz Industrial Area 3, Dubai, UAE','Industrial-zoned plot leased to a regional logistics tenant.',35000,
+        'Khalifa Industrial Holdings','+971 4 252 0000','plots@kih.ae','-','-','2009-02-04'],
+      ['Reem Island Vacant Plot','Commercial Land','Al Reem Island, Abu Dhabi, UAE','Mixed-use zoned plot held for future tower development.',60000,
+        'Reem Investments LLC','+971 2 614 7777','plots@reeminv.ae','-','-','2014-08-22'],
     ],
     filename: 'commercial-land-template',
     rules: [
       'ONE ROW per plot — no Floor / Unit columns.',
       'Plot area is required.',
+      'OWNER columns describe the title holder; Commercial Land has no resident, so resident columns are intentionally absent.',
     ],
   },
 };
@@ -99,32 +150,13 @@ const PC_TEMPLATES = {
       'Re-running the upload is safe: existing buildings/units are skipped (matched on Building + Unit).',
     ],
   },
-  residents: {
-    label: 'Residents',
-    headers: [
-      'Full name','Email','Phone','Building name','Floor','Unit number','Temporary password',
-      'Date of birth','Passport number','Emirates ID',
-      'Emergency contact name','Emergency contact phone','Employer','Occupation',
-      'Tenure','Lease start','Lease end','Monthly payment (AED)','Ownership start',
-    ],
-    examples: [
-      ['Aisha Al Mansoori','aisha.almansoori@example.ae','+971 50 412 8839','Aljil Tower',12,'B-1204','Welcome2026!','1988-04-15','AB1234567','784-1988-1234567-1','Mariam Al Mansoori','+971 50 444 9988','Emirates Group','Cabin Crew Manager','Owner','','','','2021-09-10'],
-      ['Mohammed Al Hammadi','mohammed.alhammadi@example.ae','+971 55 234 1187','Aljil Tower',8,'A-803','Welcome2026!','1990-11-22','CD7654321','784-1990-7654321-2','Khalid Al Hammadi','+971 55 988 1234','Mubadala','Financial Analyst','Tenant','2025-03-01','2026-02-28',12000,''],
-    ],
-    filename: 'residents-template',
-    rules: [
-      'Building name must match an existing building exactly (e.g. \'Aljil Tower\').',
-      'Unit number must match an existing unit in that building.',
-      'Temporary password is what the resident uses on first sign-in. They can change it afterwards.',
-      'Email must be unique across all VARS users.',
-      'Date of birth — use ISO format YYYY-MM-DD.',
-      'Emirates ID — 15-digit UAE ID (e.g. 784-1988-1234567-1). Optional but recommended.',
-      'Passport number, Emergency contact, Employer, Occupation — all optional.',
-      'Tenure — one of: Owner, Tenant.',
-      'Tenants: fill Lease start, Lease end, Monthly payment (AED). Leave Ownership start empty.',
-      'Owners: fill Ownership start. Leave Lease start / Lease end / Monthly payment empty.',
-    ],
-  },
+  // The standalone Residents tab is gone — resident records are now
+  // ingested as part of the Properties bulk upload (one row per unit with
+  // Owner + Resident columns). The PCSummary / PCBulkUpload / PCManualUpload
+  // handlers still recognise the 'residents' section key so existing
+  // resident-detail-modal flows and per-row Edit modals (opened from the
+  // Properties summary tab when we surface residents per unit) keep
+  // working without a top-level tab.
   security: {
     label: 'Security',
     headers: ['Full name','Email','Phone','Building name','Shift','Temporary password','Date of birth','Passport number'],
@@ -1107,18 +1139,49 @@ const PCBulkUpload = ({ section }) => {
 
 async function uploadBuildingsBulk(parsedRows, conflictMode = 'skip') {
   const results = [];
+  const residentRecords = []; // accumulated for one bulk-onboard call at the end
   const buildingMap = {};
-  // Building-level fields can land on any row but conventionally on the
-  // first. We prefer the first non-empty value seen per building so a
-  // missed cell on row 1 doesn't shadow a real value on row 5.
   const takeFirst = (current, incoming) => (current != null && current !== '' ? current : (incoming != null && incoming !== '' ? incoming : current));
   const numOrNull = (v) => {
     if (v == null || v === '') return null;
     const n = Number(v);
     return isNaN(n) ? null : n;
   };
+  const str = (v) => (v == null || v === '' ? null : String(v).toString().trim() || null);
   const validPropTypes = new Set(['Residential','Commercial','Villa','Commercial Land']);
   const validCommUse   = new Set(['Office','Retail','Mixed']);
+
+  // Pull owner / resident columns off a row into structured objects.
+  const ownerFrom = (row) => ({
+    name:    str(row['Owner name']),
+    phone:   str(row['Owner phone']),
+    email:   str(row['Owner email']),
+    passport_number: str(row['Owner passport']),
+    emirates_id:     str(row['Owner Emirates ID']),
+    purchase_date:   str(row['Purchase date']),
+  });
+  const hasOwner = (o) => !!(o && (o.name || o.phone || o.email || o.passport_number || o.emirates_id));
+  const residentFrom = (row) => ({
+    full_name:                str(row['Resident full name']),
+    email:                    str(row['Resident email']),
+    phone:                    str(row['Resident phone']),
+    password:                 str(row['Resident temp password']) || 'Welcome2026!',
+    date_of_birth:            str(row['Resident date of birth']),
+    passport_number:          str(row['Resident passport']),
+    emirates_id:              str(row['Resident Emirates ID']),
+    emergency_contact_name:   str(row['Resident emergency contact name']),
+    emergency_contact_phone:  str(row['Resident emergency contact phone']),
+    employer:                 str(row['Resident employer']),
+    occupation:               str(row['Resident occupation']),
+    tenure:                   str(row['Resident tenure']),
+    lease_start:              str(row['Lease start']),
+    lease_end:                str(row['Lease end']),
+    monthly_payment_aed:      numOrNull(row['Monthly payment (AED)']),
+    ownership_start:          str(row['Ownership start']),
+    cheques_per_year:         numOrNull(row['Cheques per year']),
+    contract_number:          str(row['Contract #']),
+  });
+  const hasResident = (r) => !!(r && r.full_name && r.email);
 
   for (const row of parsedRows) {
     const bname = (row['Building name'] || '').toString().trim();
@@ -1129,6 +1192,7 @@ async function uploadBuildingsBulk(parsedRows, conflictMode = 'skip') {
         property_type: null, address: null, notes: null,
         plot_area_sqft: null, villa_count: null, bedrooms_per_villa: null,
         commercial_use_type: null, gross_leasable_area_sqft: null, parking_spots: null,
+        defaultOwner: null,   // first non-empty owner block seen — inherited by later units
         units: [],
       };
     }
@@ -1142,15 +1206,32 @@ async function uploadBuildingsBulk(parsedRows, conflictMode = 'skip') {
     b.commercial_use_type       = takeFirst(b.commercial_use_type,       row['Commercial use']);
     b.gross_leasable_area_sqft  = takeFirst(b.gross_leasable_area_sqft,  row['Gross leasable area (sqft)']);
     b.parking_spots             = takeFirst(b.parking_spots,             row['Parking spots']);
-    // Only Residential / Commercial have unit rows. Villa and
-    // Commercial Land are stored as a single building record with no
-    // child units.
+
+    const rowOwner    = ownerFrom(row);
+    const rowResident = residentFrom(row);
+    if (!b.defaultOwner && hasOwner(rowOwner)) b.defaultOwner = rowOwner;
+
+    // Structure types (Residential, Commercial) attach owner + resident to
+    // a unit row; Villa / Commercial Land carry them on the building's
+    // single "phantom" record stored in units[] with floor=null.
     const floor = row['Floor'];
     const unit  = row['Unit'];
-    if ((floor != null && floor !== '') || (unit != null && unit !== '')) {
+    const hasUnit = (floor != null && floor !== '') || (unit != null && unit !== '');
+    if (hasUnit) {
       b.units.push({
         floor: floor != null && floor !== '' ? Number(floor) : null,
         unit_number: unit != null && unit !== '' ? String(unit).trim() : null,
+        owner:    hasOwner(rowOwner)    ? rowOwner    : null,
+        resident: hasResident(rowResident) ? rowResident : null,
+      });
+    } else if (hasOwner(rowOwner) || hasResident(rowResident)) {
+      // For Villa / Commercial Land — attach to a single virtual unit slot
+      // (floor null, unit_number null) so we still capture owner/resident
+      // even without a per-unit row.
+      b.units.push({
+        floor: null, unit_number: null,
+        owner:    hasOwner(rowOwner)    ? rowOwner    : null,
+        resident: hasResident(rowResident) ? rowResident : null,
       });
     }
   }
@@ -1198,21 +1279,105 @@ async function uploadBuildingsBulk(parsedRows, conflictMode = 'skip') {
     }
     let unitsAdded = 0;
     let unitsSeen  = b.units.length;
-    if (isStructure && b.units.length) {
-      const { data: existingUnits } = await supabaseClient.from('units').select('unit_number').eq('building_id', buildingId);
-      const existingNumbers = new Set((existingUnits || []).map(u => u.unit_number));
-      const toInsert = b.units
-        .filter(u => u.unit_number && !existingNumbers.has(u.unit_number) && u.floor != null && !isNaN(u.floor))
-        .map(u => ({ building_id: buildingId, floor: u.floor, unit_number: u.unit_number }));
-      if (toInsert.length) {
-        const { error: uErr } = await supabaseClient.from('units').insert(toInsert);
-        if (uErr) { results.push({ building: bname, ok: false, error: 'units insert: ' + uErr.message }); continue; }
-        unitsAdded = toInsert.length;
+    let residentsQueued = 0;
+    if (b.units.length) {
+      // Existing units for dedup. For Villa / Commercial Land where unit_number
+      // is null, we treat the whole building as one slot (don't dedup).
+      const { data: existingUnits } = await supabaseClient.from('units').select('id,unit_number').eq('building_id', buildingId);
+      const existingByNumber = Object.fromEntries((existingUnits || []).map(u => [u.unit_number || '__solo__', u]));
+
+      for (const u of b.units) {
+        const owner = u.owner || b.defaultOwner;
+        const ownerPayload = owner ? {
+          owner_name:             owner.name             || null,
+          owner_phone:            owner.phone            || null,
+          owner_email:            owner.email            || null,
+          owner_passport_number:  owner.passport_number  || null,
+          owner_emirates_id:      owner.emirates_id      || null,
+          purchase_date:          owner.purchase_date    || null,
+        } : {};
+        // owner_is_resident flag: true if resident email matches owner email.
+        const ownerIsResident = !!(u.resident && owner && u.resident.email && owner.email && u.resident.email.toLowerCase() === owner.email.toLowerCase());
+
+        const key = u.unit_number || '__solo__';
+        const existing = existingByNumber[key];
+        let unitId;
+        if (existing) {
+          unitId = existing.id;
+          if (conflictMode === 'update' || Object.keys(ownerPayload).length) {
+            await supabaseClient.from('units').update({ ...ownerPayload, owner_is_resident: ownerIsResident }).eq('id', unitId);
+          }
+        } else {
+          // For Villa / Commercial Land we still need a placeholder unit row
+          // to attach owner fields. Use floor=1, unit_number=<building name>-SOLO.
+          const insertPayload = {
+            building_id: buildingId,
+            floor: u.floor != null && !isNaN(u.floor) ? u.floor : (isStructure ? null : 1),
+            unit_number: u.unit_number || (bname.slice(0, 24) + '-SOLO'),
+            ...ownerPayload,
+            owner_is_resident: ownerIsResident,
+          };
+          // Structure rows missing required floor/unit_number are skipped.
+          if (isStructure && (insertPayload.floor == null || !insertPayload.unit_number)) continue;
+          const { data: newU, error: uErr } = await supabaseClient.from('units').insert(insertPayload).select('id').single();
+          if (uErr) { results.push({ building: bname, ok: false, error: 'unit insert (' + (u.unit_number || 'solo') + '): ' + uErr.message }); continue; }
+          unitId = newU.id;
+          unitsAdded++;
+        }
+
+        // Queue resident for bulk-onboard if present.
+        if (u.resident && u.resident.full_name && u.resident.email) {
+          residentRecords.push({
+            email:                   u.resident.email,
+            password:                u.resident.password || 'Welcome2026!',
+            full_name:               u.resident.full_name,
+            phone:                   u.resident.phone || null,
+            role:                    'resident',
+            building_name:           bname,
+            unit_number:             u.unit_number || (bname.slice(0, 24) + '-SOLO'),
+            date_of_birth:           u.resident.date_of_birth   || null,
+            passport_number:         u.resident.passport_number || null,
+            emirates_id:             u.resident.emirates_id     || null,
+            emergency_contact_name:  u.resident.emergency_contact_name  || null,
+            emergency_contact_phone: u.resident.emergency_contact_phone || null,
+            employer:                u.resident.employer   || null,
+            occupation:              u.resident.occupation || null,
+            tenure:                  u.resident.tenure || null,
+            lease_start:             u.resident.lease_start || null,
+            lease_end:               u.resident.lease_end   || null,
+            monthly_payment_aed:     u.resident.monthly_payment_aed,
+            ownership_start:         u.resident.ownership_start || null,
+            cheques_per_year:        u.resident.cheques_per_year,
+            contract_number:         u.resident.contract_number || null,
+          });
+          residentsQueued++;
+        }
       }
     }
-    results.push({ building: bname, ok: true, action: buildingAction, property_type: propType, units_added: unitsAdded, units_skipped: unitsSeen - unitsAdded });
+    results.push({ building: bname, ok: true, action: buildingAction, property_type: propType, units_added: unitsAdded, units_skipped: unitsSeen - unitsAdded, residents_queued: residentsQueued });
   }
-  return { results };
+
+  // Bulk-onboard any residents found on the unit rows. We POST in one batch
+  // so the edge function handles auth user creation + profile + assignment
+  // + conflict mode in a single round-trip. Result rows for residents are
+  // surfaced to the caller alongside the building rows.
+  let residentResults = [];
+  if (residentRecords.length > 0) {
+    try {
+      const { data: { session } } = await supabaseClient.auth.getSession();
+      const headers = { 'Content-Type': 'application/json' };
+      if (session && session.access_token) headers['Authorization'] = 'Bearer ' + session.access_token;
+      const resp = await fetch(SUPABASE_URL + '/functions/v1/bulk-onboard', {
+        method: 'POST', headers,
+        body: JSON.stringify({ records: residentRecords, mode: conflictMode }),
+      });
+      const out = await resp.json();
+      residentResults = (out && out.results) || [];
+    } catch (e) {
+      residentResults = [{ ok: false, error: 'Resident onboarding failed: ' + (e.message || e) }];
+    }
+  }
+  return { results, resident_results: residentResults };
 }
 
 // =========================================================================
