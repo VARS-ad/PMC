@@ -1062,6 +1062,57 @@ const PMCPropertiesPage = ({ setPage }) => {
                   </div>
                 </div>
 
+                {/* Upcoming · next 30 days — invoices already issued and
+                    due within the next 30 days, rolled up per building.
+                    Sits between the Outstanding (past-due) two-up and the
+                    Future revenue (12-month contracted) card so the three
+                    timeframes read top-to-bottom: now-due → 30-day → 12-month. */}
+                {(() => {
+                  const upcomingByBuilding = {};
+                  allInvoices.filter(i => i.effective_status === 'Upcoming').forEach(i => {
+                    const k = i.building_id;
+                    if (!upcomingByBuilding[k]) upcomingByBuilding[k] = { building_id: k, building_name: i.building_name, property_type: i.building_ref?.property_type, ref: i.building_ref, amount: 0, count: 0 };
+                    upcomingByBuilding[k].amount += Number(i.amount_aed || 0);
+                    upcomingByBuilding[k].count++;
+                  });
+                  const upcomingTop = Object.values(upcomingByBuilding).sort((a, b) => b.amount - a.amount).slice(0, 8);
+                  const upcomingMax = upcomingTop[0]?.amount || 1;
+                  const upcomingTotalLocal = upcomingTop.reduce((s, x) => s + x.amount, 0);
+                  return (
+                    <div className="card" style={{padding:'18px 22px', marginTop:18}}>
+                      <div style={{...sectionEyebrowSmall, display:'flex', alignItems:'baseline', justifyContent:'space-between', gap:12}}>
+                        <span>Upcoming · next 30 days</span>
+                        <span style={{fontSize:12, letterSpacing:0, textTransform:'none', color:'var(--text-muted)', fontWeight:500}}>{fmtMoney(upcomingTotalLocal)}</span>
+                      </div>
+                      {upcomingTop.length === 0 ? (
+                        <div style={{color:'var(--text-muted)', fontSize:13, padding:'8px 0'}}>No invoices due in the next 30 days.</div>
+                      ) : upcomingTop.map(x => {
+                        const widthPct = Math.max(4, Math.round((x.amount / upcomingMax) * 100));
+                        const tColor = ({ 'Residential':'#5a6b4f', 'Commercial':'#3E4C59', 'Villa':'#a07d3c', 'Commercial Land':'#61707D' })[x.property_type] || '#61707D';
+                        return (
+                          <div key={x.building_id}
+                            onClick={() => setFinancialAsset(x.ref)}
+                            style={{display:'grid', gridTemplateColumns:'1fr 110px', gap:14, alignItems:'center', padding:'9px 6px', cursor:'pointer', borderRadius:6, transition:'background 0.12s'}}
+                            onMouseEnter={e => { e.currentTarget.style.background = 'rgba(160,125,60,0.06)'; }}
+                            onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
+                            title={'Open the financial summary for ' + x.building_name}>
+                            <div style={{minWidth:0}}>
+                              <div style={{fontSize:13, fontWeight:500, color:'var(--text-dark)', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}>
+                                {x.building_name}
+                                <span style={{fontSize:11, color:'var(--text-muted)', fontWeight:400, marginLeft:6}}>· {x.count} {x.count === 1 ? 'invoice' : 'invoices'}</span>
+                              </div>
+                              <div style={{height:6, background:'#f4f1ec', borderRadius:3, overflow:'hidden', marginTop:5}}>
+                                <div style={{height:'100%', width:(widthPct + '%'), background:tColor, borderRadius:3}}/>
+                              </div>
+                            </div>
+                            <div style={{fontSize:13, fontWeight:600, color:'var(--text-dark)', textAlign:'right'}}>{fmtMoney(x.amount)}</div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  );
+                })()}
+
                 {/* Future revenue · next 12 months — projected contracted
                     lease income, ranked by building. Same visual idiom as
                     Top revenue contributors so the two read as a pair. */}
