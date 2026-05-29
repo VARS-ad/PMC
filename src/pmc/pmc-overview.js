@@ -49,13 +49,13 @@ const PMCOverviewPage = ({ setPage }) => {
         // Also pull the denormalised tenant_* fields so the Needs-Attention
         // card can spot vacant units and leases ending soon for non-
         // residential property types.
-        const { data: units } = await supabaseClient.from('units').select('id,building_id,unit_number,floor,tenant_name,tenant_lease_end');
+        const { data: units } = await supabaseClient.from('units').select('id,building_id,unit_number,floor,tenant_name,tenant_lease_end,tenant_monthly_payment_aed');
         const filteredUnits = (units || []).filter(u => !filterB || filterB.includes(u.building_id));
         const fIds = filteredUnits.map(u => u.id);
         const probe = fIds.length ? fIds : ['00000000-0000-0000-0000-000000000000'];
 
         const [{ data: ras }, { data: invoices }, { data: srs }, { data: visits }, { data: attsForAttention }] = await Promise.all([
-          supabaseClient.from('resident_assignments').select('profile_id,unit_id,lease_end,tenure').in('unit_id', probe),
+          supabaseClient.from('resident_assignments').select('profile_id,unit_id,lease_end,tenure,monthly_payment_aed').in('unit_id', probe),
           supabaseClient.from('invoices').select('id,amount_aed,status,due_date,unit_id,created_at,resident_profile_id').in('unit_id', probe),
           supabaseClient.from('service_requests').select('id,category,description,status,priority,created_at,resolved_at,unit_id,resident_profile_id').in('unit_id', probe).order('created_at', { ascending: false }),
           supabaseClient.from('visits').select('id,visit_date,status,visitor_name,type').in('unit_id', probe),
@@ -559,11 +559,27 @@ const PMCOverviewPage = ({ setPage }) => {
           );
         })()}
 
-        {/* ============ YOUR PORTFOLIO — per-asset cards ============ */}
+        {/* ============ YOUR PORTFOLIO — per-asset cards, grouped by type ============ */}
         {(() => {
           const cards = stats.assetCards || [];
           if (cards.length === 0) return null;
           const typeChip = { 'Residential':'#5a6b4f', 'Commercial':'#3E4C59', 'Villa':'#a07d3c', 'Commercial Land':'#61707D' };
+          // Section order + display label per property type. Matches the
+          // Database / Assets page so the user gets a consistent mental
+          // model across the app.
+          const TYPE_ORDER = ['Residential', 'Commercial', 'Villa', 'Commercial Land'];
+          const TYPE_LABEL = {
+            'Residential': 'Residential',
+            'Commercial': 'Commercial buildings',
+            'Villa': 'Villas',
+            'Commercial Land': 'Lands',
+          };
+          const byType = {};
+          TYPE_ORDER.forEach(t => { byType[t] = []; });
+          cards.forEach(c => {
+            const t = TYPE_ORDER.includes(c.property_type) ? c.property_type : 'Residential';
+            byType[t].push(c);
+          });
           // Highest-yield in green, lowest in red so the eye finds the
           // underperformer instantly. Threshold based on portfolio median.
           const yieldsSorted = cards.map(c => c.yield_pct).filter(v => v != null).sort((a, b) => a - b);
@@ -573,65 +589,81 @@ const PMCOverviewPage = ({ setPage }) => {
             <>
               <div style={{...groupEyebrow,display:'flex',justifyContent:'space-between',alignItems:'baseline'}}>
                 <span>Your Portfolio</span>
-                <span style={{fontSize:11,letterSpacing:0,textTransform:'none',color:'var(--text-muted)',fontWeight:400}}>{cards.length} asset{cards.length===1?'':'s'} · sorted by yield</span>
+                <span style={{fontSize:11,letterSpacing:0,textTransform:'none',color:'var(--text-muted)',fontWeight:400}}>{cards.length} asset{cards.length===1?'':'s'} · grouped by type</span>
               </div>
-              <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill, minmax(280px, 1fr))',gap:14,marginBottom:8}}>
-                {cards.map(c => {
-                  const issues = [];
-                  if (c.overdue_count > 0) issues.push({ label: c.overdue_count + ' overdue', color:'#8b4a42' });
-                  if (c.vacant_count > 0)  issues.push({ label: c.vacant_count  + ' vacant',  color:'#a07d3c' });
-                  if (c.expiring_leases_count > 0) issues.push({ label: c.expiring_leases_count + ' lease end', color:'#7a5a1f' });
-                  return (
-                    <div key={c.id} onClick={() => setOpenedUnit(null) /* placeholder */}
-                      style={{background:'#fff',border:'1px solid var(--border-light)',borderRadius:10,padding:'16px 18px',cursor:'default',transition:'box-shadow 0.15s',display:'flex',flexDirection:'column',gap:12}}
-                      onMouseEnter={e => e.currentTarget.style.boxShadow = '0 4px 14px rgba(19,31,35,0.06)'}
-                      onMouseLeave={e => e.currentTarget.style.boxShadow = 'none'}>
-                      {/* Header line */}
-                      <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',gap:10}}>
-                        <div style={{minWidth:0,flex:1}}>
-                          <div style={{fontSize:15,fontWeight:600,letterSpacing:'-0.01em',color:'var(--text-dark)',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{c.name}</div>
-                          <div style={{fontSize:11,color:'var(--text-muted)',marginTop:3,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{c.address || '—'}</div>
-                        </div>
-                        <span style={{fontSize:9,letterSpacing:'0.05em',textTransform:'uppercase',color:'#fff',background:typeChip[c.property_type] || '#61707D',padding:'3px 8px',borderRadius:3,fontWeight:600,whiteSpace:'nowrap',flexShrink:0}}>
-                          {c.property_type}
-                        </span>
-                      </div>
-                      {/* Yield + occupancy split */}
-                      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
-                        <div>
-                          <div style={{fontSize:10,letterSpacing:'0.06em',textTransform:'uppercase',color:'var(--text-secondary)',fontWeight:600,marginBottom:4}}>Yield</div>
-                          <div style={{fontSize:22,fontWeight:600,color:yieldTone(c.yield_pct),lineHeight:1}}>{c.yield_pct == null ? '—' : c.yield_pct.toFixed(1) + '%'}</div>
-                          <div style={{fontSize:10,color:'var(--text-muted)',marginTop:3}}>annualised gross</div>
-                        </div>
-                        <div>
-                          <div style={{fontSize:10,letterSpacing:'0.06em',textTransform:'uppercase',color:'var(--text-secondary)',fontWeight:600,marginBottom:4}}>Occupancy</div>
-                          <div style={{fontSize:22,fontWeight:600,color:'var(--text-dark)',lineHeight:1}}>{c.occupied_count}<span style={{fontSize:14,color:'var(--text-muted)',fontWeight:400}}> / {c.total_units}</span></div>
-                          <div style={{fontSize:10,color:'var(--text-muted)',marginTop:3}}>{c.occupancy_pct}%</div>
-                        </div>
-                      </div>
-                      {/* This-month collected + footer */}
-                      <div style={{paddingTop:10,borderTop:'1px solid var(--border-light)',display:'flex',justifyContent:'space-between',alignItems:'baseline',gap:10}}>
-                        <div>
-                          <div style={{fontSize:10,letterSpacing:'0.06em',textTransform:'uppercase',color:'var(--text-secondary)',fontWeight:600}}>This month</div>
-                          <div style={{fontSize:15,fontWeight:600,color:'#5a6b4f',marginTop:2}}>{fmt(c.this_month_collected)}</div>
-                        </div>
-                        <div style={{textAlign:'right'}}>
-                          <div style={{fontSize:10,letterSpacing:'0.06em',textTransform:'uppercase',color:'var(--text-secondary)',fontWeight:600}}>Value</div>
-                          <div style={{fontSize:13,fontWeight:600,color:'var(--text-dark)',marginTop:2}}>{c.current_value ? fmt(c.current_value) : '—'}</div>
-                        </div>
-                      </div>
-                      {/* Issue chips */}
-                      {issues.length > 0 && (
-                        <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
-                          {issues.map((iss, i) => (
-                            <span key={i} style={{fontSize:10,fontWeight:600,letterSpacing:'0.03em',textTransform:'uppercase',color:iss.color,background:'rgba(0,0,0,0.04)',padding:'3px 8px',borderRadius:3}}>{iss.label}</span>
-                          ))}
-                        </div>
-                      )}
+              {TYPE_ORDER.map(type => {
+                const list = byType[type] || [];
+                if (list.length === 0) return null;
+                // Sort highest yield first within each section.
+                list.sort((a, b) => (b.yield_pct || 0) - (a.yield_pct || 0));
+                return (
+                  <div key={type} style={{marginBottom:18}}>
+                    <div style={{display:'flex',alignItems:'baseline',gap:10,marginBottom:10,paddingBottom:6,borderBottom:'1px solid var(--border-light)'}}>
+                      <span style={{fontSize:14,fontWeight:600,letterSpacing:'-0.01em',color:'var(--text-dark)'}}>{TYPE_LABEL[type]}</span>
+                      <span style={{fontSize:11,color:'var(--text-muted)'}}>· {list.length} asset{list.length===1?'':'s'}</span>
                     </div>
-                  );
-                })}
-              </div>
+                    <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill, minmax(280px, 1fr))',gap:14}}>
+                      {list.map(c => {
+                        const issues = [];
+                        if (c.overdue_count > 0) issues.push({ label: c.overdue_count + ' overdue', color:'#8b4a42' });
+                        if (c.vacant_count > 0)  issues.push({ label: c.vacant_count  + ' vacant',  color:'#a07d3c' });
+                        if (c.expiring_leases_count > 0) issues.push({ label: c.expiring_leases_count + ' lease end', color:'#7a5a1f' });
+                        return (
+                          <div key={c.id}
+                            onClick={() => setPage && setPage('properties')}
+                            style={{background:'#fff',border:'1px solid var(--border-light)',borderRadius:10,padding:'16px 18px',cursor: setPage ? 'pointer' : 'default',transition:'box-shadow 0.15s, transform 0.15s',display:'flex',flexDirection:'column',gap:12}}
+                            onMouseEnter={e => { e.currentTarget.style.boxShadow = '0 4px 14px rgba(19,31,35,0.06)'; e.currentTarget.style.transform = 'translateY(-1px)'; }}
+                            onMouseLeave={e => { e.currentTarget.style.boxShadow = 'none'; e.currentTarget.style.transform = 'none'; }}
+                            title="Open Assets page for the deeper view">
+                            {/* Header line */}
+                            <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',gap:10}}>
+                              <div style={{minWidth:0,flex:1}}>
+                                <div style={{fontSize:15,fontWeight:600,letterSpacing:'-0.01em',color:'var(--text-dark)',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{c.name}</div>
+                                <div style={{fontSize:11,color:'var(--text-muted)',marginTop:3,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{c.address || '—'}</div>
+                              </div>
+                              <span style={{fontSize:9,letterSpacing:'0.05em',textTransform:'uppercase',color:'#fff',background:typeChip[c.property_type] || '#61707D',padding:'3px 8px',borderRadius:3,fontWeight:600,whiteSpace:'nowrap',flexShrink:0}}>
+                                {c.property_type}
+                              </span>
+                            </div>
+                            {/* Yield + occupancy split */}
+                            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
+                              <div>
+                                <div style={{fontSize:10,letterSpacing:'0.06em',textTransform:'uppercase',color:'var(--text-secondary)',fontWeight:600,marginBottom:4}}>Yield</div>
+                                <div style={{fontSize:22,fontWeight:600,color:yieldTone(c.yield_pct),lineHeight:1}}>{c.yield_pct == null ? '—' : c.yield_pct.toFixed(1) + '%'}</div>
+                                <div style={{fontSize:10,color:'var(--text-muted)',marginTop:3}}>annualised gross</div>
+                              </div>
+                              <div>
+                                <div style={{fontSize:10,letterSpacing:'0.06em',textTransform:'uppercase',color:'var(--text-secondary)',fontWeight:600,marginBottom:4}}>Occupancy</div>
+                                <div style={{fontSize:22,fontWeight:600,color:'var(--text-dark)',lineHeight:1}}>{c.occupied_count}<span style={{fontSize:14,color:'var(--text-muted)',fontWeight:400}}> / {c.total_units}</span></div>
+                                <div style={{fontSize:10,color:'var(--text-muted)',marginTop:3}}>{c.occupancy_pct}%</div>
+                              </div>
+                            </div>
+                            {/* This-month collected + footer */}
+                            <div style={{paddingTop:10,borderTop:'1px solid var(--border-light)',display:'flex',justifyContent:'space-between',alignItems:'baseline',gap:10}}>
+                              <div>
+                                <div style={{fontSize:10,letterSpacing:'0.06em',textTransform:'uppercase',color:'var(--text-secondary)',fontWeight:600}}>This month</div>
+                                <div style={{fontSize:15,fontWeight:600,color:'#5a6b4f',marginTop:2}}>{fmt(c.this_month_collected)}</div>
+                              </div>
+                              <div style={{textAlign:'right'}}>
+                                <div style={{fontSize:10,letterSpacing:'0.06em',textTransform:'uppercase',color:'var(--text-secondary)',fontWeight:600}}>Value</div>
+                                <div style={{fontSize:13,fontWeight:600,color:'var(--text-dark)',marginTop:2}}>{c.current_value ? fmt(c.current_value) : '—'}</div>
+                              </div>
+                            </div>
+                            {/* Issue chips */}
+                            {issues.length > 0 && (
+                              <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
+                                {issues.map((iss, i) => (
+                                  <span key={i} style={{fontSize:10,fontWeight:600,letterSpacing:'0.03em',textTransform:'uppercase',color:iss.color,background:'rgba(0,0,0,0.04)',padding:'3px 8px',borderRadius:3}}>{iss.label}</span>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })}
             </>
           );
         })()}
