@@ -72,6 +72,10 @@ const App = () => {
     const loadFromCloud = async (isInitial) => {
       // Don't poll while we have a pending or in-progress write
       if (!isInitial && (isWritingRef.current || writePendingRef.current)) return;
+      // Skip polls while the tab is in the background — no UI is visible to
+      // update, and it spares the user a 184KB fetch + parse every cycle.
+      // The next foreground poll (or tab refocus) picks up any changes.
+      if (!isInitial && typeof document !== 'undefined' && document.hidden) return;
       try {
         const { data: row, error } = await supabaseClient
           .from('app_state')
@@ -162,10 +166,17 @@ const App = () => {
     // Initial load
     loadFromCloud(true);
 
-    // Poll every 4 seconds for changes from other devices
-    const pollId = setInterval(() => loadFromCloud(false), 4000);
-    console.log('Supabase polling started (every 4s)');
-    return () => clearInterval(pollId);
+    // Poll for changes from other devices. 4s was needlessly aggressive for
+    // a 184KB blob — visitor pre-approvals already arrive via a realtime
+    // channel (see upcoming-pre-approvals.js), so a 15s sweep is plenty for
+    // the rest and cuts the background fetch/parse load by ~75%. A refocus
+    // listener fires an immediate catch-up poll so returning to the tab feels
+    // instant rather than waiting up to 15s.
+    const pollId = setInterval(() => loadFromCloud(false), 15000);
+    const onFocus = () => { if (!document.hidden) loadFromCloud(false); };
+    document.addEventListener('visibilitychange', onFocus);
+    console.log('Supabase polling started (every 15s, paused while hidden)');
+    return () => { clearInterval(pollId); document.removeEventListener('visibilitychange', onFocus); };
   }, []);
 
   // Write data to Supabase + localStorage when data changes (debounced)
