@@ -298,25 +298,7 @@ const PMCOverviewPage = ({ setPage }) => {
             {explicitRange}
           </div>
         </div>
-        <div style={{display:'flex',gap:8,alignItems:'center',flexWrap:'wrap'}}>
-          <select value={timeRange} onChange={e => setTimeRange(e.target.value)}
-            style={{padding:'8px 14px',fontSize:13,fontWeight:500,borderRadius:6,background:'#fff',border:'1px solid var(--border-light)',color:'var(--text-dark)',cursor:'pointer',fontFamily:'inherit',outline:'none'}}>
-            <option value="1m">1 Month (this month)</option>
-            <option value="2m">2 Months</option>
-            <option value="3m">3 Months</option>
-            <option value="12m">12 Months</option>
-            <option value="custom">Custom range…</option>
-          </select>
-          {timeRange === 'custom' && (
-            <>
-              <input type="date" value={customStart} onChange={e => setCustomStart(e.target.value)}
-                style={{padding:'8px 12px',fontSize:13,borderRadius:6,background:'#fff',border:'1px solid var(--border-light)',color:'var(--text-dark)',fontFamily:'inherit',outline:'none'}}/>
-              <span style={{color:'var(--text-muted)',fontSize:13}}>→</span>
-              <input type="date" value={customEnd} onChange={e => setCustomEnd(e.target.value)}
-                style={{padding:'8px 12px',fontSize:13,borderRadius:6,background:'#fff',border:'1px solid var(--border-light)',color:'var(--text-dark)',fontFamily:'inherit',outline:'none'}}/>
-            </>
-          )}
-        </div>
+        <TimeRangePicker/>
       </div>
 
       {!stats ? (
