@@ -221,6 +221,9 @@ const PMCPropertiesPage = ({ setPage }) => {
   const [error, setError] = useState(null);
   const [selectedBuilding, setSelectedBuilding] = useState(null);
   const [drill, setDrill] = useState(null); // { building, view }
+  // Al Qurm View trial: the consolidated Total Billed tile opens this
+  // slide-in financial panel instead of the usual BuildingDrillModal.
+  const [financialAsset, setFinancialAsset] = useState(null);
   const [showDownload, setShowDownload] = useState(false);
   // Inner tab selector — the four asset types used to stack; now they
   // sit behind tabs so the user can focus on one type at a time.
@@ -556,30 +559,45 @@ const PMCPropertiesPage = ({ setPage }) => {
                     ))}
                   </div>
                 )}
-                <div style={{display:'grid',gridTemplateColumns:`repeat(${cols}, minmax(0, 1fr))`,gap:8,marginTop:14}}>
-                  {/* Custom Units stat. Matches PMCStat exactly so the
-                      tile row lines up. The "View floors & units" tail
-                      caption is gone; the whole tile is clickable. */}
-                  <div
-                    onClick={(e) => { e.stopPropagation(); open(); }}
-                    title="View floors & units"
-                    style={{padding:'14px 16px',background:'var(--bg-surface)',borderRadius:6,border:'1px solid var(--border-light)',cursor:'pointer',transition:'background 0.15s, border-color 0.15s'}}
-                    onMouseEnter={e => { e.currentTarget.style.background = 'var(--accent-warm-light)'; e.currentTarget.style.borderColor = 'var(--accent-warm)'; }}
-                    onMouseLeave={e => { e.currentTarget.style.background = 'var(--bg-surface)'; e.currentTarget.style.borderColor = 'var(--border-light)'; }}
-                  >
-                    <div style={{fontSize:11,letterSpacing:'0.08em',textTransform:'uppercase',color:'var(--text-secondary)',marginBottom:6,fontWeight:500}}>Units</div>
-                    <div style={{fontSize:16,fontWeight:600,color:'var(--text-dark)',letterSpacing:'-0.015em'}}>{b.unitCount} <span style={{fontSize:12,fontWeight:400,color:'var(--text-muted)',letterSpacing:0}}>· {occupancyPct}% occupied</span></div>
-                  </div>
-                  {isCommercial && (
-                    <PMCStat label="Monthly Run-Rate"  value={'AED ' + Math.round(b.monthlyRev).toLocaleString()}          onClick={() => setDrill({ building: b, view: 'tenants' })}        hint="Tenants + lease rates"/>
-                  )}
-                  <PMCStat label="Total Billed" value={'AED ' + Math.round(totalBilled).toLocaleString()}  onClick={() => setDrill({ building: b, view: 'invoices' })}  hint="All invoices for this building"/>
-                  <PMCStat label="Collected"    value={'AED ' + Math.round(b.collected).toLocaleString()} onClick={() => setDrill({ building: b, view: 'collected' })} color="#5a6b4f" hint="Paid invoices"/>
-                  <PMCStat label="Pending"      value={'AED ' + Math.round(b.pending).toLocaleString()}   onClick={() => setDrill({ building: b, view: 'pending' })}   color={b.pending  > 0 ? '#8b4a42' : null} hint="Past due — not paid yet"/>
-                  <PMCStat label="Upcoming"     value={'AED ' + Math.round(b.upcoming).toLocaleString()}  onClick={() => setDrill({ building: b, view: 'upcoming' })}  color={b.upcoming > 0 ? '#a07d3c' : null} hint="Due within next 30 days"/>
-                  <PMCStat label="Future"       value={'AED ' + Math.round(b.future).toLocaleString()}    onClick={() => setDrill({ building: b, view: 'future' })}    color={b.future   > 0 ? '#61707D' : null} hint="Due more than 30 days out"/>
-                  <PMCStat label="Open SRs"     value={b.openSRs + ' open · ' + b.totalSRs + ' total'}    onClick={() => setDrill({ building: b, view: 'srs' })}       hint="Service requests"/>
-                </div>
+                {(() => {
+                  // Al Qurm View trial: the 4 sub-buckets (Collected /
+                  // Pending / Upcoming / Future) collapse into a single
+                  // Total Billed tile that opens the slide-in financial
+                  // panel. Every other asset keeps the original 6/7 tile
+                  // row until we roll the trial out.
+                  const isTrial = b.name === 'Al Qurm View';
+                  const trialCols = isTrial ? 3 : cols;
+                  return (
+                    <div style={{display:'grid',gridTemplateColumns:`repeat(${trialCols}, minmax(0, 1fr))`,gap:8,marginTop:14}}>
+                      {/* Units tile (custom render — matches PMCStat shape) */}
+                      <div
+                        onClick={(e) => { e.stopPropagation(); open(); }}
+                        title="View floors & units"
+                        style={{padding:'14px 16px',background:'var(--bg-surface)',borderRadius:6,border:'1px solid var(--border-light)',cursor:'pointer',transition:'background 0.15s, border-color 0.15s'}}
+                        onMouseEnter={e => { e.currentTarget.style.background = 'var(--accent-warm-light)'; e.currentTarget.style.borderColor = 'var(--accent-warm)'; }}
+                        onMouseLeave={e => { e.currentTarget.style.background = 'var(--bg-surface)'; e.currentTarget.style.borderColor = 'var(--border-light)'; }}
+                      >
+                        <div style={{fontSize:11,letterSpacing:'0.08em',textTransform:'uppercase',color:'var(--text-secondary)',marginBottom:6,fontWeight:500}}>Units</div>
+                        <div style={{fontSize:16,fontWeight:600,color:'var(--text-dark)',letterSpacing:'-0.015em'}}>{b.unitCount} <span style={{fontSize:12,fontWeight:400,color:'var(--text-muted)',letterSpacing:0}}>· {occupancyPct}% occupied</span></div>
+                      </div>
+                      {isCommercial && !isTrial && (
+                        <PMCStat label="Monthly Run-Rate"  value={'AED ' + Math.round(b.monthlyRev).toLocaleString()}          onClick={() => setDrill({ building: b, view: 'tenants' })}        hint="Tenants + lease rates"/>
+                      )}
+                      {isTrial ? (
+                        <PMCStat label="Total Billed" value={'AED ' + Math.round(totalBilled).toLocaleString()} onClick={() => setFinancialAsset(b)} hint="Open the asset's financial summary — collected, pending, upcoming + per-unit breakdown."/>
+                      ) : (
+                        <>
+                          <PMCStat label="Total Billed" value={'AED ' + Math.round(totalBilled).toLocaleString()}  onClick={() => setDrill({ building: b, view: 'invoices' })}  hint="All invoices for this building"/>
+                          <PMCStat label="Collected"    value={'AED ' + Math.round(b.collected).toLocaleString()} onClick={() => setDrill({ building: b, view: 'collected' })} color="#5a6b4f" hint="Paid invoices"/>
+                          <PMCStat label="Pending"      value={'AED ' + Math.round(b.pending).toLocaleString()}   onClick={() => setDrill({ building: b, view: 'pending' })}   color={b.pending  > 0 ? '#8b4a42' : null} hint="Past due — not paid yet"/>
+                          <PMCStat label="Upcoming"     value={'AED ' + Math.round(b.upcoming).toLocaleString()}  onClick={() => setDrill({ building: b, view: 'upcoming' })}  color={b.upcoming > 0 ? '#a07d3c' : null} hint="Due within next 30 days"/>
+                          <PMCStat label="Future"       value={'AED ' + Math.round(b.future).toLocaleString()}    onClick={() => setDrill({ building: b, view: 'future' })}    color={b.future   > 0 ? '#61707D' : null} hint="Due more than 30 days out"/>
+                        </>
+                      )}
+                      <PMCStat label="Open SRs"     value={b.openSRs + ' open · ' + b.totalSRs + ' total'}    onClick={() => setDrill({ building: b, view: 'srs' })}       hint="Service requests"/>
+                    </div>
+                  );
+                })()}
                 </div>{/* padded body */}
               </div>
             );
@@ -647,6 +665,7 @@ const PMCPropertiesPage = ({ setPage }) => {
 
       {selectedBuilding && <BuildingDetailModal building={selectedBuilding} onClose={() => setSelectedBuilding(null)}/>}
       {drill && <BuildingDrillModal building={drill.building} view={drill.view} setPage={setPage} onClose={() => setDrill(null)}/>}
+      {financialAsset && <AssetFinancialPanel building={financialAsset} onClose={() => setFinancialAsset(null)}/>}
     </div>
   );
 };

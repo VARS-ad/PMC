@@ -11,12 +11,9 @@
 // mount.
 
 const UnitDetailModal = ({ unit, building, assignment: passedAssignment, profile: passedProfile, onClose }) => {
-  // Phase 1A trial: Al Qurm View units open the new full-screen
-  // landlord deep-dive page instead of this compact modal. Every other
-  // asset keeps the existing modal until we roll the trial out further.
-  if (building && building.name === 'Al Qurm View' && typeof UnitDetailPage !== 'undefined') {
-    return <UnitDetailPage unit={unit} building={building} onClose={onClose}/>;
-  }
+  // Phase 1A trial reverted — unit clicks land on the existing compact
+  // modal everywhere. The asset-level financial deep-dive lives in
+  // AssetFinancialPanel instead, opened from the Total Billed tile.
   const [assignment, setAssignment]         = useState(passedAssignment || null);
   const [profile, setProfile]               = useState(passedProfile || null);
   // When the unit is vacant but unpaid invoices remain, we resolve the
