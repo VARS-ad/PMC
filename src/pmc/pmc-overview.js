@@ -33,28 +33,28 @@ const PMCStat = ({ label, value, color, onClick, hint }) => (
 // CDN-hosted, free for commercial demo use.
 const STOCK_BUILDING_PHOTOS = {
   'Residential': [
-    'https://images.unsplash.com/photo-1545324418-cc1a3fa10c00?w=1000&auto=format&fit=crop&q=70',
-    'https://images.unsplash.com/photo-1512453979798-5ea266f8880c?w=1000&auto=format&fit=crop&q=70',
-    'https://images.unsplash.com/photo-1582407947304-fd86f028f716?w=1000&auto=format&fit=crop&q=70',
-    'https://images.unsplash.com/photo-1486325212027-8081e485255e?w=1000&auto=format&fit=crop&q=70',
+    'https://images.unsplash.com/photo-1545324418-cc1a3fa10c00?w=1600&auto=format&fit=crop&q=85',
+    'https://images.unsplash.com/photo-1512453979798-5ea266f8880c?w=1600&auto=format&fit=crop&q=85',
+    'https://images.unsplash.com/photo-1582407947304-fd86f028f716?w=1600&auto=format&fit=crop&q=85',
+    'https://images.unsplash.com/photo-1486325212027-8081e485255e?w=1600&auto=format&fit=crop&q=85',
   ],
   'Commercial': [
-    'https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?w=1000&auto=format&fit=crop&q=70',
-    'https://images.unsplash.com/photo-1577415124269-fc1140a69e91?w=1000&auto=format&fit=crop&q=70',
-    'https://images.unsplash.com/photo-1497366754035-f200968a6e72?w=1000&auto=format&fit=crop&q=70',
-    'https://images.unsplash.com/photo-1554435493-93422e8220c8?w=1000&auto=format&fit=crop&q=70',
+    'https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?w=1600&auto=format&fit=crop&q=85',
+    'https://images.unsplash.com/photo-1577415124269-fc1140a69e91?w=1600&auto=format&fit=crop&q=85',
+    'https://images.unsplash.com/photo-1497366754035-f200968a6e72?w=1600&auto=format&fit=crop&q=85',
+    'https://images.unsplash.com/photo-1554435493-93422e8220c8?w=1600&auto=format&fit=crop&q=85',
   ],
   'Villa': [
-    'https://images.unsplash.com/photo-1613490493576-7fde63acd811?w=1000&auto=format&fit=crop&q=70',
-    'https://images.unsplash.com/photo-1568605114967-8130f3a36994?w=1000&auto=format&fit=crop&q=70',
-    'https://images.unsplash.com/photo-1564013799919-ab600027ffc6?w=1000&auto=format&fit=crop&q=70',
-    'https://images.unsplash.com/photo-1600596542815-ffad4c1539a9?w=1000&auto=format&fit=crop&q=70',
+    'https://images.unsplash.com/photo-1613490493576-7fde63acd811?w=1600&auto=format&fit=crop&q=85',
+    'https://images.unsplash.com/photo-1568605114967-8130f3a36994?w=1600&auto=format&fit=crop&q=85',
+    'https://images.unsplash.com/photo-1564013799919-ab600027ffc6?w=1600&auto=format&fit=crop&q=85',
+    'https://images.unsplash.com/photo-1600596542815-ffad4c1539a9?w=1600&auto=format&fit=crop&q=85',
   ],
   'Commercial Land': [
-    'https://images.unsplash.com/photo-1581094288338-2314dddb7ece?w=1000&auto=format&fit=crop&q=70',
-    'https://images.unsplash.com/photo-1565008447742-97f6f38c985c?w=1000&auto=format&fit=crop&q=70',
-    'https://images.unsplash.com/photo-1581090700227-1e37b190418e?w=1000&auto=format&fit=crop&q=70',
-    'https://images.unsplash.com/photo-1587293852726-70cdb56c2866?w=1000&auto=format&fit=crop&q=70',
+    'https://images.unsplash.com/photo-1581094288338-2314dddb7ece?w=1600&auto=format&fit=crop&q=85',
+    'https://images.unsplash.com/photo-1565008447742-97f6f38c985c?w=1600&auto=format&fit=crop&q=85',
+    'https://images.unsplash.com/photo-1581090700227-1e37b190418e?w=1600&auto=format&fit=crop&q=85',
+    'https://images.unsplash.com/photo-1587293852726-70cdb56c2866?w=1600&auto=format&fit=crop&q=85',
   ],
 };
 const pickStockPhoto = (assetId, propertyType) => {
@@ -422,16 +422,18 @@ const PMCOverviewPage = ({ setPage }) => {
             const bAssigned = (ras || []).filter(r => bUnitIds.has(r.unit_id));
             const bTenantOccupied = bUnits.filter(u => u.tenant_name).length;
             const occupiedCount = bAssigned.length + bTenantOccupied;
-            // This-month collected for THIS asset.
-            const thisMonthCollected = thisMonthInvoices.filter(i => bUnitIds.has(i.unit_id) && i.status === 'Paid').reduce((s, i) => s + Number(i.amount_aed), 0);
+            // Period-aware collected. Honours the top-bar time-range so
+            // the figure on each card matches the headline above.
+            const periodCollected = periodInvoices.filter(i => bUnitIds.has(i.unit_id) && i.status === 'Paid').reduce((s, i) => s + Number(i.amount_aed), 0);
             // Annualised gross yield = (annual rent at target) / purchase_price.
             const annualTarget = bAssigned.reduce((s, r) => s + Number(r.monthly_payment_aed || 0), 0) * 12
                                + bUnits.reduce((s, u) => s + Number(u.tenant_monthly_payment_aed || 0), 0) * 12;
             const yieldPct = b.purchase_price && Number(b.purchase_price) > 0
               ? (annualTarget / Number(b.purchase_price)) * 100
               : null;
-            // Counts for the inline exception chip.
+            // Counts + amounts for the inline exception chips.
             const overdueCount = (invoices || []).filter(i => bUnitIds.has(i.unit_id) && i._eff === 'Overdue').length;
+            const overdueAmount = (invoices || []).filter(i => bUnitIds.has(i.unit_id) && i._eff === 'Overdue').reduce((s, i) => s + Number(i.amount_aed), 0);
             const expiringLeasesCount = bAssigned.filter(r => r.lease_end && r.lease_end >= today10 && r.lease_end <= cutoff60).length
                                       + bUnits.filter(u => u.tenant_lease_end && u.tenant_lease_end >= today10 && u.tenant_lease_end <= cutoff60).length;
             const vacantCount = bUnits.length - occupiedCount;
@@ -440,10 +442,11 @@ const PMCOverviewPage = ({ setPage }) => {
               purchase_price: b.purchase_price, current_value: b.current_value, acquired_on: b.acquired_on,
               total_units: bUnits.length, occupied_count: occupiedCount, vacant_count: Math.max(0, vacantCount),
               occupancy_pct: bUnits.length > 0 ? Math.round(100 * occupiedCount / bUnits.length) : 0,
-              this_month_collected: thisMonthCollected,
+              period_collected: periodCollected,
               annual_target: annualTarget,
               yield_pct: yieldPct,
               overdue_count: overdueCount,
+              overdue_amount: overdueAmount,
               expiring_leases_count: expiringLeasesCount,
               raw_building: b,
               photo_path: photoByBuilding[b.id] || null,
@@ -691,12 +694,26 @@ const PMCOverviewPage = ({ setPage }) => {
                       <span style={{fontSize:14,fontWeight:600,letterSpacing:'-0.01em',color:'var(--text-dark)'}}>{TYPE_LABEL[type]}</span>
                       <span style={{fontSize:11,color:'var(--text-muted)'}}>· {list.length} asset{list.length===1?'':'s'}</span>
                     </div>
+                    {/* Period-aware label so the figure on every card matches
+                        the time-range pick at the top of the page. */}
+                    {(() => null)()}
                     <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill, minmax(280px, 1fr))',gap:14}}>
                       {list.map(c => {
-                        const issues = [];
-                        if (c.overdue_count > 0) issues.push({ label: c.overdue_count + ' overdue', color:'#8b4a42' });
-                        if (c.vacant_count > 0)  issues.push({ label: c.vacant_count  + ' vacant',  color:'#a07d3c' });
-                        if (c.expiring_leases_count > 0) issues.push({ label: c.expiring_leases_count + ' lease end', color:'#7a5a1f' });
+                        // Per-property-type vocab for the vacant chip — landlords
+                        // want to read 'vacant flats' on a residential card, not
+                        // 'vacant units'.
+                        const vacantWord = ({ 'Residential':'flats', 'Commercial':'offices', 'Villa':'villas', 'Commercial Land':'plots' })[c.property_type] || 'units';
+                        const periodCollectedLabel = timeRange === 'custom' && customStart && customEnd
+                          ? customStart + ' → ' + customEnd
+                          : timeRange === '1m' ? new Date().toLocaleString('en-GB', { month: 'long', year: 'numeric' })
+                          : 'Last ' + monthsBack + ' months';
+                        const chips = [];
+                        // Always show occupancy so the user sees how full the
+                        // asset is at a glance.
+                        chips.push({ label: c.occupancy_pct + '% occupied', color:'#5a6b4f' });
+                        if (c.overdue_count > 0) chips.push({ label: c.overdue_count + ' overdue · AED ' + Math.round(c.overdue_amount || 0).toLocaleString(), color:'#8b4a42' });
+                        if (c.vacant_count > 0)  chips.push({ label: c.vacant_count  + ' vacant ' + vacantWord,  color:'#a07d3c' });
+                        if (c.expiring_leases_count > 0) chips.push({ label: c.expiring_leases_count + ' lease end', color:'#7a5a1f' });
                         return (
                           <div key={c.id}
                             onClick={() => { try { sessionStorage.setItem('vars:scroll-to-asset', c.id); sessionStorage.setItem('vars:scroll-to-asset-type', c.property_type || 'Residential'); } catch (_) {} if (setPage) setPage('properties'); }}
@@ -712,15 +729,16 @@ const PMCOverviewPage = ({ setPage }) => {
                                 <div style={{fontSize:15,fontWeight:600,letterSpacing:'-0.01em',color:'var(--text-dark)',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{c.name}</div>
                                 <div style={{fontSize:11,color:'var(--text-muted)',marginTop:3,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{c.address || '—'}</div>
                               </div>
-                              {/* This month collected — the one number that matters */}
+                              {/* Period-aware collected — the one number that matters,
+                                  and it always matches the time-range pick. */}
                               <div style={{paddingTop:10,borderTop:'1px solid var(--border-light)'}}>
-                                <div style={{fontSize:10,letterSpacing:'0.06em',textTransform:'uppercase',color:'var(--text-secondary)',fontWeight:600,marginBottom:4}}>Collected this month</div>
-                                <div style={{fontSize:22,fontWeight:600,color:'#5a6b4f',letterSpacing:'-0.015em',lineHeight:1}}>{fmt(c.this_month_collected)}</div>
+                                <div style={{fontSize:10,letterSpacing:'0.06em',textTransform:'uppercase',color:'var(--text-secondary)',fontWeight:600,marginBottom:4}}>Collected · {periodCollectedLabel}</div>
+                                <div style={{fontSize:22,fontWeight:600,color:'#5a6b4f',letterSpacing:'-0.015em',lineHeight:1}}>{fmt(c.period_collected)}</div>
                               </div>
-                              {/* Issue chips */}
-                              {issues.length > 0 && (
+                              {/* Status chips: occupancy + exceptions */}
+                              {chips.length > 0 && (
                                 <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
-                                  {issues.map((iss, i) => (
+                                  {chips.map((iss, i) => (
                                     <span key={i} style={{fontSize:10,fontWeight:600,letterSpacing:'0.03em',textTransform:'uppercase',color:iss.color,background:'rgba(0,0,0,0.04)',padding:'3px 8px',borderRadius:3}}>{iss.label}</span>
                                   ))}
                                 </div>

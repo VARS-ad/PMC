@@ -50,13 +50,15 @@ const BuildingDrillModal = ({ building, view, onClose, setPage }) => {
   }, []);
 
   const VIEWS = {
-    invoices:    { label: 'Total Billed',  page: 'payment', kind: 'invoices' },
-    collected:   { label: 'Collected',     page: 'payment', kind: 'invoices' },
-    pending:     { label: 'Pending',       page: 'payment', kind: 'invoices' },
-    upcoming:    { label: 'Upcoming',      page: 'payment', kind: 'invoices' },
-    future:      { label: 'Future',        page: 'payment', kind: 'invoices' },
-    srs:         { label: 'Open Service Requests', page: 'service', kind: 'srs' },
-    tenants:     { label: 'Tenants',       page: 'profileCreation', kind: 'tenants' },
+    invoices:         { label: 'Total Billed',                 page: 'payment',         kind: 'invoices' },
+    collected:        { label: 'Collected',                    page: 'payment',         kind: 'invoices' },
+    pending:          { label: 'Pending',                      page: 'payment',         kind: 'invoices' },
+    upcoming:         { label: 'Upcoming',                     page: 'payment',         kind: 'invoices' },
+    future:           { label: 'Future',                       page: 'payment',         kind: 'invoices' },
+    srs:              { label: 'Open Service Requests',        page: 'service',         kind: 'srs' },
+    'srs-urgent':     { label: 'High-Priority Service Requests', page: 'service',       kind: 'srs' },
+    tenants:          { label: 'Tenants',                      page: 'profileCreation', kind: 'tenants' },
+    'leases-expiring':{ label: 'Leases Expiring · 60 days',    page: 'profileCreation', kind: 'tenants' },
   };
   const v = VIEWS[view] || VIEWS.invoices;
 
@@ -69,8 +71,14 @@ const BuildingDrillModal = ({ building, view, onClose, setPage }) => {
     if (view === 'future')    rows = rows.filter(r => r.effective_status === 'Future');
   } else if (v.kind === 'srs') {
     rows = (building.srs || []).filter(s => ['New','Acknowledged','In Progress'].includes(s.status));
+    if (view === 'srs-urgent') rows = rows.filter(s => ['High','Urgent'].includes(s.priority));
   } else if (v.kind === 'tenants') {
     rows = (building.tenants || []);
+    if (view === 'leases-expiring') {
+      const todayIso = new Date().toISOString().slice(0, 10);
+      const cutoff60Iso = new Date(Date.now() + 60 * 24 * 3600 * 1000).toISOString().slice(0, 10);
+      rows = rows.filter(t => t.lease_end && t.lease_end >= todayIso && t.lease_end <= cutoff60Iso);
+    }
   }
 
   const total = v.kind === 'invoices'
@@ -269,7 +277,7 @@ const PMCPropertiesPage = ({ setPage }) => {
       try {
         const [{ data: bs }, { data: units }, { data: ras }, { data: invoices }, { data: srs }, { data: profiles }, { data: photoAtts }] = await Promise.all([
           supabaseClient.from('buildings').select('id,name,address,notes,property_type,created_at,purchase_price,current_value,acquired_on').order('name'),
-          supabaseClient.from('units').select('id,building_id,floor,unit_number'),
+          supabaseClient.from('units').select('id,building_id,floor,unit_number,tenant_name,tenant_email,tenant_phone,tenant_tenure,tenant_contract_number,tenant_lease_start,tenant_lease_end,tenant_monthly_payment_aed'),
           supabaseClient.from('resident_assignments').select('profile_id,unit_id,tenure,monthly_payment_aed,lease_start,lease_end,ownership_start'),
           supabaseClient.from('invoices').select('id,invoice_number,description,amount_aed,due_date,status,source_type,unit_id,resident_profile_id,created_at'),
           supabaseClient.from('service_requests').select('id,category,description,status,priority,created_at,unit_id,resident_profile_id,preferred_date'),
@@ -295,6 +303,7 @@ const PMCPropertiesPage = ({ setPage }) => {
           const bUnits = (units || []).filter(u => u.building_id === b.id);
           const unitMap = Object.fromEntries(bUnits.map(u => [u.id, u]));
           const unitIds = bUnits.map(u => u.id);
+          // Residential occupants (resident_assignments)
           const occupied = (ras || [])
             .filter(r => unitIds.includes(r.unit_id))
             .map(r => ({
@@ -304,8 +313,33 @@ const PMCPropertiesPage = ({ setPage }) => {
               unit_number: unitMap[r.unit_id]?.unit_number || '—',
               floor: unitMap[r.unit_id]?.floor ?? null,
             }));
-          const tenants = occupied.filter(o => o.tenure === 'Tenant');
+          // Non-residential occupants (units.tenant_*). These are
+          // commercial / villa / commercial-land clients — same shape
+          // as a Tenant assignment for roster + occupancy purposes
+          // so the rest of the card (vacancy chip, tenants drill,
+          // monthly run-rate) works uniformly.
+          const nonResOccupants = bUnits
+            .filter(u => u.tenant_name)
+            .map(u => ({
+              profile_id: null,
+              unit_id: u.id,
+              resident_name: u.tenant_name,
+              resident_phone: u.tenant_phone || null,
+              unit_number: u.unit_number,
+              floor: u.floor,
+              tenure: u.tenant_tenure || 'Tenant',
+              lease_start: u.tenant_lease_start || null,
+              lease_end: u.tenant_lease_end || null,
+              monthly_payment_aed: u.tenant_monthly_payment_aed || 0,
+              contract_number: u.tenant_contract_number || null,
+            }));
+          // Combined tenants list — what landlords actually see as
+          // 'occupied' regardless of property type.
+          const tenants = occupied.filter(o => o.tenure === 'Tenant').concat(nonResOccupants);
           const monthlyRev = tenants.reduce((s, t) => s + Number(t.monthly_payment_aed || 0), 0);
+          // Combined occupancy count: residential assignments + non-
+          // residential tenants from units.tenant_name.
+          const occupiedCount = occupied.length + nonResOccupants.length;
           const _nowMs = Date.now();
           const bInvoices = (invoices || [])
             .filter(i => unitIds.includes(i.unit_id))
@@ -340,7 +374,7 @@ const PMCPropertiesPage = ({ setPage }) => {
             tenants, // resident_assignments filtered to Tenant
             invoices: bInvoices,
             srs: bSRs,
-            unitCount: bUnits.length, occupiedCount: occupied.length,
+            unitCount: bUnits.length, occupiedCount,
             monthlyRev, collected, pending, upcoming, future, openSRs, totalSRs: bSRs.length,
             photo_path: photoByBuilding[b.id] || null,
           };
@@ -488,8 +522,8 @@ const PMCPropertiesPage = ({ setPage }) => {
             const typeChip = ({ 'Residential':'#5a6b4f', 'Commercial':'#3E4C59', 'Villa':'#a07d3c', 'Commercial Land':'#61707D' })[b.property_type] || '#61707D';
             const attentionItems = [];
             if (bOverdue > 0) attentionItems.push({ color:'#8b4a42', text: bOverdue + ' overdue tenant' + (bOverdue === 1 ? '' : 's') + ' · AED ' + Math.round(bOverdueTotal).toLocaleString() + ' at risk', onAction: () => setDrill({ building: b, view: 'pending' }) });
-            if (bUrgentSRs > 0) attentionItems.push({ color:'#8b4a42', text: bUrgentSRs + ' high-priority service request' + (bUrgentSRs === 1 ? '' : 's') + ' open', onAction: () => setDrill({ building: b, view: 'srs' }) });
-            if (bExpiringLeases > 0) attentionItems.push({ color:'#a07d3c', text: bExpiringLeases + ' lease' + (bExpiringLeases === 1 ? '' : 's') + ' expiring within 60 days', onAction: () => setDrill({ building: b, view: 'tenants' }) });
+            if (bUrgentSRs > 0) attentionItems.push({ color:'#8b4a42', text: bUrgentSRs + ' high-priority service request' + (bUrgentSRs === 1 ? '' : 's') + ' open', onAction: () => setDrill({ building: b, view: 'srs-urgent' }) });
+            if (bExpiringLeases > 0) attentionItems.push({ color:'#a07d3c', text: bExpiringLeases + ' lease' + (bExpiringLeases === 1 ? '' : 's') + ' expiring within 60 days', onAction: () => setDrill({ building: b, view: 'leases-expiring' }) });
             if (bVacant > 0) attentionItems.push({ color:'#a07d3c', text: bVacant + ' vacant unit' + (bVacant === 1 ? '' : 's'), onAction: open });
             return (
               <div key={b.id} className="card" data-asset-id={b.id} style={{padding:0,overflow:'hidden'}}>
