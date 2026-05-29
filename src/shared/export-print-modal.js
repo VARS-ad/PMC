@@ -137,7 +137,7 @@ const ExportPrintModal = ({
     return null;
   })();
 
-  const handleExport = () => {
+  const handleExport = async () => {
     const opts = {
       title:       active.title,
       columns:     active.columns,
@@ -151,6 +151,13 @@ const ExportPrintModal = ({
       sheetName: active.sheetName || active.title,
     };
     try {
+      // Per-dataset override — caller renders the file itself (e.g. a
+      // bundled multi-page PDF that doesn't map to a single table).
+      if (typeof active.customExport === 'function') {
+        await active.customExport({ format, opts, filteredRows });
+        onClose();
+        return;
+      }
       if      (format === 'pdf')   exportReportPDF(opts);
       else if (format === 'csv')   exportReportCSV(opts);
       else if (format === 'word')  exportReportWord(opts);
@@ -161,6 +168,17 @@ const ExportPrintModal = ({
       alert('Export failed: ' + (e.message || 'unknown error'));
     }
   };
+
+  // Allowed formats for the active dataset. Defaults to all four when
+  // unspecified; a dataset can scope it (e.g. PDF-only for the
+  // bundled portfolio report).
+  const allowedFormats = Array.isArray(active.supportedFormats) && active.supportedFormats.length > 0
+    ? active.supportedFormats
+    : ['pdf', 'excel', 'csv', 'word'];
+  // If the current format isn't allowed for this dataset, snap to the first allowed.
+  React.useEffect(() => {
+    if (!allowedFormats.includes(format)) setFormat(allowedFormats[0]);
+  }, [active.id, allowedFormats.join(',')]);
 
   const totalRows = active.rows ? active.rows.length : 0;
 
@@ -211,36 +229,30 @@ const ExportPrintModal = ({
         <div className="form-group">
           <label>Format</label>
           <div className="type-selector">
-            <button
-              className={'type-btn ' + (format === 'pdf' ? 'active' : '')}
-              onClick={() => setFormat('pdf')}>
-              PDF
-            </button>
-            <button
-              className={'type-btn ' + (format === 'excel' ? 'active' : '')}
-              onClick={() => setFormat('excel')}>
-              Excel (.xlsx)
-            </button>
-            <button
-              className={'type-btn ' + (format === 'csv' ? 'active' : '')}
-              onClick={() => setFormat('csv')}>
-              CSV
-            </button>
-            <button
-              className={'type-btn ' + (format === 'word' ? 'active' : '')}
-              onClick={() => setFormat('word')}>
-              Word (.doc)
-            </button>
+            {allowedFormats.includes('pdf') && (
+              <button className={'type-btn ' + (format === 'pdf' ? 'active' : '')} onClick={() => setFormat('pdf')}>PDF</button>
+            )}
+            {allowedFormats.includes('excel') && (
+              <button className={'type-btn ' + (format === 'excel' ? 'active' : '')} onClick={() => setFormat('excel')}>Excel (.xlsx)</button>
+            )}
+            {allowedFormats.includes('csv') && (
+              <button className={'type-btn ' + (format === 'csv' ? 'active' : '')} onClick={() => setFormat('csv')}>CSV</button>
+            )}
+            {allowedFormats.includes('word') && (
+              <button className={'type-btn ' + (format === 'word' ? 'active' : '')} onClick={() => setFormat('word')}>Word (.doc)</button>
+            )}
           </div>
         </div>
 
         <div style={{marginTop: 12, fontSize: 12, color: '#61707D'}}>
-          {filteredRows.length} of {totalRows} records will be included.
+          {active.customExport
+            ? (active.description || 'Bundled export — content is composed from the live data on the page.')
+            : (filteredRows.length + ' of ' + totalRows + ' records will be included.')}
         </div>
 
         <div className="btn-group" style={{marginTop: 20, justifyContent: 'flex-end'}}>
           <button className="btn" onClick={onClose}>Cancel</button>
-          <button className="btn btn-primary" onClick={handleExport} disabled={filteredRows.length === 0}>
+          <button className="btn btn-primary" onClick={handleExport} disabled={!active.customExport && filteredRows.length === 0}>
             Download
           </button>
         </div>

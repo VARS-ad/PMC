@@ -21,7 +21,6 @@ const PMCReportsPage = () => {
   const [stats, setStats] = useState(null);
   const [section, setSection] = useState('portfolio');
   const [showDownload, setShowDownload] = useState(false);
-  const [pdfBusy, setPdfBusy] = useState(false);
 
   // Period bounds from AppContext.
   const _monthsBackMap = { '1m': 1, '2m': 2, '3m': 3, '12m': 12 };
@@ -423,6 +422,20 @@ const PMCReportsPage = () => {
 
     return [
       {
+        // Bundled multi-page PDF — cover + ToC + every section in one
+        // document. Uses customExport to bypass the default per-table
+        // PDF renderer and call renderFullReportPdf directly. PDF only.
+        id: 'full_portfolio_report', label: 'Full Portfolio Report (PDF)', title: 'Full Portfolio Report',
+        description: 'A single multi-page PDF bundling every section (cover · table of contents · portfolio · financial · residents · service ops · maintenance companies · visitors & guards). Branded, CONFIDENTIAL footer.',
+        supportedFormats: ['pdf'],
+        customExport: async () => {
+          await renderFullReportPdf(stats, { selectedProperties }, { label: stats.periodLabel, start: stats.periodStart, end: stats.periodEnd });
+        },
+        rows: [],
+        columns: [],
+        extraMetadata: baseMeta,
+      },
+      {
         id: 'portfolio_summary', label: 'Portfolio — Summary', title: 'Portfolio Summary',
         sheetName: 'Portfolio', filenameBase: 'portfolio-summary',
         rows: [
@@ -561,18 +574,6 @@ const PMCReportsPage = () => {
     ];
   })();
 
-  const handleFullPdf = async () => {
-    if (!stats || pdfBusy) return;
-    setPdfBusy(true);
-    try {
-      await renderFullReportPdf(stats, { selectedProperties }, { label: stats.periodLabel, start: stats.periodStart, end: stats.periodEnd });
-    } catch (e) {
-      alert('PDF generation failed: ' + (e.message || e));
-    } finally {
-      setPdfBusy(false);
-    }
-  };
-
   if (error) return <div className="page-header"><h1>Reports</h1><div style={{color:'#8b4a42',fontSize:13,marginTop:14}}>{error}</div></div>;
 
   return (
@@ -583,10 +584,9 @@ const PMCReportsPage = () => {
         </div>
         <div style={{display:'flex',gap:10,alignItems:'center',flexWrap:'wrap'}}>
           <TimeRangePicker/>
-          <button className="btn btn-primary" onClick={handleFullPdf} disabled={!stats || pdfBusy}>
-            {pdfBusy ? 'Building PDF…' : 'Download Report (PDF)'}
-          </button>
-          <button className="btn" onClick={() => setShowDownload(true)} disabled={!stats}>Download Data</button>
+          {/* "Download Data" now includes the bundled "Full Portfolio
+              Report (PDF)" as its first option — no separate PDF button. */}
+          <button className="btn btn-primary" onClick={() => setShowDownload(true)} disabled={!stats}>Download Data</button>
         </div>
       </div>
 
