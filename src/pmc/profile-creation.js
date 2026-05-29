@@ -1061,6 +1061,10 @@ const PCBulkUpload = ({ section }) => {
       if (section === 'buildings') {
         const res = await uploadBuildingsBulk(parsedRows, conflictMode);
         setResults(res);
+        // Tell the TopBar (and any other listener) to re-fetch buildings so
+        // newly-onboarded properties appear in the property selector and
+        // every per-building view immediately — no page reload required.
+        try { window.dispatchEvent(new CustomEvent('vars:buildings-changed')); } catch (_) {}
       } else if (section === 'vendors') {
         const res = await uploadVendorsBulk(parsedRows, conflictMode);
         setResults(res);

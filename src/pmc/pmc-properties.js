@@ -411,7 +411,11 @@ const PMCPropertiesPage = ({ setPage }) => {
         <div className="card"><div style={{padding:32,color:'var(--text-muted)',fontSize:13,textAlign:'center'}}>No buildings in your portfolio yet. Add some via <strong>Profile Creation → Buildings</strong>.</div></div>
       ) : (() => {
           // Shared eyebrow header style (mirrors pmc-overview.js groupEyebrow)
-          const sectionEyebrow = { fontSize:11, letterSpacing:'0.08em', textTransform:'uppercase', color:'var(--text-secondary)', fontWeight:600 };
+          // Section heading sits between page-title and card-titles in the
+          // hierarchy: bigger than the 11px eyebrow it used to be, so the
+          // boundary between Residential / Commercial / Villas / Plots is
+          // visually obvious when scrolling the Assets page.
+          const sectionEyebrow = { fontSize:18, letterSpacing:'0.04em', textTransform:'uppercase', color:'var(--text-dark)', fontWeight:700 };
 
           // Render a single building card. `kind` controls whether
           // Commercial gets the extra Monthly Run-Rate column (6 cards
@@ -462,10 +466,10 @@ const PMCPropertiesPage = ({ setPage }) => {
           // stacked "RESIDENTIAL" + "2 buildings" on two rows; we now
           // append the count as a quiet suffix on the eyebrow itself.
           const renderSection = (label, kind, list) => (
-            <div style={{marginBottom:32}}>
-              <div style={{...sectionEyebrow, marginBottom:14, display:'flex', alignItems:'center', gap:10}}>
+            <div style={{marginBottom:40}}>
+              <div style={{...sectionEyebrow, marginBottom:18, display:'flex', alignItems:'baseline', gap:12, paddingBottom:8, borderBottom:'1px solid var(--border-light)'}}>
                 <span>{label}</span>
-                <span style={{color:'var(--text-muted)',fontWeight:400,letterSpacing:0,textTransform:'none',fontSize:12}}>· {list.length} {list.length === 1 ? 'building' : 'buildings'}</span>
+                <span style={{color:'var(--text-muted)',fontWeight:400,letterSpacing:0,textTransform:'none',fontSize:13}}>· {list.length} {list.length === 1 ? 'building' : 'buildings'}</span>
               </div>
               {list.length === 0 ? (
                 <div className="card"><div style={{padding:32,color:'var(--text-muted)',fontSize:13,textAlign:'center'}}>No {label.toLowerCase()} buildings yet. Add via <strong>Profile Creation → Buildings</strong>.</div></div>

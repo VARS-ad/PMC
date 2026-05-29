@@ -1,9 +1,12 @@
 // ==================== TOP BAR ====================
-// The property dropdown is populated from Supabase (the user's actual buildings)
-// plus two "Coming soon" placeholders to convey future scope.
-const COMING_SOON_PROPERTIES = [
-  { id: 'soon-commercial', name: 'Commercial Land', location: 'Coming soon · multi-use development', towers: 0, units: 0, comingSoon: true },
-  { id: 'soon-villa',      name: 'Villa Compound',  location: 'Coming soon · low-rise residential', towers: 0, units: 0, comingSoon: true },
+// The property dropdown is populated from Supabase (the user's actual buildings).
+// Properties are grouped by property_type into 4 collapsible categories so the
+// list stays scannable when the portfolio grows.
+const PROPERTY_CATEGORIES = [
+  { key: 'Residential',     label: 'Residential' },
+  { key: 'Commercial',      label: 'Commercial Buildings' },
+  { key: 'Villa',           label: 'Villas' },
+  { key: 'Commercial Land', label: 'Plots' },
 ];
 
 const TopBar = ({ onCreateClick, onMenuToggle, onLogout, onNavigate }) => {
@@ -11,13 +14,19 @@ const TopBar = ({ onCreateClick, onMenuToggle, onLogout, onNavigate }) => {
   const [showCreate, setShowCreate] = useState(false);
   const [showPmProfile, setShowPmProfile] = useState(false);
   const [showPropertyDropdown, setShowPropertyDropdown] = useState(false);
-  const [allProperties, setAllProperties] = useState(COMING_SOON_PROPERTIES);
+  const [allProperties, setAllProperties] = useState([]);
+  // Which category sections are expanded inside the dropdown. Default: all
+  // four expanded so the first-time view mirrors the old flat list; user
+  // can collapse what isn't relevant to declutter.
+  const [expandedCats, setExpandedCats] = useState({
+    'Residential': true, 'Commercial': true, 'Villa': true, 'Commercial Land': true,
+  });
   useEffect(() => {
     if (!supabaseClient) return;
     let mounted = true;
-    (async () => {
+    const load = async () => {
       try {
-        const { data: buildings } = await supabaseClient.from('buildings').select('id,name,address').order('name');
+        const { data: buildings } = await supabaseClient.from('buildings').select('id,name,address,property_type').order('name');
         if (!mounted) return;
         const ids = (buildings || []).map(b => b.id);
         const unitCounts = {};
@@ -27,17 +36,55 @@ const TopBar = ({ onCreateClick, onMenuToggle, onLogout, onNavigate }) => {
         }
         const real = (buildings || []).map(b => ({
           id: b.id, name: b.name, location: b.address || '—',
+          property_type: b.property_type || 'Residential',
           towers: 1, units: unitCounts[b.id] || 0,
         }));
         if (!mounted) return;
-        setAllProperties([...real, ...COMING_SOON_PROPERTIES]);
-        // Default: select ALL real properties so every report shows the full portfolio out of the box.
-        if (real.length > 0) setSelectedProperties(prev => prev.length ? prev : real.map(r => r.id));
+        setAllProperties(real);
+        // Default: select ALL real properties so every report shows the full
+        // portfolio out of the box. After a fresh upload (vars:buildings-changed)
+        // we also auto-select the NEW property ids so the user immediately sees
+        // their data in the active filter — they're not hidden behind an
+        // un-checked checkbox.
+        setSelectedProperties(prev => {
+          if (!prev || prev.length === 0) return real.map(r => r.id);
+          const known = new Set(prev);
+          const newOnes = real.filter(r => !known.has(r.id)).map(r => r.id);
+          return newOnes.length === 0 ? prev : [...prev, ...newOnes];
+        });
       } catch (_) { /* keep fallback */ }
-    })();
-    return () => { mounted = false; };
+    };
+    load();
+    // After a bulk-onboard upload finishes, profile-creation dispatches this
+    // event so the topbar refreshes without a page reload.
+    const onBuildingsChanged = () => load();
+    window.addEventListener('vars:buildings-changed', onBuildingsChanged);
+    return () => { mounted = false; window.removeEventListener('vars:buildings-changed', onBuildingsChanged); };
   }, []);
-  const realProps = allProperties.filter(p => !p.comingSoon);
+  const realProps = allProperties;
+  // Bucket properties by category for the grouped dropdown.
+  const propsByCat = {};
+  PROPERTY_CATEGORIES.forEach(c => { propsByCat[c.key] = []; });
+  realProps.forEach(p => {
+    const cat = PROPERTY_CATEGORIES.find(c => c.key === p.property_type) ? p.property_type : 'Residential';
+    propsByCat[cat].push(p);
+  });
+  const toggleCat = (key) => setExpandedCats(prev => ({ ...prev, [key]: !prev[key] }));
+  // Select-all / deselect-all just within one category. Enforces the global
+  // "at least one selected" invariant by falling back to a single property
+  // when a deselect-all would empty the filter.
+  const setSelectionForCategory = (catKey, select) => {
+    const ids = (propsByCat[catKey] || []).map(p => p.id);
+    if (ids.length === 0) return;
+    setSelectedProperties(prev => {
+      if (select) return Array.from(new Set([...prev, ...ids]));
+      const next = prev.filter(id => !ids.includes(id));
+      if (next.length > 0) return next;
+      // Keep at least one selected globally.
+      const fallback = realProps.find(p => !ids.includes(p.id));
+      return fallback ? [fallback.id] : prev;
+    });
+  };
   const [showMyProfileModal, setShowMyProfileModal] = useState(false);
   const [profileForm, setProfileForm] = useState({
     name: data.currentUser?.name || '',
@@ -182,24 +229,53 @@ const TopBar = ({ onCreateClick, onMenuToggle, onLogout, onNavigate }) => {
                   setSelectedProperties(selectedProperties.length === realProps.length ? (realProps[0] ? [realProps[0].id] : []) : realProps.map(p => p.id));
                 }}>{selectedProperties.length === realProps.length && realProps.length > 0 ? t('pm.deselectAll') : t('pm.selectAll')}</span>
               </div>
-              <div style={{padding:'8px 0',maxHeight:300,overflowY:'auto'}}>
-                {allProperties.map(p => {
-                  const isSelected = selectedProperties.includes(p.id);
-                  const isComingSoon = !!p.comingSoon;
+              <div style={{padding:'4px 0',maxHeight:380,overflowY:'auto'}}>
+                {PROPERTY_CATEGORIES.map(cat => {
+                  const props = propsByCat[cat.key] || [];
+                  if (props.length === 0) return null;
+                  const selectedInCat = props.filter(p => selectedProperties.includes(p.id)).length;
+                  const allSelected = selectedInCat === props.length;
+                  const expanded = !!expandedCats[cat.key];
                   return (
-                    <div key={p.id} onClick={() => !isComingSoon && toggleProperty(p.id)}
-                      style={{display:'flex',alignItems:'center',gap:12,padding:'10px 16px',cursor: isComingSoon ? 'default' : 'pointer',background: isSelected ? '#f8f8f8' : 'transparent',transition:'background 0.15s',opacity: isComingSoon ? 0.5 : 1}}>
-                      <div style={{width:18,height:18,borderRadius:4,border: isSelected ? 'none' : '1.5px solid #d0d0d0',background: isSelected ? '#131F23' : '#fff',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,visibility: isComingSoon ? 'hidden' : 'visible'}}>
-                        {isSelected && <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3"><path d="M20 6L9 17l-5-5"/></svg>}
+                    <div key={cat.key} style={{borderBottom:'1px solid #F0F0F0'}}>
+                      <div onClick={() => toggleCat(cat.key)}
+                        style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:8,padding:'10px 16px',cursor:'pointer',background: expanded ? '#FAFAFA' : 'transparent',transition:'background 0.15s'}}>
+                        <div style={{display:'flex',alignItems:'center',gap:8,minWidth:0}}>
+                          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#61707D" strokeWidth="2"
+                               style={{transform: expanded ? 'rotate(90deg)' : 'rotate(0deg)',transition:'transform 0.15s',flexShrink:0}}>
+                            <polyline points="9 18 15 12 9 6"/>
+                          </svg>
+                          <span style={{fontSize:12,fontWeight:600,color:'#131F23',letterSpacing:'0.02em'}}>{cat.label}</span>
+                          <span style={{fontSize:11,color:'#61707D',whiteSpace:'nowrap'}}>{selectedInCat} / {props.length}</span>
+                        </div>
+                        <span onClick={(e) => { e.stopPropagation(); setSelectionForCategory(cat.key, !allSelected); }}
+                              style={{fontSize:11,color:'#3E4C59',cursor:'pointer',whiteSpace:'nowrap',fontWeight:500}}>
+                          {allSelected ? t('pm.deselectAll') : t('pm.selectAll')}
+                        </span>
                       </div>
-                      <div style={{flex:1}}>
-                        <div style={{fontSize:13,fontWeight: isSelected ? 600 : 400,color: isComingSoon ? '#c0c0c0' : '#131F23'}}>{p.name}</div>
-                        <div style={{fontSize:11,color: isComingSoon ? '#d0d0d0' : '#61707D'}}>{p.location} · {p.towers} towers · {p.units} units</div>
-                      </div>
-                      {isComingSoon && <span style={{fontSize:10,fontWeight:600,color:'#fff',background:'#c0c0c0',padding:'3px 10px',borderRadius:12,whiteSpace:'nowrap'}}>{t('pm.comingSoon')}</span>}
+                      {expanded && props.map(p => {
+                        const isSelected = selectedProperties.includes(p.id);
+                        return (
+                          <div key={p.id} onClick={() => toggleProperty(p.id)}
+                            style={{display:'flex',alignItems:'center',gap:12,padding:'10px 16px 10px 32px',cursor:'pointer',background: isSelected ? '#f8f8f8' : 'transparent',transition:'background 0.15s'}}>
+                            <div style={{width:18,height:18,borderRadius:4,border: isSelected ? 'none' : '1.5px solid #d0d0d0',background: isSelected ? '#131F23' : '#fff',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
+                              {isSelected && <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3"><path d="M20 6L9 17l-5-5"/></svg>}
+                            </div>
+                            <div style={{flex:1,minWidth:0}}>
+                              <div style={{fontSize:13,fontWeight: isSelected ? 600 : 400,color:'#131F23',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{p.name}</div>
+                              <div style={{fontSize:11,color:'#61707D',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{p.location} · {p.units} units</div>
+                            </div>
+                          </div>
+                        );
+                      })}
                     </div>
                   );
                 })}
+                {realProps.length === 0 && (
+                  <div style={{padding:'24px 16px',textAlign:'center',color:'#61707D',fontSize:12}}>
+                    No properties yet. Upload them from Database → Assets.
+                  </div>
+                )}
               </div>
               <div style={{padding:'10px 16px',borderTop:'1px solid #f0f0f0',fontSize:11,color:'#61707D'}}>
                 {selectedProperties.length} of {realProps.length} properties selected
