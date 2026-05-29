@@ -1011,29 +1011,48 @@ const BuildingDetailModal = ({ building, onClose }) => {
 const PCBulkUpload = ({ section }) => {
   const cfg = PC_TEMPLATES[section];
   const fileInputRef = useRef(null);
+  // One file-input ref per Buildings sub-picker (keyed by BUILDINGS_BY_TYPE
+  // key) so the Remove-file button can clear the right input visually.
+  const buildingFileRefs = useRef({});
   const [parsedRows, setParsedRows] = useState(null);
   const [uploading, setUploading] = useState(false);
   const [results, setResults] = useState(null);
   const [error, setError] = useState(null);
   const [conflictMode, setConflictMode] = useState('skip'); // 'skip' | 'update' — what happens when an email already exists
+  // Tracks which BUILDINGS_BY_TYPE picker the current preview came from.
+  // Lets the preview show ONLY that type's columns (e.g. residential should
+  // never display Plot area / Villa count / Commercial use / GLA / Parking).
+  const [previewType, setPreviewType] = useState(null);
 
   // For Buildings ('Assets') each property type has its own Upload control
   // wired to its own header list (Residential / Commercial / Villa /
   // Commercial Land). For every other section the shared upload at the
   // bottom uses cfg.headers as before.
-  const handleFileWithHeaders = (expectedHeaders) => async (e) => {
-    setError(null); setResults(null); setParsedRows(null);
+  const handleFileWithHeaders = (expectedHeaders, typeKey = null) => async (e) => {
+    setError(null); setResults(null); setParsedRows(null); setPreviewType(null);
     const file = e.target.files && e.target.files[0];
     if (!file) return;
     try {
       const rows = await parseUploadedFile(file);
       const objs = rowsToObjects(rows, expectedHeaders);
       setParsedRows(objs);
+      setPreviewType(typeKey);
     } catch (err) {
       setError(String(err.message || err));
     }
   };
   const handleFile = handleFileWithHeaders(cfg.headers);
+
+  // Clear the picked file (preview, error, results, and reset the actual
+  // <input type="file"> elements so the same file can be re-picked).
+  const clearPreview = () => {
+    setParsedRows(null);
+    setPreviewType(null);
+    setError(null);
+    setResults(null);
+    if (fileInputRef.current) fileInputRef.current.value = '';
+    Object.values(buildingFileRefs.current).forEach(el => { if (el) el.value = ''; });
+  };
 
   const submit = async () => {
     if (!parsedRows || parsedRows.length === 0) return;
@@ -1201,11 +1220,34 @@ const PCBulkUpload = ({ section }) => {
           // THIS type's column set. The user picks the row that matches
           // the template they downloaded; the chosen file is then parsed
           // and previewed in the table below, same as other sections.
+          // Each picker has its own × clear button so a stuck filename
+          // label (e.g. after a read error) can be reset without page reload.
           <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit, minmax(260px, 1fr))',gap:10}}>
             {Object.entries(BUILDINGS_BY_TYPE).map(([typeKey, t]) => (
               <label key={typeKey} style={{display:'flex',flexDirection:'column',gap:6,padding:'12px 14px',background:'#fff',border:'1px solid var(--border-light)',borderRadius:8,cursor:'pointer'}}>
-                <span style={{fontSize:11,letterSpacing:'0.06em',textTransform:'uppercase',color:'var(--text-secondary)',fontWeight:600}}>{t.label}</span>
-                <input type="file" accept=".xlsx,.csv" onChange={handleFileWithHeaders(t.headers)} style={{fontSize:12}}/>
+                <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8}}>
+                  <span style={{fontSize:11,letterSpacing:'0.06em',textTransform:'uppercase',color:'var(--text-secondary)',fontWeight:600}}>{t.label}</span>
+                  <button
+                    type="button"
+                    title="Clear file"
+                    onClick={e => { e.preventDefault(); clearPreview(); }}
+                    style={{border:'none',background:'transparent',color:'var(--text-muted)',cursor:'pointer',fontSize:13,padding:'0 4px',lineHeight:1}}
+                  >×</button>
+                </div>
+                <input
+                  ref={el => { buildingFileRefs.current[typeKey] = el; }}
+                  type="file"
+                  accept=".xlsx,.csv"
+                  onChange={handleFileWithHeaders(t.headers, typeKey)}
+                  style={{fontSize:12}}
+                />
+                <button
+                  type="button"
+                  className="btn btn-sm"
+                  style={{marginTop:4,fontSize:11}}
+                  title={'Export the ' + t.label.toLowerCase() + ' currently in the database, in the same column shape as the template above.'}
+                  onClick={e => { e.preventDefault(); downloadCurrentBuildingsAsXlsx(typeKey); }}
+                >Download current data</button>
               </label>
             ))}
           </div>
@@ -1213,21 +1255,60 @@ const PCBulkUpload = ({ section }) => {
           <input ref={fileInputRef} type="file" accept=".xlsx,.csv" onChange={handleFile} style={{fontSize:12}}/>
         )}
         {error && <div style={{color:'#8b4a42',fontSize:12,marginTop:12,padding:10,background:'#fdf2f1',borderRadius:6}}>Error: {error}</div>}
-        {parsedRows && (
-          <div style={{marginTop:16}}>
-            <div style={{fontSize:12,fontWeight:500,marginBottom:8}}>Preview — {parsedRows.length} row{parsedRows.length===1?'':'s'}</div>
-            <div className="data-table-scroll" style={{maxHeight:280,overflowY:'auto',border:'1px solid var(--border-light)',borderRadius:6}}>
-              <table className="data-table" style={{fontSize:11}}>
-                <thead><tr>{cfg.headers.map(h => <th key={h}>{h}</th>)}</tr></thead>
-                <tbody>{parsedRows.slice(0,50).map((r,i) => (<tr key={i}>{cfg.headers.map(h => <td key={h}>{r[h] == null ? '—' : String(r[h])}</td>)}</tr>))}</tbody>
-              </table>
-              {parsedRows.length > 50 && <div style={{padding:8,fontSize:11,color:'var(--text-muted)',textAlign:'center'}}>… and {parsedRows.length - 50} more rows.</div>}
+        {parsedRows && (() => {
+          // For Buildings: use the columns of the property type the user
+          // picked, so e.g. Residential never shows Plot area / Villa count
+          // / Commercial use / GLA / Parking. For every other section we
+          // fall back to cfg.headers (single template).
+          const previewHeaders = (section === 'buildings' && previewType)
+            ? BUILDINGS_BY_TYPE[previewType].headers
+            : cfg.headers;
+          // Visual inheritance of building-level fields: the user fills
+          // Address / Notes / Property type / per-type fields on the FIRST
+          // row of each building; the parser inherits them on later rows
+          // of the same building. Mirror that in the preview so the user
+          // doesn't see blanks where the data is actually carried over.
+          const INHERIT = new Set([
+            'Property type','Address','Notes',
+            'Plot area (sqft)','Villa count','Bedrooms per villa','Bedrooms',
+            'Commercial use','Gross leasable area (sqft)','Parking spots',
+            'Owner name','Owner phone','Owner email','Owner passport','Owner Emirates ID','Purchase date',
+          ]);
+          const nameCols = ['Building name','Plot name','Villa name'];
+          const lastByGroup = {};
+          const displayRows = parsedRows.slice(0, 50).map(r => {
+            const name = nameCols.map(c => r[c]).find(v => v != null && v !== '') || '__unknown__';
+            if (!lastByGroup[name]) lastByGroup[name] = {};
+            const out = { ...r };
+            for (const h of previewHeaders) {
+              if (!INHERIT.has(h)) continue;
+              if (out[h] != null && out[h] !== '') {
+                lastByGroup[name][h] = out[h];
+              } else if (lastByGroup[name][h] != null && lastByGroup[name][h] !== '') {
+                out[h] = lastByGroup[name][h];
+              }
+            }
+            return out;
+          });
+          return (
+            <div style={{marginTop:16}}>
+              <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8,gap:12,flexWrap:'wrap'}}>
+                <div style={{fontSize:12,fontWeight:500}}>Preview — {parsedRows.length} row{parsedRows.length===1?'':'s'}{previewType ? ' · ' + BUILDINGS_BY_TYPE[previewType].label : ''}</div>
+                <button type="button" className="btn btn-sm" onClick={clearPreview}>Remove file</button>
+              </div>
+              <div className="data-table-scroll" style={{maxHeight:280,overflowY:'auto',border:'1px solid var(--border-light)',borderRadius:6}}>
+                <table className="data-table" style={{fontSize:11}}>
+                  <thead><tr>{previewHeaders.map(h => <th key={h}>{h}</th>)}</tr></thead>
+                  <tbody>{displayRows.map((r,i) => (<tr key={i}>{previewHeaders.map(h => <td key={h}>{r[h] == null || r[h] === '' ? '—' : String(r[h])}</td>)}</tr>))}</tbody>
+                </table>
+                {parsedRows.length > 50 && <div style={{padding:8,fontSize:11,color:'var(--text-muted)',textAlign:'center'}}>… and {parsedRows.length - 50} more rows.</div>}
+              </div>
+              <button className="btn btn-primary" style={{marginTop:14}} disabled={uploading} onClick={submit}>
+                {uploading ? 'Uploading…' : 'Create ' + parsedRows.length + ' record' + (parsedRows.length === 1 ? '' : 's')}
+              </button>
             </div>
-            <button className="btn btn-primary" style={{marginTop:14}} disabled={uploading} onClick={submit}>
-              {uploading ? 'Uploading…' : 'Create ' + parsedRows.length + ' record' + (parsedRows.length === 1 ? '' : 's')}
-            </button>
-          </div>
-        )}
+          );
+        })()}
         {results && (
           <div style={{marginTop:16,padding:14,background:'var(--bg-surface)',borderRadius:8,border:'1px solid var(--border-light)'}}>
             <div style={{fontSize:13,fontWeight:600,marginBottom:8}}>Upload results</div>
@@ -1243,6 +1324,83 @@ const PCBulkUpload = ({ section }) => {
     </div>
   );
 };
+
+// Export the currently-stored buildings + units for one property type as an
+// xlsx file in the same column shape as BUILDINGS_BY_TYPE[typeKey].headers,
+// so the user can review what's onboarded and (if needed) round-trip via the
+// upload picker. Owner data is read from the unit row. Resident / tenant /
+// client columns are emitted blank (those records aren't stored on the unit
+// — residents live in Supabase Auth, and non-residential types do not get
+// Auth accounts).
+async function downloadCurrentBuildingsAsXlsx(typeKey) {
+  const cfg = BUILDINGS_BY_TYPE[typeKey];
+  if (!cfg) return;
+  const { data: buildings, error: bErr } = await supabaseClient
+    .from('buildings')
+    .select('id, name, property_type, address, notes, plot_area_sqft, villa_count, bedrooms_per_villa, commercial_use_type, gross_leasable_area_sqft, parking_spots')
+    .eq('property_type', typeKey)
+    .order('name', { ascending: true });
+  if (bErr) { alert('Could not load buildings: ' + bErr.message); return; }
+  if (!buildings || buildings.length === 0) { alert('No ' + cfg.label.toLowerCase() + ' in the database yet.'); return; }
+  const ids = buildings.map(b => b.id);
+  const { data: units, error: uErr } = await supabaseClient
+    .from('units')
+    .select('id, building_id, floor, unit_number, owner_name, owner_phone, owner_email, owner_passport_number, owner_emirates_id, purchase_date')
+    .in('building_id', ids)
+    .order('floor', { ascending: true })
+    .order('unit_number', { ascending: true });
+  if (uErr) { alert('Could not load units: ' + uErr.message); return; }
+  const unitsByBuilding = {};
+  for (const u of (units || [])) {
+    (unitsByBuilding[u.building_id] = unitsByBuilding[u.building_id] || []).push(u);
+  }
+  // Single source-of-truth row builder: for each column name, return the
+  // value for THIS unit row. Building-level fields are emitted only on the
+  // first row of each building (mirroring the template style).
+  const valueFor = (h, b, u, isFirstRow) => {
+    switch (h) {
+      // Identity columns differ per type — accept any of the three.
+      case 'Building name':
+      case 'Plot name':
+      case 'Villa name':       return b.name;
+      case 'Property type':    return isFirstRow ? b.property_type : '';
+      case 'Floor':            return u && u.floor != null ? u.floor : '';
+      case 'Unit':             return u && u.unit_number ? u.unit_number : '';
+      case 'Address':          return isFirstRow ? (b.address || '') : '';
+      case 'Notes':            return isFirstRow ? (b.notes || '') : '';
+      case 'Plot area (sqft)': return isFirstRow ? (b.plot_area_sqft ?? '') : '';
+      case 'Villa count':      return isFirstRow ? (b.villa_count ?? '') : '';
+      case 'Bedrooms per villa':
+      case 'Bedrooms':         return isFirstRow ? (b.bedrooms_per_villa ?? '') : '';
+      case 'Commercial use':                return isFirstRow ? (b.commercial_use_type || '') : '';
+      case 'Gross leasable area (sqft)':    return isFirstRow ? (b.gross_leasable_area_sqft ?? '') : '';
+      case 'Parking spots':                 return isFirstRow ? (b.parking_spots ?? '') : '';
+      // Owner block — emitted on every row that has owner data on its unit.
+      case 'Owner name':         return u && u.owner_name || '';
+      case 'Owner phone':        return u && u.owner_phone || '';
+      case 'Owner email':        return u && u.owner_email || '';
+      case 'Owner passport':     return u && u.owner_passport_number || '';
+      case 'Owner Emirates ID':  return u && u.owner_emirates_id || '';
+      case 'Purchase date':      return u && u.purchase_date || '';
+      // Everything else (Resident / Tenant / Client / lease cols) — blank.
+      default: return '';
+    }
+  };
+  const rows = [];
+  for (const b of buildings) {
+    const us = unitsByBuilding[b.id] || [];
+    if (us.length === 0) {
+      // Building with no units yet — emit one row carrying the building-level fields.
+      rows.push(cfg.headers.map(h => valueFor(h, b, null, true)));
+    } else {
+      us.forEach((u, i) => {
+        rows.push(cfg.headers.map(h => valueFor(h, b, u, i === 0)));
+      });
+    }
+  }
+  const stamp = new Date().toISOString().slice(0, 10);
+  downloadAsXlsx(cfg.filename + '-current-' + stamp, cfg.headers, rows);
+}
 
 async function uploadBuildingsBulk(parsedRows, conflictMode = 'skip') {
   const results = [];
