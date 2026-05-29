@@ -21,6 +21,8 @@ const AssetFinancialPanel = ({ building, onClose }) => {
   const [showDownload, setShowDownload] = useState(false);
   const [openUnit, setOpenUnit] = useState(null);    // row click → UnitDetailModal
   const [invoiceSort, setInvoiceSort] = useState({ key: 'due_date', dir: 'desc' });
+  // Month filter set by clicking a bar on the chart. 'YYYY-MM' or null.
+  const [selectedMonth, setSelectedMonth] = useState(null);
   // Chart.js refs replaced by an inline SVG renderer (see TimelineChart
   // below) — eliminates the canvas-sizing race we were fighting and
   // gives us a cleaner, more modern look.
@@ -134,25 +136,37 @@ const AssetFinancialPanel = ({ building, onClose }) => {
   }
 
   // ---- Hand-drawn SVG chart (replaces Chart.js) ----------------------
-  // Why SVG: the canvas sizing race with the modal layout left the
-  // chart visibly empty even with valid data. Inline SVG sidesteps the
-  // entire problem AND gives us pixel-perfect control over the look.
-  const TimelineChart = ({ data }) => {
+  // SVG sidesteps the canvas sizing race entirely AND gives us pixel-
+  // perfect control. Interactivity matches the rest of the modal:
+  //   • Hover → vertical lane highlight + floating tooltip card with
+  //     month + Collected + Outstanding amounts
+  //   • Click → toggle a month filter. The Invoices section below
+  //     filters to only that month; click again or the 'Clear filter'
+  //     chip to remove it.
+  const TimelineChart = ({ data, selectedMonth, onSelectMonth }) => {
+    const [hoveredIdx, setHoveredIdx] = useState(null);
     const W = 1000, H = 280;
-    const padTop = 14, padBottom = 50, padLeft = 56, padRight = 16;
+    const padTop = 26, padBottom = 50, padLeft = 56, padRight = 16;
     const chartW = W - padLeft - padRight;
     const chartH = H - padTop - padBottom;
-    const groupW = chartW / data.length;          // one bar-group per month
-    const barW = Math.min(36, groupW * 0.55);
+    const groupW = chartW / data.length;
+    const barW = Math.min(38, groupW * 0.58);
     const maxStacked = Math.max(1, ...data.map(d => d.collected + d.outstanding));
-    // 4 gridlines at sensible rounded values
-    const niceStep = (m) => {
-      const exp = Math.pow(10, Math.floor(Math.log10(m)));
-      const f = m / exp;
-      if (f < 1.5) return 0.25 * exp;
-      if (f < 3)   return 0.5  * exp;
-      if (f < 7)   return exp;
-      return 2 * exp;
+
+    // niceStep — round 'rough' UP to one of {1, 2, 5, 10} × 10^k. With
+    // the target of ~4–5 gridlines we feed rough = maxStacked / 4. For
+    // a 23k max that gives rough≈5750 → step=5000 → ticks 0/5k/10k/15k/
+    // 20k/25k. The previous version returned 1000, which is why we had
+    // 25 stacked labels on the Y axis.
+    const niceStep = (rough) => {
+      const exp = Math.pow(10, Math.floor(Math.log10(Math.max(1, rough))));
+      const f = rough / exp;
+      let r;
+      if (f >= 7)      r = 10;
+      else if (f >= 3) r = 5;
+      else if (f >= 1.5) r = 2;
+      else             r = 1;
+      return r * exp;
     };
     const step = niceStep(maxStacked / 4);
     const yMax = Math.ceil(maxStacked / step) * step;
@@ -160,9 +174,16 @@ const AssetFinancialPanel = ({ building, onClose }) => {
     const y = (v) => padTop + chartH - (v / yMax) * chartH;
     const fmtTick = (v) => v >= 1000000 ? (v / 1000000).toFixed(1) + 'M' : v >= 1000 ? Math.round(v / 1000) + 'k' : Math.round(v);
 
+    // Position the tooltip in HTML coords (the SVG scales to container
+    // width via the viewBox; tooltip position uses a percentage so
+    // it tracks the right bar at any width).
+    const tooltipLeftPct = hoveredIdx != null
+      ? ((padLeft + (hoveredIdx + 0.5) * groupW) / W) * 100
+      : 0;
+
     return (
       <div style={{position:'relative'}}>
-        <svg viewBox={'0 0 ' + W + ' ' + H} preserveAspectRatio="xMidYMid meet" style={{display:'block',width:'100%',height:280}}>
+        <svg viewBox={'0 0 ' + W + ' ' + H} preserveAspectRatio="xMidYMid meet" style={{display:'block',width:'100%',height:280,overflow:'visible'}}>
           {/* Gridlines + Y labels */}
           {Array.from({ length: ySteps + 1 }).map((_, i) => {
             const v = i * step;
@@ -174,38 +195,64 @@ const AssetFinancialPanel = ({ building, onClose }) => {
               </g>
             );
           })}
-          {/* Bars */}
+          {/* Interactive month groups */}
           {data.map((d, i) => {
-            const cx = padLeft + i * groupW + (groupW - barW) / 2;
+            const laneX = padLeft + i * groupW;
+            const cx = laneX + (groupW - barW) / 2;
             const colY = y(d.collected);
             const colH = padTop + chartH - colY;
             const outY = y(d.collected + d.outstanding);
             const outH = colY - outY;
             const monthly = d.collected + d.outstanding;
+            const isHovered = hoveredIdx === i;
+            const isSelected = selectedMonth && selectedMonth === d.month;
+            const dim = (selectedMonth || hoveredIdx != null) && !isHovered && !isSelected;
             return (
-              <g key={i}>
+              <g key={i}
+                style={{cursor:'pointer'}}
+                onMouseEnter={() => setHoveredIdx(i)}
+                onMouseLeave={() => setHoveredIdx(null)}
+                onClick={() => onSelectMonth && onSelectMonth(isSelected ? null : d.month)}>
+                {/* Lane highlight on hover / selected */}
+                {(isHovered || isSelected) && (
+                  <rect x={laneX + 2} y={padTop - 4} width={groupW - 4} height={chartH + 8} fill={isSelected ? '#3E4C59' : '#131F23'} opacity={isSelected ? 0.07 : 0.04} rx="6"/>
+                )}
+                {/* Invisible click-target spanning the lane */}
+                <rect x={laneX} y={padTop - 4} width={groupW} height={chartH + 32} fill="transparent" pointerEvents="all"/>
                 {/* Outstanding (top, slate-red) */}
                 {outH > 0 && (
-                  <rect x={cx} y={outY} width={barW} height={Math.max(2, outH)} fill="#8b4a42" opacity="0.78" rx="4" ry="4">
-                    <title>{d.label}: Outstanding AED {Math.round(d.outstanding).toLocaleString()}</title>
-                  </rect>
+                  <rect x={cx} y={outY} width={barW} height={Math.max(2, outH)} fill="#8b4a42" opacity={dim ? 0.3 : 0.82} rx="4" ry="4" style={{transition:'opacity 0.15s'}}/>
                 )}
                 {/* Collected (bottom, slate-green) */}
                 {colH > 0 && (
-                  <rect x={cx} y={colY} width={barW} height={Math.max(2, colH)} fill="#5a6b4f" rx="4" ry="4">
-                    <title>{d.label}: Collected AED {Math.round(d.collected).toLocaleString()}</title>
-                  </rect>
+                  <rect x={cx} y={colY} width={barW} height={Math.max(2, colH)} fill="#5a6b4f" opacity={dim ? 0.32 : 1} rx="4" ry="4" style={{transition:'opacity 0.15s'}}/>
                 )}
                 {/* Month label */}
-                <text x={cx + barW / 2} y={padTop + chartH + 22} fontSize="12" fill="#61707D" textAnchor="middle" fontFamily="inherit">{d.label}</text>
-                {/* Total value above the bar — only when the bar has data, so empty months stay clean */}
-                {monthly > 0 && (
-                  <text x={cx + barW / 2} y={Math.max(padTop + 10, outY - 8)} fontSize="11" fill="#131F23" textAnchor="middle" fontWeight="600" fontFamily="inherit">{fmtTick(monthly)}</text>
+                <text x={cx + barW / 2} y={padTop + chartH + 22} fontSize="12" fill={isSelected ? '#131F23' : '#61707D'} fontWeight={isSelected ? 700 : 400} textAnchor="middle" fontFamily="inherit">{d.label}</text>
+                {/* Total value above the bar — only when the bar has data */}
+                {monthly > 0 && !isHovered && (
+                  <text x={cx + barW / 2} y={Math.max(padTop + 10, outY - 8)} fontSize="11" fill="#131F23" textAnchor="middle" fontWeight="600" fontFamily="inherit" opacity={dim ? 0.35 : 1}>{fmtTick(monthly)}</text>
                 )}
               </g>
             );
           })}
         </svg>
+        {/* HTML tooltip — positioned over the hovered lane */}
+        {hoveredIdx != null && (
+          <div style={{position:'absolute',top:-2,left: tooltipLeftPct + '%',transform:'translateX(-50%)',background:'#131F23',color:'#fff',padding:'10px 14px',borderRadius:8,fontSize:12,pointerEvents:'none',boxShadow:'0 6px 18px rgba(19,31,35,0.20)',whiteSpace:'nowrap',zIndex:5}}>
+            <div style={{fontWeight:700,marginBottom:4,letterSpacing:'-0.005em'}}>{data[hoveredIdx].label}</div>
+            <div style={{display:'flex',alignItems:'center',gap:8,fontSize:11,color:'#cfd6d4'}}>
+              <span style={{width:8,height:8,background:'#5a6b4f',borderRadius:2,display:'inline-block'}}/>
+              <span style={{flex:1}}>Collected</span>
+              <span style={{fontWeight:600,color:'#fff'}}>AED {Math.round(data[hoveredIdx].collected).toLocaleString()}</span>
+            </div>
+            <div style={{display:'flex',alignItems:'center',gap:8,fontSize:11,color:'#cfd6d4',marginTop:3}}>
+              <span style={{width:8,height:8,background:'#8b4a42',borderRadius:2,display:'inline-block',opacity:0.82}}/>
+              <span style={{flex:1}}>Outstanding</span>
+              <span style={{fontWeight:600,color:'#fff'}}>AED {Math.round(data[hoveredIdx].outstanding).toLocaleString()}</span>
+            </div>
+          </div>
+        )}
         {/* Legend below */}
         <div style={{display:'flex',justifyContent:'center',gap:24,marginTop:8,fontSize:12,color:'var(--text-secondary)'}}>
           <span style={{display:'inline-flex',alignItems:'center',gap:8}}>
@@ -213,9 +260,12 @@ const AssetFinancialPanel = ({ building, onClose }) => {
             Collected
           </span>
           <span style={{display:'inline-flex',alignItems:'center',gap:8}}>
-            <span style={{width:12,height:12,background:'#8b4a42',opacity:0.78,borderRadius:3,display:'inline-block'}}/>
+            <span style={{width:12,height:12,background:'#8b4a42',opacity:0.82,borderRadius:3,display:'inline-block'}}/>
             Outstanding
           </span>
+          {onSelectMonth && (
+            <span style={{color:'var(--text-muted)',fontStyle:'italic'}}>· click a month to filter the invoice list</span>
+          )}
         </div>
       </div>
     );
@@ -228,7 +278,11 @@ const AssetFinancialPanel = ({ building, onClose }) => {
       : { key, dir: ['amount_aed','due_date','created_at'].includes(key) ? 'desc' : 'asc' }
     );
   };
-  const sortedInvoices = periodInvoices.slice().sort((a, b) => {
+  // Apply the chart-driven month filter on top of the period filter.
+  const monthFilteredInvoices = selectedMonth
+    ? periodInvoices.filter(i => (i.created_at || '').slice(0, 7) === selectedMonth)
+    : periodInvoices;
+  const sortedInvoices = monthFilteredInvoices.slice().sort((a, b) => {
     const k = invoiceSort.key;
     const sign = invoiceSort.dir === 'asc' ? 1 : -1;
     let av = a[k]; let bv = b[k];
@@ -342,9 +396,9 @@ const AssetFinancialPanel = ({ building, onClose }) => {
             </Section>
 
             {/* 12-month chart */}
-            <Section label="Income Timeline · 12 months" right={<span style={{fontSize:11,color:'var(--text-muted)'}}>Collected vs outstanding</span>}>
+            <Section label="Income Timeline · 12 months" right={<span style={{fontSize:11,color:'var(--text-muted)'}}>Collected vs outstanding · click a bar to filter</span>}>
               <div style={{background:'#fff',border:'1px solid var(--border-light)',borderRadius:10,padding:'18px 22px'}}>
-                <TimelineChart data={series}/>
+                <TimelineChart data={series} selectedMonth={selectedMonth} onSelectMonth={setSelectedMonth}/>
               </div>
             </Section>
 
@@ -405,7 +459,19 @@ const AssetFinancialPanel = ({ building, onClose }) => {
             </Section>
 
             {/* Invoices — sortable, centered status + slots, truncated INV # */}
-            <Section label={'Invoices · ' + sortedInvoices.length + ' in period'} right={<span style={{fontSize:11,color:'var(--text-muted)'}}>{periodLabel}</span>}>
+            <Section label={'Invoices · ' + sortedInvoices.length + (selectedMonth ? ' in ' + new Date(selectedMonth + '-01').toLocaleString('en-GB', { month:'long', year:'numeric' }) : ' in period')} right={
+              <span style={{display:'inline-flex',alignItems:'center',gap:10,fontSize:11,color:'var(--text-muted)'}}>
+                {selectedMonth ? (
+                  <button type="button" onClick={() => setSelectedMonth(null)}
+                    style={{fontSize:11,fontWeight:600,letterSpacing:'0.04em',textTransform:'uppercase',color:'#3E4C59',background:'#E6EAE9',border:'none',padding:'4px 10px',borderRadius:4,cursor:'pointer',display:'inline-flex',alignItems:'center',gap:6}}>
+                    {new Date(selectedMonth + '-01').toLocaleString('en-GB', { month:'short', year:'numeric' })}
+                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                  </button>
+                ) : (
+                  <span>{periodLabel}</span>
+                )}
+              </span>
+            }>
               <div style={{background:'#fff',border:'1px solid var(--border-light)',borderRadius:10,overflow:'hidden'}}>
                 {sortedInvoices.length === 0 ? (
                   <div style={{padding:24,color:'var(--text-muted)',fontSize:13,textAlign:'center'}}>No invoices in the selected period.</div>
