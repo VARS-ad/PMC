@@ -201,22 +201,28 @@ const TopBar = ({ onCreateClick, onMenuToggle, onLogout, onNavigate }) => {
   const propertyLabel = selectedProperties.length === 1
     ? (allProperties.find(p => p.id === selectedProperties[0])?.name || '—')
     : selectedProperties.length === realProps.length && realProps.length > 0
-    ? 'All Properties'
-    : selectedProperties.length + ' Properties Selected';
+    ? 'All Assets'
+    : selectedProperties.length + ' Assets Selected';
 
   return (
     <div className="topbar">
       <button className="hamburger" onClick={onMenuToggle}><span/><span/><span/></button>
 
-      {/* Property Multi-Select */}
+      {/* Asset Multi-Select — every child sits in a flex row at a fixed
+          24px line-height so the icon, label, count chip and chevron all
+          share a single baseline regardless of font metrics. */}
       <div style={{position:'relative'}}>
         <div className="property-select" onClick={() => setShowPropertyDropdown(!showPropertyDropdown)} style={{cursor:'pointer'}}>
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#61707D" strokeWidth="1.5"><path d="M3 21h18M5 21V7l7-4 7 4v14M9 21v-6h6v6"/></svg>
-          <span>{propertyLabel}</span>
+          <span style={{display:'inline-flex',alignItems:'center',justifyContent:'center',width:18,height:18,flexShrink:0}}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#61707D" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M3 21h18M5 21V7l7-4 7 4v14M9 21v-6h6v6"/></svg>
+          </span>
+          <span style={{display:'inline-flex',alignItems:'center',height:18,lineHeight:1}}>{propertyLabel}</span>
           {selectedProperties.length > 1 && selectedProperties.length < realProps.length && (
-            <span style={{background:'#3E4C59',color:'#fff',fontSize:10,padding:'1px 6px',borderRadius:10,fontWeight:600}}>{selectedProperties.length}</span>
+            <span style={{background:'#3E4C59',color:'#fff',fontSize:10,height:18,minWidth:18,padding:'0 6px',borderRadius:10,fontWeight:600,display:'inline-flex',alignItems:'center',justifyContent:'center',lineHeight:1}}>{selectedProperties.length}</span>
           )}
-          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#61707D" strokeWidth="2" style={{transform: showPropertyDropdown ? 'rotate(180deg)' : 'rotate(0deg)',transition:'transform 0.2s'}}><polyline points="6 9 12 15 18 9"/></svg>
+          <span style={{display:'inline-flex',alignItems:'center',justifyContent:'center',width:14,height:18,flexShrink:0}}>
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#61707D" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" style={{transform: showPropertyDropdown ? 'rotate(180deg)' : 'rotate(0deg)',transition:'transform 0.2s'}}><polyline points="6 9 12 15 18 9"/></svg>
+          </span>
         </div>
 
         {showPropertyDropdown && (
