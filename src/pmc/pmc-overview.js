@@ -186,11 +186,12 @@ const AttentionDrillModal = ({ kind, title, items, onClose, navigate }) => {
       return (
         <>
           <div style={{flex:1,minWidth:0}}>
-            <div style={{fontSize:13,fontWeight:600,color:'var(--text-dark)',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{it.building_name}</div>
-            <div style={{fontSize:11,color:'var(--text-muted)',marginTop:2,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{it.property_type}</div>
+            <div style={{fontSize:13,fontWeight:600,color:'var(--text-dark)',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{it.unit_number || '—'}</div>
+            <div style={{fontSize:11,color:'var(--text-muted)',marginTop:2,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{it.building_name}{it.floor != null ? ' · Floor ' + it.floor : ''}</div>
           </div>
           <div style={{textAlign:'right',marginRight:12,minWidth:0}}>
-            <div style={{fontSize:13,fontWeight:600,color:'#a07d3c',whiteSpace:'nowrap'}}>{it.vacancy_count} vacant</div>
+            <div style={{fontSize:11,fontWeight:600,color:'#a07d3c',letterSpacing:'0.04em',textTransform:'uppercase',whiteSpace:'nowrap'}}>Vacant</div>
+            <div style={{fontSize:11,color:'var(--text-muted)',marginTop:2,whiteSpace:'nowrap'}}>{it.property_type}</div>
           </div>
         </>
       );
@@ -610,23 +611,24 @@ const PMCOverviewPage = ({ setPage }) => {
         const assignedUnitIds = new Set((ras || []).map(r => r.unit_id));
         const vacantUnits = filteredUnits.filter(u => !assignedUnitIds.has(u.id) && !u.tenant_name);
         if (vacantUnits.length > 0) {
-          // Roll up vacant units by building so the drill modal shows
-          // one row per asset with a vacancy count, not a long list of
-          // unit numbers.
-          const vacantByBuilding = {};
-          vacantUnits.forEach(u => {
-            if (!vacantByBuilding[u.building_id]) vacantByBuilding[u.building_id] = 0;
-            vacantByBuilding[u.building_id]++;
-          });
-          const vacantItems = Object.entries(vacantByBuilding).map(([bid, count]) => {
-            const b = bMap[bid];
+          // Per-unit list so the drill modal can open the matching
+          // UnitDetailModal directly when a row is clicked (matches
+          // overdue/expiring behaviour). Group/sort by building so
+          // related units sit together.
+          const vacantItems = vacantUnits.map(u => {
+            const b = bMap[u.building_id];
             return {
-              building_id: bid,
+              id: u.id,
+              building_id: u.building_id,
               building_name: b ? b.name : '—',
               property_type: b ? b.property_type : '—',
-              vacancy_count: count,
+              unit_number: u.unit_number,
+              floor: u.floor,
             };
-          }).sort((a, b) => b.vacancy_count - a.vacancy_count);
+          }).sort((a, c) => {
+            if (a.building_name !== c.building_name) return a.building_name.localeCompare(c.building_name);
+            return (a.unit_number || '').localeCompare(c.unit_number || '');
+          });
           attention.push({
             kind: 'vacant',
             severity: vacantUnits.length > 5 ? 'orange' : 'yellow',
@@ -748,6 +750,10 @@ const PMCOverviewPage = ({ setPage }) => {
           srRecent,
           // Landlord watchlist
           attention,
+          // Lookups exposed so the attention drill modal can open
+          // UnitDetailModal directly (overdue/expiring rows) without
+          // bouncing through Assets first.
+          uMap, bMap, raByUnit, pMap,
           // Landlord headline + per-asset cards
           headlineCollected, headlineOverdue, headlineUpcoming, headlineLastMonth,
           assetCards,
@@ -930,7 +936,13 @@ const PMCOverviewPage = ({ setPage }) => {
                         // TODO(consumer): pmc-service-requests.js should
                         // read 'vars:sr-prefilter' on mount and apply
                         // the priority + status filters from it.
-                        try { sessionStorage.setItem('vars:sr-prefilter', JSON.stringify({ priority: 'High', status: 'New' })); } catch (_) {}
+                        // 'highPriorityOpen' = priority IN (High, Urgent) AND
+                        // status IN (New, Acknowledged, In Progress) — matches
+                        // the count shown on this attention row exactly.
+                        // (Single-value filter dropdowns can't express the
+                        // compound query, so we pass a named preset and let
+                        // the SR page apply the right semantics.)
+                        try { sessionStorage.setItem('vars:sr-prefilter', JSON.stringify({ preset: 'highPriorityOpen' })); } catch (_) {}
                         if (setPage) setPage('service');
                         return;
                       }
@@ -1091,26 +1103,31 @@ const PMCOverviewPage = ({ setPage }) => {
           items={attentionDrill.items}
           onClose={() => setAttentionDrill(null)}
           navigate={(it) => {
-            // Drill behaviour by kind:
-            //  - overdue / expiring → land on Assets and open the
-            //    building's financial panel (where invoice + lease
-            //    detail live). Consumer reads the storage flag.
-            //  - vacant → land on Assets and scroll to the asset
-            //    card (existing pattern used elsewhere).
-            // TODO(consumer): pmc-properties.js / asset-financial-panel
-            // should honour 'vars:open-asset-financial' on mount and
-            // auto-open the financial panel for that building id.
+            // Drill straight into UnitDetailModal for any per-unit row
+            // (overdue / expiring / vacant — all item shapes carry an
+            // `id` equal to the unit_id). The Assets page is no longer
+            // a required hop — the user sees the unit + resident +
+            // financial activity right here. Look the unit + building
+            // up via the maps we stashed on stats so we don't need a
+            // separate fetch.
+            const kindL = attentionDrill.kind;
+            const unitMap = stats && stats.uMap;
+            const buildingMap = stats && stats.bMap;
+            if ((kindL === 'overdue' || kindL === 'expiring' || kindL === 'vacant')
+                && it && it.id && unitMap && buildingMap) {
+              const u = unitMap[it.id];
+              const b = u ? buildingMap[u.building_id] : null;
+              if (u && b) {
+                setAttentionDrill(null);
+                setOpenedUnit({ unit: u, building: b });
+                return;
+              }
+            }
+            // Defensive fallback — if we can't resolve the unit (stale
+            // data, race), fall through to the old Assets hop.
             try {
-              if (attentionDrill.kind === 'overdue' || attentionDrill.kind === 'expiring') {
-                if (it && it.building_id) {
-                  sessionStorage.setItem('vars:open-asset-financial', it.building_id);
-                  sessionStorage.setItem('vars:scroll-to-asset', it.building_id);
-                }
-              } else if (attentionDrill.kind === 'vacant') {
-                if (it && it.building_id) {
-                  sessionStorage.setItem('vars:scroll-to-asset', it.building_id);
-                  if (it.property_type) sessionStorage.setItem('vars:scroll-to-asset-type', it.property_type);
-                }
+              if (it && it.building_id) {
+                sessionStorage.setItem('vars:scroll-to-asset', it.building_id);
               }
             } catch (_) {}
             setAttentionDrill(null);

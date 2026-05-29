@@ -41,6 +41,10 @@ const PMCServiceRequestsPage = () => {
   const [statusFilter, setStatusFilter] = useState('all');
   const [priorityFilter, setPriorityFilter] = useState('all');
   const [categoryFilter, setCategoryFilter] = useState('all');
+  // Named compound presets driven by sessionStorage hand-offs (Overview
+  // attention rows). Currently: 'highPriorityOpen' = priority in
+  // [High, Urgent] AND status in [New, Acknowledged, In Progress].
+  const [presetMode, setPresetMode] = useState(null);
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
   const [search, setSearch] = useState('');
@@ -95,15 +99,29 @@ const PMCServiceRequestsPage = () => {
       sessionStorage.removeItem('vars:sr-prefilter');
       const f = JSON.parse(raw);
       if (f && typeof f === 'object') {
-        if (f.priority) setPriorityFilter(f.priority);
-        if (f.status)   setStatusFilter(f.status);
+        if (f.preset === 'highPriorityOpen') {
+          // Compound preset — reset the single-value dropdowns and
+          // route through the preset branch below.
+          setPresetMode('highPriorityOpen');
+          setPriorityFilter('all'); setStatusFilter('all');
+        } else {
+          if (f.priority) setPriorityFilter(f.priority);
+          if (f.status)   setStatusFilter(f.status);
+        }
       }
     } catch (_) {}
   }, []);
 
   const filtered = (rows || []).filter(s => {
-    if (statusFilter !== 'all' && s.status !== statusFilter) return false;
-    if (priorityFilter !== 'all' && s.priority !== priorityFilter) return false;
+    // Preset takes precedence over the single-value dropdowns. When the
+    // user clears the preset chip they fall back to the regular filters.
+    if (presetMode === 'highPriorityOpen') {
+      if (!['High','Urgent'].includes(s.priority)) return false;
+      if (!['New','Acknowledged','In Progress'].includes(s.status)) return false;
+    } else {
+      if (statusFilter !== 'all' && s.status !== statusFilter) return false;
+      if (priorityFilter !== 'all' && s.priority !== priorityFilter) return false;
+    }
     if (categoryFilter !== 'all' && s.category !== categoryFilter) return false;
     if (dateFrom && (s.created_at || '').slice(0,10) < dateFrom) return false;
     if (dateTo && (s.created_at || '').slice(0,10) > dateTo) return false;
@@ -257,7 +275,14 @@ const PMCServiceRequestsPage = () => {
       </div>
 
       <div className="card">
-        <div style={{display:'flex',gap:14,flexWrap:'wrap',alignItems:'flex-end',marginBottom:14}}>
+        {presetMode === 'highPriorityOpen' && (
+          <div style={{display:'flex', alignItems:'center', gap:10, padding:'10px 14px', marginBottom:14, background:'#fdf5e6', border:'1px solid #efe1be', borderRadius:6, fontSize:12, color:'#7a5a1f'}}>
+            <span style={{fontWeight:700, letterSpacing:'0.04em', textTransform:'uppercase', fontSize:10}}>Preset</span>
+            <span style={{flex:1}}>High-priority open · priority in High/Urgent AND status in New/Acknowledged/In Progress</span>
+            <button onClick={() => setPresetMode(null)} style={{background:'transparent', border:'1px solid #efe1be', borderRadius:4, padding:'4px 10px', fontSize:11, color:'#7a5a1f', cursor:'pointer', fontWeight:600}}>Clear preset</button>
+          </div>
+        )}
+        <div style={{display:'flex',gap:14,flexWrap:'wrap',alignItems:'flex-end',marginBottom:14, opacity: presetMode ? 0.45 : 1, pointerEvents: presetMode ? 'none' : 'auto'}}>
           <div style={{flex:'1 1 140px'}}>
             <label style={{fontSize:10,letterSpacing:'0.06em',textTransform:'uppercase',color:'var(--text-secondary)',marginBottom:6,display:'block',fontWeight:500}}>Status</label>
             <select className="form-input" value={statusFilter} onChange={e => setStatusFilter(e.target.value)}>

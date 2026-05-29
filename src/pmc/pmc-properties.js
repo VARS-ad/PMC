@@ -784,14 +784,14 @@ const PMCPropertiesPage = ({ setPage }) => {
                   </div>
                 )}
                 {(() => {
-                  // 2-tile layout: Units · Open Service Requests.
-                  // The Operating Revenue tile used to live in the middle —
-                  // removed in favour of the new Assets → Summary tab,
-                  // which carries the portfolio-wide financial rollup
-                  // (and clickable drill into per-asset AssetFinancialPanel
-                  // via the Top revenue contributors list).
+                  // 3-tile layout: Units · Operating Revenue Billed ·
+                  // Open Service Requests. The middle tile reads the
+                  // same number the Summary tab uses (period-scoped
+                  // billed total) and clicks open the asset's
+                  // AssetFinancialPanel — restored on user request so
+                  // each card carries the at-a-glance financial state.
                   return (
-                    <div style={{display:'grid',gridTemplateColumns:'repeat(2, minmax(0, 1fr))',gap:8,marginTop:14}}>
+                    <div style={{display:'grid',gridTemplateColumns:'repeat(3, minmax(0, 1fr))',gap:8,marginTop:14}}>
                       {/* Units tile (custom render — matches PMCStat shape) */}
                       <div
                         onClick={(e) => { e.stopPropagation(); open(); }}
@@ -803,6 +803,7 @@ const PMCPropertiesPage = ({ setPage }) => {
                         <div style={{fontSize:11,letterSpacing:'0.08em',textTransform:'uppercase',color:'var(--text-secondary)',marginBottom:6,fontWeight:500}}>Units</div>
                         <div style={{fontSize:16,fontWeight:600,color:'var(--text-dark)',letterSpacing:'-0.015em'}}>{b.unitCount} <span style={{fontSize:12,fontWeight:400,color:'var(--text-muted)',letterSpacing:0}}>· {occupancyPct}% occupied</span></div>
                       </div>
+                      <PMCStat label="Operating Revenue Billed" value={'AED ' + Math.round(totalBilled).toLocaleString()} onClick={() => setFinancialAsset(b)} hint="Open the asset's financial summary — collected, pending, upcoming + per-unit breakdown + invoices."/>
                       <PMCStat label="Open Service Requests"   value={b.openSRs + ' open · ' + b.totalSRs + ' total'}    onClick={() => setDrill({ building: b, view: 'srs' })} hint="Service requests"/>
                     </div>
                   );
