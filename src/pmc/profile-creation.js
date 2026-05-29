@@ -3,17 +3,33 @@
 const PC_TEMPLATES = {
   buildings: {
     label: 'Buildings',
-    headers: ['Building name','Floor','Unit','Address','Notes'],
+    headers: [
+      'Building name','Property type','Floor','Unit','Address','Notes',
+      'Plot area (sqft)','Villa count','Bedrooms per villa',
+      'Commercial use','Gross leasable area (sqft)','Parking spots',
+    ],
     examples: [
-      ['Aljil Tower',1,'A-101','Sheikh Zayed Rd, Dubai, UAE','Mixed residential/commercial.'],
-      ['Aljil Tower',1,'A-102','',''],
-      ['Aljil Tower',2,'A-201','',''],
-      ['Al Qurm View',1,'Q-101','Shams Abu Dhabi, Al Reem Island, Abu Dhabi','Low-rise residential.'],
+      // RESIDENTIAL — one row per unit, floor + unit number required.
+      ['Aljil Tower','Residential',1,'A-101','Sheikh Zayed Rd, Dubai, UAE','Mixed residential/commercial tower.','','','','','',''],
+      ['Aljil Tower','Residential',1,'A-102','','','','','','','',''],
+      ['Aljil Tower','Residential',2,'A-201','','','','','','','',''],
+      ['Al Qurm View','Residential',1,'Q-101','Shams Abu Dhabi, Al Reem Island, Abu Dhabi','Low-rise residential.','','','','','',''],
+      // COMMERCIAL — same row-per-unit, plus building-level GLA / parking / use on the first row.
+      ['Marina Bay Offices','Commercial',3,'305','Dubai Marina, Dubai, UAE','Office tower.','','','','Office',12000,80],
+      ['Marina Bay Offices','Commercial',3,'306','','','','','','','',''],
+      // VILLA — one row for the WHOLE compound. Floor + Unit stay blank.
+      ['Palm Villas Compound','Villa','','','Palm Jumeirah, Dubai, UAE','Gated compound.',8000,5,4,'','',''],
+      // COMMERCIAL LAND — raw plot, no floors, no units, no buildings on it.
+      ['Al Wasl Plot 14','Commercial Land','','','Al Wasl Rd, Dubai, UAE','Vacant plot, leased for events.',25000,'','','','',''],
     ],
     filename: 'buildings-template',
     rules: [
-      'One row per unit. A building with 100 units = 100 rows; the same building name repeats on every row.',
-      'Address and Notes are optional. Fill them on the FIRST row of each building; subsequent rows can leave them blank.',
+      'Property type must be one of: Residential, Commercial, Villa, Commercial Land.',
+      'Residential and Commercial: ONE ROW PER UNIT. Floor and Unit are required. A 100-unit tower = 100 rows; repeat Building name on every row.',
+      'Villa: ONE ROW per villa compound. Leave Floor and Unit blank. Fill Villa count, Plot area, Bedrooms per villa.',
+      'Commercial Land: ONE ROW per plot. Leave Floor and Unit blank. Fill Plot area.',
+      'Building-level fields (Property type, Address, Notes, Plot area, Villa count, GLA, Parking, etc.) are read from the FIRST row of each building; later rows can leave them blank.',
+      'Commercial use must be one of: Office, Retail, Mixed (only for Commercial buildings).',
       'Re-running the upload is safe: existing buildings/units are skipped (matched on Building + Unit).',
     ],
   },
@@ -896,42 +912,103 @@ const PCBulkUpload = ({ section }) => {
 async function uploadBuildingsBulk(parsedRows) {
   const results = [];
   const buildingMap = {};
+  // Building-level fields can land on any row but conventionally on the
+  // first. We prefer the first non-empty value seen per building so a
+  // missed cell on row 1 doesn't shadow a real value on row 5.
+  const takeFirst = (current, incoming) => (current != null && current !== '' ? current : (incoming != null && incoming !== '' ? incoming : current));
+  const numOrNull = (v) => {
+    if (v == null || v === '') return null;
+    const n = Number(v);
+    return isNaN(n) ? null : n;
+  };
+  const validPropTypes = new Set(['Residential','Commercial','Villa','Commercial Land']);
+  const validCommUse   = new Set(['Office','Retail','Mixed']);
+
   for (const row of parsedRows) {
     const bname = (row['Building name'] || '').toString().trim();
     if (!bname) { results.push({ row: JSON.stringify(row), ok: false, error: 'Missing building name' }); continue; }
     if (!buildingMap[bname]) {
-      buildingMap[bname] = { name: bname, address: row['Address'] || null, notes: row['Notes'] || null, units: [] };
+      buildingMap[bname] = {
+        name: bname,
+        property_type: null, address: null, notes: null,
+        plot_area_sqft: null, villa_count: null, bedrooms_per_villa: null,
+        commercial_use_type: null, gross_leasable_area_sqft: null, parking_spots: null,
+        units: [],
+      };
     }
-    if (!buildingMap[bname].address && row['Address']) buildingMap[bname].address = row['Address'];
-    if (!buildingMap[bname].notes && row['Notes']) buildingMap[bname].notes = row['Notes'];
-    buildingMap[bname].units.push({
-      floor: row['Floor'] != null ? Number(row['Floor']) : null,
-      unit_number: row['Unit'] != null ? String(row['Unit']).trim() : null,
-    });
+    const b = buildingMap[bname];
+    b.property_type             = takeFirst(b.property_type,             row['Property type']);
+    b.address                   = takeFirst(b.address,                   row['Address']);
+    b.notes                     = takeFirst(b.notes,                     row['Notes']);
+    b.plot_area_sqft            = takeFirst(b.plot_area_sqft,            row['Plot area (sqft)']);
+    b.villa_count               = takeFirst(b.villa_count,               row['Villa count']);
+    b.bedrooms_per_villa        = takeFirst(b.bedrooms_per_villa,        row['Bedrooms per villa']);
+    b.commercial_use_type       = takeFirst(b.commercial_use_type,       row['Commercial use']);
+    b.gross_leasable_area_sqft  = takeFirst(b.gross_leasable_area_sqft,  row['Gross leasable area (sqft)']);
+    b.parking_spots             = takeFirst(b.parking_spots,             row['Parking spots']);
+    // Only Residential / Commercial have unit rows. Villa and
+    // Commercial Land are stored as a single building record with no
+    // child units.
+    const floor = row['Floor'];
+    const unit  = row['Unit'];
+    if ((floor != null && floor !== '') || (unit != null && unit !== '')) {
+      b.units.push({
+        floor: floor != null && floor !== '' ? Number(floor) : null,
+        unit_number: unit != null && unit !== '' ? String(unit).trim() : null,
+      });
+    }
   }
+
   for (const bname of Object.keys(buildingMap)) {
     const b = buildingMap[bname];
+    const propType = (b.property_type || 'Residential').toString().trim();
+    if (!validPropTypes.has(propType)) {
+      results.push({ building: bname, ok: false, error: 'Unknown Property type "' + propType + '" — must be one of: Residential, Commercial, Villa, Commercial Land.' });
+      continue;
+    }
+    const commUse = b.commercial_use_type ? b.commercial_use_type.toString().trim() : null;
+    if (commUse && !validCommUse.has(commUse)) {
+      results.push({ building: bname, ok: false, error: 'Unknown Commercial use "' + commUse + '" — must be Office, Retail or Mixed.' });
+      continue;
+    }
+    const isStructure = propType === 'Residential' || propType === 'Commercial';
+
     const { data: existing } = await supabaseClient.from('buildings').select('id').eq('name', bname).maybeSingle();
     let buildingId;
     if (existing) {
       buildingId = existing.id;
     } else {
-      const { data: newB, error: bErr } = await supabaseClient.from('buildings').insert({ name: bname, address: b.address, notes: b.notes }).select('id').single();
+      const insertPayload = {
+        name: bname,
+        property_type: propType,
+        address: b.address || null,
+        notes: b.notes || null,
+        plot_area_sqft:           numOrNull(b.plot_area_sqft),
+        villa_count:              numOrNull(b.villa_count),
+        bedrooms_per_villa:       numOrNull(b.bedrooms_per_villa),
+        commercial_use_type:      commUse,
+        gross_leasable_area_sqft: numOrNull(b.gross_leasable_area_sqft),
+        parking_spots:            numOrNull(b.parking_spots),
+      };
+      const { data: newB, error: bErr } = await supabaseClient.from('buildings').insert(insertPayload).select('id').single();
       if (bErr) { results.push({ building: bname, ok: false, error: 'building insert: ' + bErr.message }); continue; }
       buildingId = newB.id;
     }
-    const { data: existingUnits } = await supabaseClient.from('units').select('unit_number').eq('building_id', buildingId);
-    const existingNumbers = new Set((existingUnits || []).map(u => u.unit_number));
-    const toInsert = b.units
-      .filter(u => u.unit_number && !existingNumbers.has(u.unit_number) && u.floor != null && !isNaN(u.floor))
-      .map(u => ({ building_id: buildingId, floor: u.floor, unit_number: u.unit_number }));
     let unitsAdded = 0;
-    if (toInsert.length) {
-      const { error: uErr } = await supabaseClient.from('units').insert(toInsert);
-      if (uErr) { results.push({ building: bname, ok: false, error: 'units insert: ' + uErr.message }); continue; }
-      unitsAdded = toInsert.length;
+    let unitsSeen  = b.units.length;
+    if (isStructure && b.units.length) {
+      const { data: existingUnits } = await supabaseClient.from('units').select('unit_number').eq('building_id', buildingId);
+      const existingNumbers = new Set((existingUnits || []).map(u => u.unit_number));
+      const toInsert = b.units
+        .filter(u => u.unit_number && !existingNumbers.has(u.unit_number) && u.floor != null && !isNaN(u.floor))
+        .map(u => ({ building_id: buildingId, floor: u.floor, unit_number: u.unit_number }));
+      if (toInsert.length) {
+        const { error: uErr } = await supabaseClient.from('units').insert(toInsert);
+        if (uErr) { results.push({ building: bname, ok: false, error: 'units insert: ' + uErr.message }); continue; }
+        unitsAdded = toInsert.length;
+      }
     }
-    results.push({ building: bname, ok: true, units_added: unitsAdded, units_skipped: b.units.length - unitsAdded });
+    results.push({ building: bname, ok: true, property_type: propType, units_added: unitsAdded, units_skipped: unitsSeen - unitsAdded });
   }
   return { results };
 }
@@ -1346,7 +1423,7 @@ const BuildingManualForm = () => {
     <div className="card">
       <div style={{fontSize:13,fontWeight:600,marginBottom:14}}>Add a building</div>
       <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:14,marginBottom:14}}>
-        <PCSelect label="Property type" required value={propertyType} onChange={setPropertyType} options={[{value:'Residential',label:'Residential'},{value:'Commercial',label:'Commercial'},{value:'Villa',label:'Villa'}]}/>
+        <PCSelect label="Property type" required value={propertyType} onChange={setPropertyType} options={[{value:'Residential',label:'Residential'},{value:'Commercial',label:'Commercial'},{value:'Villa',label:'Villa'},{value:'Commercial Land',label:'Commercial Land'}]}/>
         <div/>
       </div>
       <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:14,marginBottom:14}}>
@@ -1715,7 +1792,7 @@ const EditRecordModal = ({ kind, record, onClose, onSaved }) => {
         </div>
         {kind === 'building' && (
           <div>
-            <div style={{marginBottom:14}}><PCSelect label="Property type" required value={form.property_type} onChange={setF('property_type')} options={[{value:'Residential',label:'Residential'},{value:'Commercial',label:'Commercial'},{value:'Villa',label:'Villa'}]}/></div>
+            <div style={{marginBottom:14}}><PCSelect label="Property type" required value={form.property_type} onChange={setF('property_type')} options={[{value:'Residential',label:'Residential'},{value:'Commercial',label:'Commercial'},{value:'Villa',label:'Villa'},{value:'Commercial Land',label:'Commercial Land'}]}/></div>
             <div style={{marginBottom:14}}><PCField label="Building name" required value={form.name} onChange={setF('name')}/></div>
             <div style={{marginBottom:14}}><PCField label="Address" value={form.address} onChange={setF('address')}/></div>
             <div style={{marginBottom:14}}><PCField label="Notes" value={form.notes} onChange={setF('notes')} textarea/></div>

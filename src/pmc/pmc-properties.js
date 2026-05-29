@@ -477,15 +477,17 @@ const PMCPropertiesPage = ({ setPage }) => {
             </div>
           );
 
-          const residential = buildings.filter(b => b.property_type === 'Residential');
-          const commercial  = buildings.filter(b => b.property_type === 'Commercial');
-          const villas      = buildings.filter(b => b.property_type === 'Villa');
+          const residential    = buildings.filter(b => b.property_type === 'Residential');
+          const commercial     = buildings.filter(b => b.property_type === 'Commercial');
+          const villas         = buildings.filter(b => b.property_type === 'Villa');
+          const commercialLand = buildings.filter(b => b.property_type === 'Commercial Land');
 
           return (
             <>
-              {renderSection('Residential', 'Residential', residential)}
-              {renderSection('Commercial',  'Commercial',  commercial)}
-              {renderSection('Villas',      'Villa',       villas)}
+              {renderSection('Residential',     'Residential',     residential)}
+              {renderSection('Commercial',      'Commercial',      commercial)}
+              {renderSection('Villas',          'Villa',           villas)}
+              {renderSection('Commercial Land', 'Commercial Land', commercialLand)}
             </>
           );
         })()
