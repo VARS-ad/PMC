@@ -17,7 +17,13 @@
 const AssetFinancialPanel = ({ building, onClose }) => {
   const [loading, setLoading] = useState(true);
   const [rawInvoices, setRawInvoices] = useState([]);
-  const [monthsBack, setMonthsBack] = useState(12);
+  // Local period state — mirrors the global TimeRangePicker shape so
+  // the modal's selector LOOKS identical to the rest of the app, but
+  // doesn't touch AppContext (changing it here mustn't ripple into
+  // Overview's filter).
+  const [timeRange, setTimeRange] = useState('12m');         // 1m | 3m | 6m | 12m | 24m | custom
+  const [customStart, setCustomStart] = useState('');
+  const [customEnd, setCustomEnd]     = useState('');
   const [showDownload, setShowDownload] = useState(false);
   const [openUnit, setOpenUnit] = useState(null);    // row click → UnitDetailModal
   const [invoiceSort, setInvoiceSort] = useState({ key: 'due_date', dir: 'desc' });
@@ -74,10 +80,14 @@ const AssetFinancialPanel = ({ building, onClose }) => {
   };
 
   // ---- Period filter --------------------------------------------------
+  // Resolve the active period from (timeRange + custom dates).
   const today = new Date();
-  const periodStart = new Date(today.getFullYear(), today.getMonth() - monthsBack + 1, 1);
-  const periodStartIso = periodStart.toISOString().slice(0, 10);
+  const PRESETS = { '1m':1, '3m':3, '6m':6, '12m':12, '24m':24 };
+  const presetMonths = PRESETS[timeRange] || 12;
+  const presetStartIso = new Date(today.getFullYear(), today.getMonth() - presetMonths + 1, 1).toISOString().slice(0, 10);
   const todayIso = today.toISOString().slice(0, 10);
+  const periodStartIso = (timeRange === 'custom' && customStart) ? customStart : presetStartIso;
+  const periodEndIso   = (timeRange === 'custom' && customEnd)   ? customEnd   : todayIso;
 
   const annotated = rawInvoices.map(i => {
     const u = unitMap[i.unit_id];
@@ -93,7 +103,7 @@ const AssetFinancialPanel = ({ building, onClose }) => {
   });
   const periodInvoices = annotated.filter(i => {
     const d = (i.created_at || '').slice(0, 10);
-    return d >= periodStartIso && d <= todayIso;
+    return d >= periodStartIso && d <= periodEndIso;
   });
 
   // ---- Period totals --------------------------------------------------
@@ -335,9 +345,11 @@ const AssetFinancialPanel = ({ building, onClose }) => {
     'Cancelled':{ bg:'#E6EAE9', fg:'#61707D' },
   }[eff] || { bg:'#E6EAE9', fg:'#61707D' });
 
-  const periodLabel = (monthsBack === 1)
-    ? new Date().toLocaleString('en-GB', { month: 'long', year: 'numeric' })
-    : 'Last ' + monthsBack + ' months';
+  const periodLabel = timeRange === 'custom'
+    ? (periodStartIso + ' → ' + periodEndIso)
+    : timeRange === '1m'
+      ? new Date().toLocaleString('en-GB', { month: 'long', year: 'numeric' })
+      : 'Last ' + presetMonths + ' months';
 
   return (
     <>
@@ -359,27 +371,35 @@ const AssetFinancialPanel = ({ building, onClose }) => {
         </div>
 
         <div style={{padding:'20px 32px 32px',overflowY:'auto',flex:1}}>
-          {/* Period pills */}
-          <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:14,flexWrap:'wrap',gap:12}}>
-            <div style={{fontSize:10,letterSpacing:'0.1em',textTransform:'uppercase',color:'#61707D',fontWeight:600}}>Period</div>
-            <div style={{display:'flex',gap:4,background:'#fff',border:'1px solid var(--border-light)',borderRadius:8,padding:3}}>
-              {[
-                { m: 1,  label: 'This month' },
-                { m: 3,  label: '3 months' },
-                { m: 6,  label: '6 months' },
-                { m: 12, label: '12 months' },
-                { m: 24, label: '24 months' },
-              ].map(opt => {
-                const active = monthsBack === opt.m;
-                return (
-                  <button key={opt.m} type="button" onClick={() => setMonthsBack(opt.m)}
-                    style={{padding:'6px 14px',fontSize:12,fontWeight: active ? 600 : 500,color: active ? '#fff' : 'var(--text-secondary)',background: active ? '#3E4C59' : 'transparent',border:'none',borderRadius:6,cursor:'pointer',transition:'background 0.12s,color 0.12s'}}>
-                    {opt.label}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
+          {/* Period — same shape as the global TimeRangePicker. */}
+          {(() => {
+            const onPreset = (key) => {
+              setTimeRange(key);
+              // Keep custom dates around in state for a future toggle back.
+            };
+            const onStartChange = (v) => { setCustomStart(v); if (!customEnd) setCustomEnd(periodEndIso); setTimeRange('custom'); };
+            const onEndChange   = (v) => { setCustomEnd(v);   if (!customStart) setCustomStart(periodStartIso); setTimeRange('custom'); };
+            const inputStyle = { padding:'8px 12px',fontSize:13,borderRadius:6,background:'#fff',border:'1px solid var(--border-light)',color:'var(--text-dark)',fontFamily:'inherit',outline:'none' };
+            return (
+              <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:14,flexWrap:'wrap',gap:12}}>
+                <div style={{fontSize:10,letterSpacing:'0.1em',textTransform:'uppercase',color:'#61707D',fontWeight:600}}>Period</div>
+                <div style={{display:'flex',gap:8,alignItems:'center',flexWrap:'wrap'}}>
+                  <select value={timeRange} onChange={e => onPreset(e.target.value)}
+                    style={{...inputStyle,padding:'8px 14px',fontWeight:500,cursor:'pointer'}}>
+                    <option value="1m">1 Month (this month)</option>
+                    <option value="3m">3 Months</option>
+                    <option value="6m">6 Months</option>
+                    <option value="12m">12 Months</option>
+                    <option value="24m">24 Months</option>
+                    <option value="custom">Custom range…</option>
+                  </select>
+                  <input type="date" value={periodStartIso} onChange={e => onStartChange(e.target.value)} style={inputStyle}/>
+                  <span style={{color:'var(--text-muted)',fontSize:13}}>→</span>
+                  <input type="date" value={periodEndIso} onChange={e => onEndChange(e.target.value)} style={inputStyle}/>
+                </div>
+              </div>
+            );
+          })()}
 
           {loading ? (
             <div style={{padding:60,textAlign:'center',color:'var(--text-muted)',fontSize:13}}>Loading…</div>
