@@ -45,7 +45,7 @@ const PMCOverviewPage = ({ setPage }) => {
       if (!supabaseClient) { setError('Supabase not initialized'); return; }
       try {
         const filterB = selectedProperties.length > 0 ? selectedProperties : null;
-        const { data: buildings } = await supabaseClient.from('buildings').select('id,name,address,property_type');
+        const { data: buildings } = await supabaseClient.from('buildings').select('id,name,address,property_type,purchase_price,current_value,acquired_on');
         // Also pull the denormalised tenant_* fields so the Needs-Attention
         // card can spot vacant units and leases ending soon for non-
         // residential property types.
@@ -290,6 +290,63 @@ const PMCOverviewPage = ({ setPage }) => {
         const severityRank = { red: 0, orange: 1, yellow: 2 };
         attention.sort((a, b) => severityRank[a.severity] - severityRank[b.severity]);
 
+        // -------- Landlord headline: this-month + prev-month + target -----
+        // Single-line answer to 'how is this month going for me?'.
+        const thisMonthInvoices = (invoices || []).filter(i => (i.created_at || '').slice(0, 10) >= thisMonthStart && (i.created_at || '').slice(0, 10) <= today);
+        const lastMonthInvoices = (invoices || []).filter(i => (i.created_at || '').slice(0, 10) >= lastMonthStart && (i.created_at || '').slice(0, 10) <= lastMonthEnd);
+        const headlineCollected     = thisMonthInvoices.filter(i => i.status === 'Paid').reduce((s, i) => s + Number(i.amount_aed), 0);
+        const headlineLastMonth     = lastMonthInvoices.filter(i => i.status === 'Paid').reduce((s, i) => s + Number(i.amount_aed), 0);
+        // Target = total monthly rent across occupied units (residential
+        // assignments + non-residential tenants). What we should be
+        // bringing in if every tenant paid this month.
+        const targetResidential = (ras || []).reduce((s, r) => s + Number(r.monthly_payment_aed || 0), 0);
+        const targetNonResid    = filteredUnits.reduce((s, u) => s + Number(u.tenant_monthly_payment_aed || 0), 0);
+        const headlineTarget = targetResidential + targetNonResid;
+        const headlinePct = headlineTarget > 0 ? Math.round(100 * headlineCollected / headlineTarget) : null;
+        const headlineDelta = headlineCollected - headlineLastMonth;
+
+        // -------- Per-asset cards ----------------------------------------
+        // One card per selected building so the landlord can compare their
+        // 5–15 assets side by side without leaving the Overview. Each
+        // card shows: occupancy, this-month collected, annualised gross
+        // yield (vs purchase_price), and a colour chip flagging
+        // overdue / vacant / expiring exceptions.
+        const assetCards = (buildings || [])
+          .filter(b => !filterB || filterB.includes(b.id))
+          .map(b => {
+            const bUnits = filteredUnits.filter(u => u.building_id === b.id);
+            const bUnitIds = new Set(bUnits.map(u => u.id));
+            const bAssigned = (ras || []).filter(r => bUnitIds.has(r.unit_id));
+            const bTenantOccupied = bUnits.filter(u => u.tenant_name).length;
+            const occupiedCount = bAssigned.length + bTenantOccupied;
+            // This-month collected for THIS asset.
+            const thisMonthCollected = thisMonthInvoices.filter(i => bUnitIds.has(i.unit_id) && i.status === 'Paid').reduce((s, i) => s + Number(i.amount_aed), 0);
+            // Annualised gross yield = (annual rent at target) / purchase_price.
+            const annualTarget = bAssigned.reduce((s, r) => s + Number(r.monthly_payment_aed || 0), 0) * 12
+                               + bUnits.reduce((s, u) => s + Number(u.tenant_monthly_payment_aed || 0), 0) * 12;
+            const yieldPct = b.purchase_price && Number(b.purchase_price) > 0
+              ? (annualTarget / Number(b.purchase_price)) * 100
+              : null;
+            // Counts for the inline exception chip.
+            const overdueCount = (invoices || []).filter(i => bUnitIds.has(i.unit_id) && i._eff === 'Overdue').length;
+            const expiringLeasesCount = bAssigned.filter(r => r.lease_end && r.lease_end >= today10 && r.lease_end <= cutoff60).length
+                                      + bUnits.filter(u => u.tenant_lease_end && u.tenant_lease_end >= today10 && u.tenant_lease_end <= cutoff60).length;
+            const vacantCount = bUnits.length - occupiedCount;
+            return {
+              id: b.id, name: b.name, property_type: b.property_type, address: b.address,
+              purchase_price: b.purchase_price, current_value: b.current_value, acquired_on: b.acquired_on,
+              total_units: bUnits.length, occupied_count: occupiedCount, vacant_count: Math.max(0, vacantCount),
+              occupancy_pct: bUnits.length > 0 ? Math.round(100 * occupiedCount / bUnits.length) : 0,
+              this_month_collected: thisMonthCollected,
+              annual_target: annualTarget,
+              yield_pct: yieldPct,
+              overdue_count: overdueCount,
+              expiring_leases_count: expiringLeasesCount,
+              raw_building: b,
+            };
+          })
+          .sort((a, b) => (b.yield_pct || 0) - (a.yield_pct || 0));
+
         setStats({
           // Portfolio Summary KPIs
           selectedPropsCount, totalUnits, occupied, occupancyRate, lastMonthCollected, pendingSCAmount, upcomingSCAmount,
@@ -307,6 +364,9 @@ const PMCOverviewPage = ({ setPage }) => {
           srRecent,
           // Landlord watchlist
           attention,
+          // Landlord headline + per-asset cards
+          headlineCollected, headlineTarget, headlinePct, headlineDelta, headlineLastMonth,
+          assetCards,
         });
       } catch (e) {
         if (mounted) setError(String(e.message || e));
@@ -404,6 +464,54 @@ const PMCOverviewPage = ({ setPage }) => {
       {!stats ? (
         <div className="card"><div style={{padding:24,color:'var(--text-muted)',fontSize:13}}>Loading…</div></div>
       ) : (<>
+        {/* ============ HEADLINE — 'How is this month going?' ============ */}
+        {(() => {
+          const delta = stats.headlineDelta || 0;
+          const deltaAbs = Math.abs(delta);
+          const arrow = delta > 0 ? '▲' : delta < 0 ? '▼' : '·';
+          const deltaColor = delta > 0 ? '#5a6b4f' : delta < 0 ? '#8b4a42' : 'var(--text-muted)';
+          const pctColor = stats.headlinePct == null ? 'var(--text-muted)'
+                         : stats.headlinePct >= 80 ? '#5a6b4f'
+                         : stats.headlinePct >= 50 ? '#a07d3c' : '#8b4a42';
+          const monthName = new Date().toLocaleString('en-GB', { month: 'long' });
+          return (
+            <div className="card" style={{padding:'24px 28px',marginBottom:16,background:'linear-gradient(135deg, #fff 0%, #faf7f0 100%)'}}>
+              <div style={{fontSize:11,letterSpacing:'0.08em',textTransform:'uppercase',color:'var(--text-secondary)',fontWeight:600,marginBottom:8}}>
+                {monthName} {new Date().getFullYear()} · So far
+              </div>
+              <div style={{display:'flex',alignItems:'baseline',flexWrap:'wrap',gap:18}}>
+                <div style={{fontSize:38,fontWeight:600,letterSpacing:'-0.02em',color:'var(--text-dark)',lineHeight:1}}>
+                  {fmt(stats.headlineCollected)}
+                </div>
+                <div style={{fontSize:14,color:'var(--text-muted)',fontWeight:500}}>collected</div>
+                {stats.headlinePct != null && (
+                  <div style={{fontSize:14,fontWeight:600,color:pctColor}}>
+                    {stats.headlinePct}% of target
+                  </div>
+                )}
+                {(stats.headlineLastMonth > 0 || stats.headlineCollected > 0) && (
+                  <div style={{fontSize:14,fontWeight:500,color:deltaColor,display:'flex',alignItems:'center',gap:4}}>
+                    {arrow} {fmt(deltaAbs)} vs last month
+                  </div>
+                )}
+              </div>
+              {stats.headlineTarget > 0 && (
+                <div style={{marginTop:14,height:6,background:'#e6eae9',borderRadius:3,overflow:'hidden'}}>
+                  <div style={{
+                    width: Math.min(100, Math.round(100 * stats.headlineCollected / stats.headlineTarget)) + '%',
+                    height:'100%',
+                    background: pctColor,
+                    transition:'width 0.3s ease',
+                  }}/>
+                </div>
+              )}
+              <div style={{fontSize:12,color:'var(--text-muted)',marginTop:10,letterSpacing:'-0.005em'}}>
+                Target this month {fmt(stats.headlineTarget)} · last month {fmt(stats.headlineLastMonth)} collected
+              </div>
+            </div>
+          );
+        })()}
+
         {/* ============ NEEDS YOUR ATTENTION ============ */}
         {(() => {
           const items = stats.attention || [];
@@ -447,6 +555,83 @@ const PMCOverviewPage = ({ setPage }) => {
                   })}
                 </div>
               )}
+            </>
+          );
+        })()}
+
+        {/* ============ YOUR PORTFOLIO — per-asset cards ============ */}
+        {(() => {
+          const cards = stats.assetCards || [];
+          if (cards.length === 0) return null;
+          const typeChip = { 'Residential':'#5a6b4f', 'Commercial':'#3E4C59', 'Villa':'#a07d3c', 'Commercial Land':'#61707D' };
+          // Highest-yield in green, lowest in red so the eye finds the
+          // underperformer instantly. Threshold based on portfolio median.
+          const yieldsSorted = cards.map(c => c.yield_pct).filter(v => v != null).sort((a, b) => a - b);
+          const median = yieldsSorted.length > 0 ? yieldsSorted[Math.floor(yieldsSorted.length / 2)] : 0;
+          const yieldTone = (y) => y == null ? 'var(--text-muted)' : y >= median + 0.5 ? '#5a6b4f' : y <= median - 0.5 ? '#8b4a42' : 'var(--text-dark)';
+          return (
+            <>
+              <div style={{...groupEyebrow,display:'flex',justifyContent:'space-between',alignItems:'baseline'}}>
+                <span>Your Portfolio</span>
+                <span style={{fontSize:11,letterSpacing:0,textTransform:'none',color:'var(--text-muted)',fontWeight:400}}>{cards.length} asset{cards.length===1?'':'s'} · sorted by yield</span>
+              </div>
+              <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill, minmax(280px, 1fr))',gap:14,marginBottom:8}}>
+                {cards.map(c => {
+                  const issues = [];
+                  if (c.overdue_count > 0) issues.push({ label: c.overdue_count + ' overdue', color:'#8b4a42' });
+                  if (c.vacant_count > 0)  issues.push({ label: c.vacant_count  + ' vacant',  color:'#a07d3c' });
+                  if (c.expiring_leases_count > 0) issues.push({ label: c.expiring_leases_count + ' lease end', color:'#7a5a1f' });
+                  return (
+                    <div key={c.id} onClick={() => setOpenedUnit(null) /* placeholder */}
+                      style={{background:'#fff',border:'1px solid var(--border-light)',borderRadius:10,padding:'16px 18px',cursor:'default',transition:'box-shadow 0.15s',display:'flex',flexDirection:'column',gap:12}}
+                      onMouseEnter={e => e.currentTarget.style.boxShadow = '0 4px 14px rgba(19,31,35,0.06)'}
+                      onMouseLeave={e => e.currentTarget.style.boxShadow = 'none'}>
+                      {/* Header line */}
+                      <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',gap:10}}>
+                        <div style={{minWidth:0,flex:1}}>
+                          <div style={{fontSize:15,fontWeight:600,letterSpacing:'-0.01em',color:'var(--text-dark)',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{c.name}</div>
+                          <div style={{fontSize:11,color:'var(--text-muted)',marginTop:3,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{c.address || '—'}</div>
+                        </div>
+                        <span style={{fontSize:9,letterSpacing:'0.05em',textTransform:'uppercase',color:'#fff',background:typeChip[c.property_type] || '#61707D',padding:'3px 8px',borderRadius:3,fontWeight:600,whiteSpace:'nowrap',flexShrink:0}}>
+                          {c.property_type}
+                        </span>
+                      </div>
+                      {/* Yield + occupancy split */}
+                      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
+                        <div>
+                          <div style={{fontSize:10,letterSpacing:'0.06em',textTransform:'uppercase',color:'var(--text-secondary)',fontWeight:600,marginBottom:4}}>Yield</div>
+                          <div style={{fontSize:22,fontWeight:600,color:yieldTone(c.yield_pct),lineHeight:1}}>{c.yield_pct == null ? '—' : c.yield_pct.toFixed(1) + '%'}</div>
+                          <div style={{fontSize:10,color:'var(--text-muted)',marginTop:3}}>annualised gross</div>
+                        </div>
+                        <div>
+                          <div style={{fontSize:10,letterSpacing:'0.06em',textTransform:'uppercase',color:'var(--text-secondary)',fontWeight:600,marginBottom:4}}>Occupancy</div>
+                          <div style={{fontSize:22,fontWeight:600,color:'var(--text-dark)',lineHeight:1}}>{c.occupied_count}<span style={{fontSize:14,color:'var(--text-muted)',fontWeight:400}}> / {c.total_units}</span></div>
+                          <div style={{fontSize:10,color:'var(--text-muted)',marginTop:3}}>{c.occupancy_pct}%</div>
+                        </div>
+                      </div>
+                      {/* This-month collected + footer */}
+                      <div style={{paddingTop:10,borderTop:'1px solid var(--border-light)',display:'flex',justifyContent:'space-between',alignItems:'baseline',gap:10}}>
+                        <div>
+                          <div style={{fontSize:10,letterSpacing:'0.06em',textTransform:'uppercase',color:'var(--text-secondary)',fontWeight:600}}>This month</div>
+                          <div style={{fontSize:15,fontWeight:600,color:'#5a6b4f',marginTop:2}}>{fmt(c.this_month_collected)}</div>
+                        </div>
+                        <div style={{textAlign:'right'}}>
+                          <div style={{fontSize:10,letterSpacing:'0.06em',textTransform:'uppercase',color:'var(--text-secondary)',fontWeight:600}}>Value</div>
+                          <div style={{fontSize:13,fontWeight:600,color:'var(--text-dark)',marginTop:2}}>{c.current_value ? fmt(c.current_value) : '—'}</div>
+                        </div>
+                      </div>
+                      {/* Issue chips */}
+                      {issues.length > 0 && (
+                        <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
+                          {issues.map((iss, i) => (
+                            <span key={i} style={{fontSize:10,fontWeight:600,letterSpacing:'0.03em',textTransform:'uppercase',color:iss.color,background:'rgba(0,0,0,0.04)',padding:'3px 8px',borderRadius:3}}>{iss.label}</span>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
             </>
           );
         })()}
