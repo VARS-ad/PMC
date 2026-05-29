@@ -32,6 +32,16 @@ const UnitDetailModal = ({ unit, building, assignment: passedAssignment, profile
   const [showAttachments, setShowAttachments] = useState(false);
   // Clicking the resident's name opens the full ResidentDetailModal.
   const [showResidentDetail, setShowResidentDetail] = useState(false);
+  // Lease contract attachment row (kind='lease_contract' on unit_attachments).
+  // Loaded inline so the modal can render a "View / Replace / Delete" slot
+  // without opening UnitAttachmentsModal — the user lands here from the
+  // "Lease expiring within 60 days" attention row and needs the document
+  // one click away.
+  const [leaseContract, setLeaseContract]   = useState(null);
+  const [leaseContractUrl, setLeaseContractUrl] = useState(null);
+  const [leaseUploading, setLeaseUploading] = useState(false);
+  const [leaseError, setLeaseError]         = useState(null);
+  const leaseInputRef                       = useRef(null);
 
   useEffect(() => {
     let mounted = true;
@@ -111,6 +121,53 @@ const UnitDetailModal = ({ unit, building, assignment: passedAssignment, profile
     })();
     return () => { mounted = false; };
   }, [unit.id]);
+
+  // Load the existing lease_contract attachment (if any) for this unit and
+  // resolve a short-lived signed URL for the "View" link. Mirrors the
+  // pattern used in UnitAttachmentRow / pmc-overview.js.
+  const reloadLeaseContract = async () => {
+    if (!supabaseClient) return;
+    const { data } = await supabaseClient.from('unit_attachments')
+      .select('id,kind,filename,storage_path,created_at')
+      .eq('unit_id', unit.id)
+      .eq('kind', 'lease_contract')
+      .order('created_at', { ascending: false })
+      .limit(1);
+    const row = (data && data[0]) || null;
+    setLeaseContract(row);
+    if (row) {
+      const { data: signed } = await supabaseClient.storage
+        .from('unit-attachments')
+        .createSignedUrl(row.storage_path, 3600);
+      setLeaseContractUrl(signed && signed.signedUrl);
+    } else {
+      setLeaseContractUrl(null);
+    }
+  };
+  useEffect(() => { reloadLeaseContract(); }, [unit.id]);
+
+  const handleLeaseUpload = async (file) => {
+    if (!file || !supabaseClient) return;
+    setLeaseUploading(true); setLeaseError(null);
+    const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+    const path = unit.id + '/lease-contract-' + Date.now() + '-' + safeName;
+    const { error: upErr } = await supabaseClient.storage.from('unit-attachments').upload(path, file);
+    if (upErr) { setLeaseError('Upload failed: ' + upErr.message); setLeaseUploading(false); return; }
+    const { error: insErr } = await supabaseClient.from('unit_attachments').insert({
+      unit_id: unit.id, kind: 'lease_contract', filename: file.name, storage_path: path,
+    });
+    if (insErr) setLeaseError('Saved file but metadata insert failed: ' + insErr.message);
+    setLeaseUploading(false);
+    await reloadLeaseContract();
+  };
+
+  const handleLeaseDelete = async () => {
+    if (!supabaseClient || !leaseContract) return;
+    if (!window.confirm('Delete the current lease contract document?')) return;
+    await supabaseClient.storage.from('unit-attachments').remove([leaseContract.storage_path]);
+    await supabaseClient.from('unit_attachments').delete().eq('id', leaseContract.id);
+    await reloadLeaseContract();
+  };
 
   // Listen for status changes fired by the InvoiceSlotModal so the row
   // re-buckets without a full reload.
@@ -320,6 +377,128 @@ const UnitDetailModal = ({ unit, building, assignment: passedAssignment, profile
                 );
               }
               return null;
+            })()}
+
+            {(() => {
+              // LEASE CONTRACT — surfaces the actual signed agreement plus
+              // the lease dates / monthly payment from resident_assignments
+              // (or the tenant_* fallback on the unit). Lands the landlord
+              // directly on the document when they open this modal from the
+              // "Lease expiring within 60 days" attention row on Overview.
+              const propType   = (building && building.property_type) || 'Residential';
+              const isPersonal = propType === 'Residential' || propType === 'Villa';
+              const hasResidentialLease = isPersonal && assignment && assignment.tenure !== 'Owner';
+              const hasCommercialLease  = !isPersonal && ownerInfo &&
+                (ownerInfo.tenant_lease_start || ownerInfo.tenant_lease_end || ownerInfo.tenant_monthly_payment_aed || ownerInfo.tenant_contract_number);
+              const hasLease = hasResidentialLease || hasCommercialLease;
+
+              const tenure        = hasResidentialLease ? (assignment.tenure || 'Tenant')
+                                  : hasCommercialLease  ? (ownerInfo.tenant_tenure || 'Tenant')
+                                  : null;
+              const leaseStart    = hasResidentialLease ? assignment.lease_start
+                                  : hasCommercialLease  ? ownerInfo.tenant_lease_start
+                                  : null;
+              const leaseEnd      = hasResidentialLease ? assignment.lease_end
+                                  : hasCommercialLease  ? ownerInfo.tenant_lease_end
+                                  : null;
+              const monthly       = hasResidentialLease ? Number(assignment.monthly_payment_aed) || 0
+                                  : hasCommercialLease  ? Number(ownerInfo.tenant_monthly_payment_aed) || 0
+                                  : 0;
+
+              return (
+                <Section label="Lease Contract">
+                  {!hasLease ? (
+                    <div style={{fontSize:13,color:'#61707D',padding:'6px 0'}}>
+                      No active lease. Assign a tenant from Database → Assets.
+                    </div>
+                  ) : (
+                    <>
+                      <Field label="Tenure">{tenure}</Field>
+                      <Field label="Lease start">{leaseStart}</Field>
+                      <Field label="Lease end">{leaseEnd}</Field>
+                      <Field label="Monthly payment">{monthly ? fmt(monthly) : '—'}</Field>
+
+                      <div style={{display:'flex',gap:12,padding:'10px 0 4px',fontSize:13,alignItems:'center',borderTop:'1px solid #E6EAE9',marginTop:10}}>
+                        <div style={{width:140,color:'#61707D'}}>Contract document</div>
+                        <div style={{flex:1,color:'#131F23',fontWeight:500,display:'flex',alignItems:'center',gap:10,flexWrap:'wrap'}}>
+                          {leaseContract ? (
+                            <>
+                              {leaseContractUrl ? (
+                                <a href={leaseContractUrl} target="_blank" rel="noopener" style={{color:'var(--accent-warm-dark)',textDecoration:'none',fontWeight:500}}>
+                                  View →
+                                </a>
+                              ) : (
+                                <span style={{color:'var(--text-muted)',fontSize:12}}>Preparing link…</span>
+                              )}
+                              <span style={{fontSize:11,color:'#61707D'}}>{leaseContract.filename}</span>
+                              <input
+                                ref={leaseInputRef}
+                                type="file"
+                                accept=".pdf"
+                                style={{display:'none'}}
+                                onChange={async (e) => {
+                                  const f = e.target.files && e.target.files[0];
+                                  if (!f) return;
+                                  // Replace = delete existing then upload
+                                  if (leaseContract) {
+                                    await supabaseClient.storage.from('unit-attachments').remove([leaseContract.storage_path]);
+                                    await supabaseClient.from('unit_attachments').delete().eq('id', leaseContract.id);
+                                  }
+                                  await handleLeaseUpload(f);
+                                  if (leaseInputRef.current) leaseInputRef.current.value = '';
+                                }}
+                              />
+                              <button
+                                className="btn btn-sm"
+                                disabled={leaseUploading}
+                                onClick={() => leaseInputRef.current && leaseInputRef.current.click()}
+                                style={{padding:'4px 10px',fontSize:11}}
+                              >
+                                {leaseUploading ? 'Uploading…' : 'Replace'}
+                              </button>
+                              <button
+                                onClick={handleLeaseDelete}
+                                style={{background:'none',border:'none',cursor:'pointer',color:'#8b4a42',fontSize:14,padding:'2px 6px',lineHeight:1}}
+                                title="Delete contract"
+                              >
+                                ✕
+                              </button>
+                            </>
+                          ) : (
+                            <>
+                              <span style={{color:'#61707D',fontSize:12}}>No contract uploaded yet.</span>
+                              <input
+                                ref={leaseInputRef}
+                                type="file"
+                                accept=".pdf"
+                                style={{display:'none'}}
+                                onChange={(e) => {
+                                  const f = e.target.files && e.target.files[0];
+                                  handleLeaseUpload(f);
+                                  if (leaseInputRef.current) leaseInputRef.current.value = '';
+                                }}
+                              />
+                              <button
+                                className="btn btn-sm"
+                                disabled={leaseUploading}
+                                onClick={() => leaseInputRef.current && leaseInputRef.current.click()}
+                                style={{padding:'4px 10px',fontSize:11}}
+                              >
+                                {leaseUploading ? 'Uploading…' : '+ Upload PDF'}
+                              </button>
+                            </>
+                          )}
+                        </div>
+                      </div>
+                      {leaseError && (
+                        <div style={{padding:'8px 10px',background:'#fdf2f1',color:'#8b4a42',borderRadius:6,fontSize:12,marginTop:8}}>
+                          {leaseError}
+                        </div>
+                      )}
+                    </>
+                  )}
+                </Section>
+              );
             })()}
 
             {(() => {
