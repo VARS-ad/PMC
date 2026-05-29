@@ -961,6 +961,7 @@ const DocumentLibraryPage = ({ embedded } = {}) => {
   // gentle on the storage API.
   const safeFolderName = (s) => (s || 'unknown').toString().replace(/[\\/:*?"<>|]/g, '_').trim() || 'unknown';
   const bulkExport = async () => {
+    await ensureZip().catch(() => {});
     if (!window.JSZip) { alert('ZIP library failed to load — try reloading the page.'); return; }
     const toExport = visibleAtts;
     if (toExport.length === 0) { alert('No documents match the current filter.'); return; }
@@ -1014,6 +1015,7 @@ const DocumentLibraryPage = ({ embedded } = {}) => {
   // warning in the console.
   const bulkImport = async (file) => {
     if (!file) return;
+    await ensureZip().catch(() => {});
     if (!window.JSZip) { alert('ZIP library failed to load — try reloading the page.'); return; }
     setGenStatus({ phase: 'Reading ZIP…', current: 0, total: 0 });
     let zip;

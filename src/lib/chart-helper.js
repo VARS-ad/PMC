@@ -6,12 +6,18 @@ const ChartCanvas = ({ config, height }) => {
   const canvasRef = useRef(null);
   const chartRef = useRef(null);
   useEffect(() => {
-    if (!window.Chart || !canvasRef.current) return;
-    if (chartRef.current) { chartRef.current.destroy(); chartRef.current = null; }
-    try {
-      chartRef.current = new window.Chart(canvasRef.current, config);
-    } catch (e) { /* fail silently */ }
-    return () => { if (chartRef.current) { chartRef.current.destroy(); chartRef.current = null; } };
+    if (!canvasRef.current) return;
+    let cancelled = false;
+    // Chart.js is loaded on demand (it's ~200KB and only the report/detail
+    // views need it), so the chart paints a moment after the lib arrives.
+    ensureChart().then(() => {
+      if (cancelled || !canvasRef.current) return;
+      if (chartRef.current) { chartRef.current.destroy(); chartRef.current = null; }
+      try {
+        chartRef.current = new window.Chart(canvasRef.current, config);
+      } catch (e) { /* fail silently */ }
+    }).catch(() => {});
+    return () => { cancelled = true; if (chartRef.current) { chartRef.current.destroy(); chartRef.current = null; } };
   }, [JSON.stringify(config)]);
   return (
     <div style={{position:'relative',width:'100%',height: height || 280}}>

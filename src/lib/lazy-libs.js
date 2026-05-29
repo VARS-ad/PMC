@@ -38,3 +38,23 @@ function ensurePdf() {
     .catch(err => { _pdfLoaded = null; throw err; });
   return _pdfLoaded;
 }
+
+// ----- Chart.js (~200KB) — used by the Reports charts + asset detail -----
+let _chartLoaded = null;
+function ensureChart() {
+  if (typeof Chart !== 'undefined') return Promise.resolve();
+  if (_chartLoaded) return _chartLoaded;
+  _chartLoaded = _loadScript('https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js')
+    .catch(err => { _chartLoaded = null; throw err; });
+  return _chartLoaded;
+}
+
+// ----- JSZip (~95KB) — used only by the Document Library zip up/download --
+let _zipLoaded = null;
+function ensureZip() {
+  if (typeof JSZip !== 'undefined') return Promise.resolve();
+  if (_zipLoaded) return _zipLoaded;
+  _zipLoaded = _loadScript('https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js')
+    .catch(err => { _zipLoaded = null; throw err; });
+  return _zipLoaded;
+}

@@ -24,6 +24,10 @@ const AssetDetailModal = ({ asset, onClose }) => {
   const [photoUrl, setPhotoUrl]       = useState(null);
   const chartCanvasRef = useRef(null);
   const chartInstance  = useRef(null);
+  // Chart.js loads on demand; flip this once it's ready so the chart effect
+  // below re-runs and draws (it guards on window.Chart).
+  const [chartReady, setChartReady] = useState(false);
+  useEffect(() => { ensureChart().then(() => setChartReady(true)).catch(() => {}); }, []);
 
   const fmt = (n) => 'AED ' + Math.round(Number(n) || 0).toLocaleString();
 
@@ -216,7 +220,7 @@ const AssetDetailModal = ({ asset, onClose }) => {
       },
     });
     return () => { if (chartInstance.current) { chartInstance.current.destroy(); chartInstance.current = null; } };
-  }, [loading, monthly]);
+  }, [loading, monthly, chartReady]);
 
   // --- Investment summary ---------------------------------------------
   const investment = (() => {
