@@ -1,8 +1,74 @@
 // ==================== PROFILE CREATION (PMC admin) ====================
 
+// Per-property-type sub-templates rendered in the Buildings ('Properties')
+// Bulk upload tab. Each one has its own example rows + download buttons.
+// The unified parser (uploadBuildingsBulk) accepts a mix of all four so
+// the single upload box at the bottom can ingest any combination.
+const BUILDINGS_BY_TYPE = {
+  Residential: {
+    label: 'Residential buildings',
+    headers: ['Building name','Property type','Floor','Unit','Address','Notes'],
+    examples: [
+      ['Aljil Tower','Residential',1,'A-101','Sheikh Zayed Rd, Dubai, UAE','High-rise residential, mixed amenities (pool, gym).'],
+      ['Aljil Tower','Residential',1,'A-102','',''],
+      ['Aljil Tower','Residential',2,'A-201','',''],
+      ['Al Qurm View','Residential',1,'Q-101','Shams Abu Dhabi, Al Reem Island, Abu Dhabi, UAE','Low-rise residential by Aldar Properties.'],
+    ],
+    filename: 'residential-template',
+    rules: [
+      'ONE ROW PER UNIT — a 100-unit tower = 100 rows; repeat the Building name on every row.',
+      'Floor and Unit are both required.',
+      'Address and Notes live on the FIRST row of each building; later rows can leave them blank.',
+    ],
+  },
+  Commercial: {
+    label: 'Commercial buildings',
+    headers: ['Building name','Property type','Floor','Unit','Address','Notes','Commercial use','Gross leasable area (sqft)','Parking spots'],
+    examples: [
+      ['Boulevard Plaza Offices','Commercial',1,'B-101','Sheikh Mohammed bin Rashid Blvd, Downtown Dubai, UAE','Grade A office tower.','Office',850000,1200],
+      ['Boulevard Plaza Offices','Commercial',1,'B-102','','','','',''],
+      ['Boulevard Plaza Offices','Commercial',2,'B-201','','','','',''],
+      ['Mall of the Emirates Retail Hub','Commercial',1,'R-101','Sheikh Zayed Rd, Al Barsha 1, Dubai, UAE','Anchor retail concourse.','Retail',420000,850],
+      ['Mall of the Emirates Retail Hub','Commercial',1,'R-102','','','','',''],
+    ],
+    filename: 'commercial-template',
+    rules: [
+      'ONE ROW PER UNIT. Floor and Unit are required.',
+      'Commercial use must be one of: Office, Retail, Mixed.',
+      'Building-level fields (Address, Notes, GLA, Parking, Commercial use) go on the FIRST row of each building.',
+    ],
+  },
+  Villa: {
+    label: 'Villas',
+    headers: ['Building name','Property type','Address','Notes','Plot area (sqft)','Villa count','Bedrooms per villa'],
+    examples: [
+      ['Emirates Hills Estate','Villa','Emirates Hills, Dubai, UAE','Gated villa community by EMAAR with golf course frontage.',60000,8,5],
+      ['Saadiyat Beach Villas','Villa','Saadiyat Island, Abu Dhabi, UAE','Beachfront luxury villa cluster, private beach access.',95000,12,4],
+    ],
+    filename: 'villas-template',
+    rules: [
+      'ONE ROW per villa compound — no Floor / Unit columns.',
+      'Plot area, Villa count, and Bedrooms per villa describe the whole compound.',
+    ],
+  },
+  'Commercial Land': {
+    label: 'Commercial land',
+    headers: ['Building name','Property type','Address','Notes','Plot area (sqft)'],
+    examples: [
+      ['Al Quoz Industrial Plot','Commercial Land','Al Quoz Industrial Area 3, Dubai, UAE','Industrial-zoned plot leased to a regional logistics tenant.',35000],
+      ['Reem Island Vacant Plot','Commercial Land','Al Reem Island, Abu Dhabi, UAE','Mixed-use zoned plot held for future tower development.',60000],
+    ],
+    filename: 'commercial-land-template',
+    rules: [
+      'ONE ROW per plot — no Floor / Unit columns.',
+      'Plot area is required.',
+    ],
+  },
+};
+
 const PC_TEMPLATES = {
   buildings: {
-    label: 'Buildings',
+    label: 'Properties',
     headers: [
       'Building name','Property type','Floor','Unit','Address','Notes',
       'Plot area (sqft)','Villa count','Bedrooms per villa',
@@ -442,18 +508,43 @@ const PCSummary = ({ section }) => {
   }
 
   if (section === 'buildings') {
-    return (
-      <>
-        <div className="card">
-          <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:12}}>
-            <div style={{fontSize:13,color:'var(--text-muted)'}}>{rows.length} building{rows.length===1?'':'s'} · click a row to see floors & units</div>
-            <button className="btn btn-sm" onClick={reload}>Refresh</button>
-          </div>
-          <div className="data-table-scroll">
+    // Split the rows into 4 buckets by property_type. Each bucket renders
+    // its own card with type-tailored columns (Residential / Commercial
+    // show Floors + Units; Villa shows Villas + Plot + Bedrooms;
+    // Commercial Land shows Plot area).
+    const groups = [
+      { type:'Residential',     label:'Residential properties' },
+      { type:'Commercial',      label:'Commercial properties'  },
+      { type:'Villa',           label:'Villas'                 },
+      { type:'Commercial Land', label:'Commercial land'        },
+    ];
+    const byType = {};
+    (rows || []).forEach(b => {
+      const t = b.property_type || 'Residential';
+      (byType[t] = byType[t] || []).push(b);
+    });
+    const fmtNum = (n) => (n == null ? '—' : Number(n).toLocaleString());
+    const deleteBuilding = (b) => {
+      if (!window.confirm('Delete "' + b.name + '" and all its ' + (b.units||[]).length + ' unit(s)? This cannot be undone.')) return;
+      supabaseClient.from('buildings').delete().eq('id', b.id).then(({error}) => {
+        if (error) alert('Delete failed: ' + error.message); else reload();
+      });
+    };
+    const editBtn = (b) => (
+      <button onClick={(e) => { e.stopPropagation(); setEditing({ kind: 'building', record: b }); }} style={{padding:'4px 10px',fontSize:11,background:'#fff',border:'1px solid #D0D6D5',borderRadius:4,color:'var(--text-dark)',cursor:'pointer',marginRight:6}}>Edit</button>
+    );
+    const delBtn = (b) => (
+      <button onClick={(e) => { e.stopPropagation(); deleteBuilding(b); }} style={{padding:'4px 10px',fontSize:11,background:'#fff',border:'1px solid #D0D6D5',borderRadius:4,color:'#8b4a42',cursor:'pointer'}}>Delete</button>
+    );
+    const tableFor = (type, list) => {
+      const isStructure = type === 'Residential' || type === 'Commercial';
+      if (isStructure) {
+        const extraHead = type === 'Commercial' ? <><th>Use</th><th>GLA (sqft)</th><th>Parking</th></> : null;
+        return (
           <table className="data-table">
-            <thead><tr><th>Name</th><th>Address</th><th>Floors</th><th>Units</th><th>Created</th><th style={{textAlign:'right'}}>Actions</th></tr></thead>
+            <thead><tr><th>Name</th><th>Address</th><th>Floors</th><th>Units</th>{extraHead}<th>Created</th><th style={{textAlign:'right'}}>Actions</th></tr></thead>
             <tbody>
-              {rows.map(b => {
+              {list.map(b => {
                 const floors = new Set((b.units||[]).map(u => u.floor)).size;
                 return (
                   <tr key={b.id} style={{cursor:'pointer'}} onClick={() => setSelectedBuilding(b)}>
@@ -461,24 +552,77 @@ const PCSummary = ({ section }) => {
                     <td>{b.address || '—'}</td>
                     <td>{floors}</td>
                     <td>{(b.units||[]).length}</td>
+                    {type === 'Commercial' && <>
+                      <td>{b.commercial_use_type || '—'}</td>
+                      <td>{fmtNum(b.gross_leasable_area_sqft)}</td>
+                      <td>{fmtNum(b.parking_spots)}</td>
+                    </>}
                     <td>{b.created_at ? new Date(b.created_at).toLocaleDateString() : '—'}</td>
-                    <td style={{textAlign:'right',whiteSpace:'nowrap'}}>
-                      <button onClick={(e) => { e.stopPropagation(); setEditing({ kind: 'building', record: b }); }} style={{padding:'4px 10px',fontSize:11,background:'#fff',border:'1px solid #D0D6D5',borderRadius:4,color:'var(--text-dark)',cursor:'pointer',marginRight:6}}>Edit</button>
-                      <button onClick={(e) => {
-                        e.stopPropagation();
-                        if (!window.confirm('Delete "' + b.name + '" and all its ' + (b.units||[]).length + ' unit(s)? This cannot be undone.')) return;
-                        supabaseClient.from('buildings').delete().eq('id', b.id).then(({error}) => {
-                          if (error) alert('Delete failed: ' + error.message); else reload();
-                        });
-                      }} style={{padding:'4px 10px',fontSize:11,background:'#fff',border:'1px solid #D0D6D5',borderRadius:4,color:'#8b4a42',cursor:'pointer'}}>Delete</button>
-                    </td>
+                    <td style={{textAlign:'right',whiteSpace:'nowrap'}}>{editBtn(b)}{delBtn(b)}</td>
                   </tr>
                 );
               })}
             </tbody>
           </table>
-          </div>
+        );
+      }
+      if (type === 'Villa') {
+        return (
+          <table className="data-table">
+            <thead><tr><th>Name</th><th>Address</th><th>Villas</th><th>Plot (sqft)</th><th>Bedrooms/villa</th><th>Created</th><th style={{textAlign:'right'}}>Actions</th></tr></thead>
+            <tbody>
+              {list.map(b => (
+                <tr key={b.id} style={{cursor:'pointer'}} onClick={() => setSelectedBuilding(b)}>
+                  <td style={{fontWeight:500}}>{b.name}</td>
+                  <td>{b.address || '—'}</td>
+                  <td>{fmtNum(b.villa_count)}</td>
+                  <td>{fmtNum(b.plot_area_sqft)}</td>
+                  <td>{fmtNum(b.bedrooms_per_villa)}</td>
+                  <td>{b.created_at ? new Date(b.created_at).toLocaleDateString() : '—'}</td>
+                  <td style={{textAlign:'right',whiteSpace:'nowrap'}}>{editBtn(b)}{delBtn(b)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        );
+      }
+      // Commercial Land
+      return (
+        <table className="data-table">
+          <thead><tr><th>Name</th><th>Address</th><th>Plot (sqft)</th><th>Created</th><th style={{textAlign:'right'}}>Actions</th></tr></thead>
+          <tbody>
+            {list.map(b => (
+              <tr key={b.id} style={{cursor:'pointer'}} onClick={() => setSelectedBuilding(b)}>
+                <td style={{fontWeight:500}}>{b.name}</td>
+                <td>{b.address || '—'}</td>
+                <td>{fmtNum(b.plot_area_sqft)}</td>
+                <td>{b.created_at ? new Date(b.created_at).toLocaleDateString() : '—'}</td>
+                <td style={{textAlign:'right',whiteSpace:'nowrap'}}>{editBtn(b)}{delBtn(b)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      );
+    };
+    return (
+      <>
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:14}}>
+          <div style={{fontSize:13,color:'var(--text-muted)'}}>{(rows||[]).length} propert{(rows||[]).length === 1 ? 'y' : 'ies'} · click a row to see floors & units</div>
+          <button className="btn btn-sm" onClick={reload}>Refresh</button>
         </div>
+        {groups.map(g => {
+          const list = byType[g.type] || [];
+          if (list.length === 0) return null;
+          return (
+            <div key={g.type} className="card" style={{marginBottom:18}}>
+              <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',marginBottom:12,gap:10}}>
+                <div style={{fontSize:11,letterSpacing:'0.1em',textTransform:'uppercase',color:'var(--text-secondary)',fontWeight:600}}>{g.label}</div>
+                <div style={{fontSize:12,color:'var(--text-muted)'}}>{list.length} {list.length === 1 ? 'record' : 'records'}</div>
+              </div>
+              <div className="data-table-scroll">{tableFor(g.type, list)}</div>
+            </div>
+          );
+        })}
         {selectedBuilding && <BuildingDetailModal building={selectedBuilding} onClose={() => setSelectedBuilding(null)}/>}
         {editing && <EditRecordModal kind={editing.kind} record={editing.record} onClose={() => setEditing(null)} onSaved={reload}/>}
       </>
@@ -770,10 +914,10 @@ const PCBulkUpload = ({ section }) => {
     setUploading(true); setError(null); setResults(null);
     try {
       if (section === 'buildings') {
-        const res = await uploadBuildingsBulk(parsedRows);
+        const res = await uploadBuildingsBulk(parsedRows, conflictMode);
         setResults(res);
       } else if (section === 'vendors') {
-        const res = await uploadVendorsBulk(parsedRows);
+        const res = await uploadVendorsBulk(parsedRows, conflictMode);
         setResults(res);
       } else {
         const records = parsedRows.map(r => {
@@ -830,52 +974,104 @@ const PCBulkUpload = ({ section }) => {
         </ol>
       </div>
 
-      <div className="card">
-        <div style={{fontSize:12,letterSpacing:'0.1em',textTransform:'uppercase',color:'var(--text-secondary)',marginBottom:8,fontWeight:600}}>1 · Example data</div>
-        <div style={{fontSize:13,color:'var(--text-muted)',marginBottom:14}}>Pre-populated rows you'll replace with your real data.</div>
-        <div className="data-table-scroll">
-          <table className="data-table" style={{fontSize:12}}>
-            <thead><tr>{cfg.headers.map(h => <th key={h}>{h}</th>)}</tr></thead>
-            <tbody>{cfg.examples.map((row,i) => (<tr key={i}>{row.map((v,j) => <td key={j}>{v == null || v === '' ? '—' : v}</td>)}</tr>))}</tbody>
-          </table>
-        </div>
-        <ul style={{fontSize:13,color:'var(--text-secondary)',paddingLeft:22,marginTop:16,marginBottom:0,lineHeight:1.75}}>
-          {cfg.rules.map((r,i) => <li key={i}>{r}</li>)}
-        </ul>
-      </div>
-
-      <div className="card">
-        <div style={{fontSize:12,letterSpacing:'0.1em',textTransform:'uppercase',color:'var(--text-secondary)',marginBottom:8,fontWeight:600}}>2 · Download template</div>
-        <div style={{fontSize:13,color:'var(--text-muted)',marginBottom:16}}>Same rows as above, in your preferred format.</div>
-        <div style={{display:'flex',gap:10}}>
-          <button className="btn btn-primary" onClick={() => downloadAsXlsx(cfg.filename, cfg.headers, cfg.examples)}>Download .xlsx</button>
-          <button className="btn" onClick={() => downloadAsCsv(cfg.filename, cfg.headers, cfg.examples)}>Download .csv</button>
-        </div>
-      </div>
-
-      <div className="card">
-        <div style={{fontSize:12,letterSpacing:'0.1em',textTransform:'uppercase',color:'var(--text-secondary)',marginBottom:14,fontWeight:600}}>3 · Upload completed file</div>
-        {section !== 'buildings' && (
-          <div style={{marginBottom:14,padding:'12px 14px',background:'var(--bg-page)',borderRadius:8,border:'1px solid var(--border-light)'}}>
-            <div style={{fontSize:11,letterSpacing:'0.04em',textTransform:'uppercase',color:'var(--text-secondary)',marginBottom:10,fontWeight:500}}>When an email already exists</div>
-            <div style={{display:'flex',gap:14,flexWrap:'wrap'}}>
-              <label style={{display:'flex',alignItems:'flex-start',gap:8,cursor:'pointer',fontSize:12,flex:'1 1 240px'}}>
-                <input type="radio" name={'conflictMode_' + section} value="skip" checked={conflictMode==='skip'} onChange={e => setConflictMode(e.target.value)} style={{marginTop:3,cursor:'pointer'}}/>
-                <div>
-                  <div style={{fontWeight:500,color:'var(--text-dark)'}}>Skip existing (default)</div>
-                  <div style={{fontSize:11,color:'var(--text-muted)',marginTop:2,lineHeight:1.4}}>Rows whose email is already registered are ignored. The existing account is left untouched.</div>
+      {/* For Buildings ('Properties') we render four separate Example +
+          Download blocks, one per property type. For every other section
+          we render the single combined block. */}
+      {section === 'buildings' ? (
+        <>
+          <div className="card">
+            <div style={{fontSize:12,letterSpacing:'0.1em',textTransform:'uppercase',color:'var(--text-secondary)',marginBottom:8,fontWeight:600}}>1 · Example data</div>
+            <div style={{fontSize:13,color:'var(--text-muted)',marginBottom:18}}>Four property types — each has its own columns and example rows. Use the type your data matches.</div>
+            {Object.entries(BUILDINGS_BY_TYPE).map(([typeKey, t]) => (
+              <div key={typeKey} style={{marginBottom:22,paddingBottom:18,borderBottom:'1px solid var(--border-light)'}}>
+                <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:10,gap:14,flexWrap:'wrap'}}>
+                  <div style={{fontSize:14,fontWeight:600,color:'var(--text-dark)',letterSpacing:'-0.01em'}}>{t.label}</div>
+                  <div style={{display:'flex',gap:8}}>
+                    <button className="btn btn-sm btn-primary" onClick={() => downloadAsXlsx(t.filename, t.headers, t.examples)}>Download .xlsx</button>
+                    <button className="btn btn-sm" onClick={() => downloadAsCsv(t.filename, t.headers, t.examples)}>Download .csv</button>
+                  </div>
                 </div>
-              </label>
-              <label style={{display:'flex',alignItems:'flex-start',gap:8,cursor:'pointer',fontSize:12,flex:'1 1 240px'}}>
-                <input type="radio" name={'conflictMode_' + section} value="update" checked={conflictMode==='update'} onChange={e => setConflictMode(e.target.value)} style={{marginTop:3,cursor:'pointer'}}/>
-                <div>
-                  <div style={{fontWeight:500,color:'var(--text-dark)'}}>Update existing</div>
-                  <div style={{fontSize:11,color:'var(--text-muted)',marginTop:2,lineHeight:1.4}}>Refresh name, phone, building/unit, shift, and reset the temp password. The Supabase Auth account UUID and all history (visits, bookings, invoices) stay intact.</div>
+                <div className="data-table-scroll">
+                  <table className="data-table" style={{fontSize:12}}>
+                    <thead><tr>{t.headers.map(h => <th key={h}>{h}</th>)}</tr></thead>
+                    <tbody>{t.examples.map((row,i) => (<tr key={i}>{row.map((v,j) => <td key={j}>{v == null || v === '' ? '—' : v}</td>)}</tr>))}</tbody>
+                  </table>
                 </div>
-              </label>
+                <ul style={{fontSize:12,color:'var(--text-secondary)',paddingLeft:22,marginTop:12,marginBottom:0,lineHeight:1.6}}>
+                  {t.rules.map((r,i) => <li key={i}>{r}</li>)}
+                </ul>
+              </div>
+            ))}
+            <div style={{fontSize:12,color:'var(--text-muted)',fontStyle:'italic'}}>You can also mix all four types into a single file — every column listed above is valid; rows with missing optional columns are filled with blanks.</div>
+          </div>
+        </>
+      ) : (
+        <>
+          <div className="card">
+            <div style={{fontSize:12,letterSpacing:'0.1em',textTransform:'uppercase',color:'var(--text-secondary)',marginBottom:8,fontWeight:600}}>1 · Example data</div>
+            <div style={{fontSize:13,color:'var(--text-muted)',marginBottom:14}}>Pre-populated rows you'll replace with your real data.</div>
+            <div className="data-table-scroll">
+              <table className="data-table" style={{fontSize:12}}>
+                <thead><tr>{cfg.headers.map(h => <th key={h}>{h}</th>)}</tr></thead>
+                <tbody>{cfg.examples.map((row,i) => (<tr key={i}>{row.map((v,j) => <td key={j}>{v == null || v === '' ? '—' : v}</td>)}</tr>))}</tbody>
+              </table>
+            </div>
+            <ul style={{fontSize:13,color:'var(--text-secondary)',paddingLeft:22,marginTop:16,marginBottom:0,lineHeight:1.75}}>
+              {cfg.rules.map((r,i) => <li key={i}>{r}</li>)}
+            </ul>
+          </div>
+
+          <div className="card">
+            <div style={{fontSize:12,letterSpacing:'0.1em',textTransform:'uppercase',color:'var(--text-secondary)',marginBottom:8,fontWeight:600}}>2 · Download template</div>
+            <div style={{fontSize:13,color:'var(--text-muted)',marginBottom:16}}>Same rows as above, in your preferred format.</div>
+            <div style={{display:'flex',gap:10}}>
+              <button className="btn btn-primary" onClick={() => downloadAsXlsx(cfg.filename, cfg.headers, cfg.examples)}>Download .xlsx</button>
+              <button className="btn" onClick={() => downloadAsCsv(cfg.filename, cfg.headers, cfg.examples)}>Download .csv</button>
             </div>
           </div>
-        )}
+        </>
+      )}
+
+      <div className="card">
+        <div style={{fontSize:12,letterSpacing:'0.1em',textTransform:'uppercase',color:'var(--text-secondary)',marginBottom:14,fontWeight:600}}>
+          {section === 'buildings' ? '2 · Upload completed file' : '3 · Upload completed file'}
+        </div>
+        {/* Conflict mode toggle now shown for every section. The
+            'Update existing' branch is only honoured by the bulk-onboard
+            edge function today (residents / security). Buildings,
+            vendors and contracts skip duplicates regardless of the
+            toggle — the UI hint reflects that. */}
+        <div style={{marginBottom:14,padding:'12px 14px',background:'var(--bg-page)',borderRadius:8,border:'1px solid var(--border-light)'}}>
+          <div style={{fontSize:11,letterSpacing:'0.04em',textTransform:'uppercase',color:'var(--text-secondary)',marginBottom:10,fontWeight:500}}>
+            {section === 'buildings' ? 'When a building name already exists'
+              : section === 'vendors' ? 'When a vendor name already exists'
+              : 'When an email already exists'}
+          </div>
+          <div style={{display:'flex',gap:14,flexWrap:'wrap'}}>
+            <label style={{display:'flex',alignItems:'flex-start',gap:8,cursor:'pointer',fontSize:12,flex:'1 1 240px'}}>
+              <input type="radio" name={'conflictMode_' + section} value="skip" checked={conflictMode==='skip'} onChange={e => setConflictMode(e.target.value)} style={{marginTop:3,cursor:'pointer'}}/>
+              <div>
+                <div style={{fontWeight:500,color:'var(--text-dark)'}}>Skip existing (default)</div>
+                <div style={{fontSize:11,color:'var(--text-muted)',marginTop:2,lineHeight:1.4}}>
+                  {section === 'buildings' ? 'Buildings whose name is already in the system are left untouched. New units on existing buildings are still added.'
+                    : section === 'vendors' ? 'Vendors whose company name is already registered are ignored. The existing record stays untouched.'
+                    : 'Rows whose email is already registered are ignored. The existing account is left untouched.'}
+                </div>
+              </div>
+            </label>
+            <label style={{display:'flex',alignItems:'flex-start',gap:8,cursor:'pointer',fontSize:12,flex:'1 1 240px'}}>
+              <input type="radio" name={'conflictMode_' + section} value="update" checked={conflictMode==='update'} onChange={e => setConflictMode(e.target.value)} style={{marginTop:3,cursor:'pointer'}}/>
+              <div>
+                <div style={{fontWeight:500,color:'var(--text-dark)'}}>Update existing</div>
+                <div style={{fontSize:11,color:'var(--text-muted)',marginTop:2,lineHeight:1.4}}>
+                  {section === 'buildings' ? 'Refresh Address, Notes, Property type and per-type fields (plot area, villa count, GLA, parking…) from the new rows. Unit history stays intact.'
+                    : section === 'vendors' ? 'Refresh contact details, contract dates, status and notes from the new rows. The vendor UUID and all linked payments/documents stay intact.'
+                    : 'Refresh name, phone, building/unit, shift, and reset the temp password. The Supabase Auth account UUID and all history (visits, bookings, invoices) stay intact.'}
+                </div>
+              </div>
+            </label>
+          </div>
+        </div>
         <input ref={fileInputRef} type="file" accept=".xlsx,.csv" onChange={handleFile} style={{fontSize:12}}/>
         {error && <div style={{color:'#8b4a42',fontSize:12,marginTop:12,padding:10,background:'#fdf2f1',borderRadius:6}}>Error: {error}</div>}
         {parsedRows && (
@@ -909,7 +1105,7 @@ const PCBulkUpload = ({ section }) => {
   );
 };
 
-async function uploadBuildingsBulk(parsedRows) {
+async function uploadBuildingsBulk(parsedRows, conflictMode = 'skip') {
   const results = [];
   const buildingMap = {};
   // Building-level fields can land on any row but conventionally on the
@@ -975,24 +1171,30 @@ async function uploadBuildingsBulk(parsedRows) {
 
     const { data: existing } = await supabaseClient.from('buildings').select('id').eq('name', bname).maybeSingle();
     let buildingId;
+    let buildingAction = 'skipped';
+    const fields = {
+      property_type: propType,
+      address: b.address || null,
+      notes: b.notes || null,
+      plot_area_sqft:           numOrNull(b.plot_area_sqft),
+      villa_count:              numOrNull(b.villa_count),
+      bedrooms_per_villa:       numOrNull(b.bedrooms_per_villa),
+      commercial_use_type:      commUse,
+      gross_leasable_area_sqft: numOrNull(b.gross_leasable_area_sqft),
+      parking_spots:            numOrNull(b.parking_spots),
+    };
     if (existing) {
       buildingId = existing.id;
+      if (conflictMode === 'update') {
+        const { error: uErr } = await supabaseClient.from('buildings').update(fields).eq('id', buildingId);
+        if (uErr) { results.push({ building: bname, ok: false, error: 'building update: ' + uErr.message }); continue; }
+        buildingAction = 'updated';
+      }
     } else {
-      const insertPayload = {
-        name: bname,
-        property_type: propType,
-        address: b.address || null,
-        notes: b.notes || null,
-        plot_area_sqft:           numOrNull(b.plot_area_sqft),
-        villa_count:              numOrNull(b.villa_count),
-        bedrooms_per_villa:       numOrNull(b.bedrooms_per_villa),
-        commercial_use_type:      commUse,
-        gross_leasable_area_sqft: numOrNull(b.gross_leasable_area_sqft),
-        parking_spots:            numOrNull(b.parking_spots),
-      };
-      const { data: newB, error: bErr } = await supabaseClient.from('buildings').insert(insertPayload).select('id').single();
+      const { data: newB, error: bErr } = await supabaseClient.from('buildings').insert({ name: bname, ...fields }).select('id').single();
       if (bErr) { results.push({ building: bname, ok: false, error: 'building insert: ' + bErr.message }); continue; }
       buildingId = newB.id;
+      buildingAction = 'created';
     }
     let unitsAdded = 0;
     let unitsSeen  = b.units.length;
@@ -1008,7 +1210,7 @@ async function uploadBuildingsBulk(parsedRows) {
         unitsAdded = toInsert.length;
       }
     }
-    results.push({ building: bname, ok: true, property_type: propType, units_added: unitsAdded, units_skipped: unitsSeen - unitsAdded });
+    results.push({ building: bname, ok: true, action: buildingAction, property_type: propType, units_added: unitsAdded, units_skipped: unitsSeen - unitsAdded });
   }
   return { results };
 }
@@ -1020,7 +1222,7 @@ async function uploadBuildingsBulk(parsedRows) {
 // matched (case-insensitive) against existing buildings; unmatched names are
 // silently dropped.
 // =========================================================================
-async function uploadVendorsBulk(parsedRows) {
+async function uploadVendorsBulk(parsedRows, conflictMode = 'skip') {
   const results = [];
   const validCategories = ['Plumbing','Electrical','HVAC','Cleaning','Security','Gardening','Pest Control','Lift Maintenance','General Handyman','Other'];
   const validStatuses   = ['Active','Expiring Soon','Expired','Terminated'];
@@ -1034,7 +1236,8 @@ async function uploadVendorsBulk(parsedRows) {
   for (const row of parsedRows) {
     const name = (row['Company name'] || '').toString().trim();
     if (!name) { results.push({ vendor: '(blank)', ok: false, error: 'Company name is required' }); continue; }
-    if (existingByName[name.toLowerCase()]) {
+    const existingVendor = existingByName[name.toLowerCase()];
+    if (existingVendor && conflictMode !== 'update') {
       results.push({ vendor: name, ok: true, action: 'skipped', skipped: true });
       continue;
     }
@@ -1064,7 +1267,15 @@ async function uploadVendorsBulk(parsedRows) {
       status:              rawStatus,
       notes:               (row['Notes']          || '').toString().trim() || null,
     };
-    const { data: inserted, error: ie } = await supabaseClient.from('vendors').insert(payload).select('id').single();
+    let inserted, ie, action;
+    if (existingVendor) {
+      // Update existing: refresh fields, keep id + linked payments/docs.
+      const upd = await supabaseClient.from('vendors').update(payload).eq('id', existingVendor.id).select('id').single();
+      inserted = upd.data; ie = upd.error; action = 'updated';
+    } else {
+      const ins = await supabaseClient.from('vendors').insert(payload).select('id').single();
+      inserted = ins.data; ie = ins.error; action = 'created';
+    }
     if (ie) { results.push({ vendor: name, ok: false, error: ie.message }); continue; }
 
     // Resolve buildings covered (comma-separated string of names → building IDs)
@@ -1083,7 +1294,7 @@ async function uploadVendorsBulk(parsedRows) {
         if (!le) buildingsLinked = ids.length;
       }
     }
-    results.push({ vendor: name, ok: true, action: 'created', vendor_id: inserted.id, buildings_linked: buildingsLinked, buildings_skipped: buildingsSkipped });
+    results.push({ vendor: name, ok: true, action, vendor_id: inserted.id, buildings_linked: buildingsLinked, buildings_skipped: buildingsSkipped });
   }
   return { results };
 }
