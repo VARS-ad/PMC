@@ -446,6 +446,115 @@ async function generateInvoicePdf({ building, unit, invoice, tenant }) {
   return doc.output('blob');
 }
 
+// ---- Payment-proof image (cheque-style) ----------------------------------
+// One PNG per Paid invoice, uploaded into the invoice-attachments bucket
+// with kind='payment_proof'. Designed to look like a scanned UAE cheque /
+// payment receipt — bank header + payee + amount in words & figures + a
+// faint "PAID" stamp. Pure HTML5 Canvas; no external deps.
+async function generatePaymentProofBlob({ building, unit, invoice, tenant }) {
+  return new Promise((resolve) => {
+    const W = 1600, H = 720;
+    const canvas = document.createElement('canvas');
+    canvas.width = W; canvas.height = H;
+    const ctx = canvas.getContext('2d');
+
+    // Off-white paper background with subtle grain
+    ctx.fillStyle = '#fbf7ee'; ctx.fillRect(0, 0, W, H);
+    for (let i = 0; i < 5000; i++) {
+      ctx.fillStyle = 'rgba(0,0,0,' + (Math.random() * 0.02).toFixed(3) + ')';
+      ctx.fillRect(Math.random() * W, Math.random() * H, 1, 1);
+    }
+
+    // Header band
+    ctx.fillStyle = '#3E4C59'; ctx.fillRect(0, 0, W, 80);
+    ctx.fillStyle = '#fff';
+    ctx.font = 'bold 28px Helvetica, Arial, sans-serif';
+    ctx.fillText('EMIRATES NATIONAL BANK · DEMO', 40, 50);
+    ctx.font = '14px Helvetica, Arial, sans-serif';
+    ctx.fillStyle = '#dbc5ae';
+    ctx.fillText('Payment receipt / cheque facsimile', 40, 72);
+
+    // Cheque body
+    ctx.fillStyle = '#131F23';
+    ctx.font = 'bold 18px Helvetica, Arial, sans-serif';
+    ctx.fillText('Cheque No.', 40, 130);
+    ctx.fillText('Date',       40, 170);
+    ctx.fillText('Pay to',     40, 240);
+    ctx.fillText('Amount',     40, 320);
+    ctx.fillText('In words',   40, 400);
+    ctx.fillText('Account',    40, 480);
+
+    ctx.font = '22px "Courier New", monospace';
+    const chequeNo = (invoice.invoice_number || invoice.id.slice(0, 8)).toUpperCase();
+    const paidDate = (invoice.created_at || new Date().toISOString()).slice(0, 10);
+    const amt = Number(invoice.amount_aed || 0);
+    const amtStr = 'AED ' + amt.toLocaleString();
+    const amtWords = numberToEnglishWords(amt) + ' UAE Dirhams only';
+    const payeeName = (building.name || '') + ' — Property Management';
+    ctx.fillText(chequeNo, 280, 130);
+    ctx.fillText(paidDate, 280, 170);
+    ctx.fillText(payeeName, 280, 240);
+    ctx.font = 'bold 30px "Courier New", monospace';
+    ctx.fillText(amtStr, 280, 320);
+    ctx.font = '18px "Courier New", monospace';
+    ctx.fillText(amtWords, 280, 400);
+    ctx.fillText('VARS-PMC · Demo ledger ' + (unit.unit_number || ''), 280, 480);
+
+    // Lower signature line
+    ctx.strokeStyle = '#131F23'; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(1100, 580); ctx.lineTo(1500, 580); ctx.stroke();
+    ctx.fillStyle = '#61707D';
+    ctx.font = '14px Helvetica, Arial, sans-serif';
+    ctx.fillText('Authorised signatory', 1100, 600);
+
+    // MICR-style strip at the bottom
+    ctx.fillStyle = '#131F23';
+    ctx.font = 'bold 22px "Courier New", monospace';
+    const micr = '⑆' + (invoice.id || '').replace(/-/g, '').slice(0, 18).toUpperCase() + '⑆ ' + chequeNo;
+    ctx.fillText(micr, 40, H - 40);
+
+    // PAID stamp diagonal — only when actually paid
+    if (invoice.status === 'Paid') {
+      ctx.save();
+      ctx.translate(W - 360, 240);
+      ctx.rotate(-Math.PI / 18);
+      ctx.strokeStyle = 'rgba(141,74,66,0.55)';
+      ctx.lineWidth = 6;
+      ctx.strokeRect(-10, -50, 280, 100);
+      ctx.fillStyle = 'rgba(141,74,66,0.55)';
+      ctx.font = 'bold 64px Helvetica, Arial, sans-serif';
+      ctx.fillText('PAID', 30, 20);
+      ctx.font = '16px Helvetica, Arial, sans-serif';
+      ctx.fillText(paidDate, 30, 42);
+      ctx.restore();
+    }
+
+    canvas.toBlob(b => resolve(b), 'image/png');
+  });
+}
+
+// Tiny English number-to-words helper for the cheque body — handles the
+// 0..999,999 range that's relevant for monthly rent demos.
+function numberToEnglishWords(n) {
+  n = Math.round(Number(n) || 0);
+  if (n === 0) return 'Zero';
+  const ones = ['', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine',
+    'Ten', 'Eleven', 'Twelve', 'Thirteen', 'Fourteen', 'Fifteen', 'Sixteen', 'Seventeen', 'Eighteen', 'Nineteen'];
+  const tens = ['', '', 'Twenty', 'Thirty', 'Forty', 'Fifty', 'Sixty', 'Seventy', 'Eighty', 'Ninety'];
+  const under1000 = (x) => {
+    if (x === 0) return '';
+    if (x < 20) return ones[x];
+    if (x < 100) return tens[Math.floor(x / 10)] + (x % 10 ? ' ' + ones[x % 10] : '');
+    return ones[Math.floor(x / 100)] + ' Hundred' + (x % 100 ? ' ' + under1000(x % 100) : '');
+  };
+  if (n < 1000) return under1000(n);
+  if (n < 1000000) {
+    const thousands = Math.floor(n / 1000);
+    return under1000(thousands) + ' Thousand' + (n % 1000 ? ' ' + under1000(n % 1000) : '');
+  }
+  return n.toLocaleString();
+}
+
 const DocumentLibraryPage = ({ embedded } = {}) => {
   const { selectedProperties } = useApp();
   const [loading, setLoading] = useState(true);
@@ -469,14 +578,44 @@ const DocumentLibraryPage = ({ embedded } = {}) => {
     setLoading(true); setError(null);
     if (!supabaseClient) { setError('Supabase not initialised'); setLoading(false); return; }
     try {
-      const [{ data: bs }, { data: us }, { data: atts }] = await Promise.all([
+      const [{ data: bs }, { data: us }, { data: unitAtts }, { data: invs }, { data: invAtts }] = await Promise.all([
         supabaseClient.from('buildings').select('id,name,address,property_type,plot_area_sqft,gross_leasable_area_sqft,villa_count').order('name'),
         supabaseClient.from('units').select('id,building_id,unit_number,floor,owner_name,owner_phone,owner_email,owner_passport_number,owner_emirates_id,purchase_date').order('unit_number'),
         supabaseClient.from('unit_attachments').select('id,unit_id,kind,filename,storage_path,created_at').order('created_at', { ascending: false }),
+        supabaseClient.from('invoices').select('id,unit_id,invoice_number,status').order('due_date', { ascending: false }),
+        supabaseClient.from('invoice_attachments').select('id,invoice_id,kind,file_name,storage_path,uploaded_at').order('uploaded_at', { ascending: false }),
       ]);
+      // Normalise both attachment tables into one shape so the tree / filter
+      // / download / delete / replace code paths can treat them uniformly.
+      // source='unit'   → public.unit_attachments + 'unit-attachments' bucket
+      // source='invoice'→ public.invoice_attachments + 'invoice-attachments'
+      //                   bucket; unit_id derived through invoices.
+      const invById = new Map((invs || []).map(i => [i.id, i]));
+      const merged = [
+        ...((unitAtts || []).map(a => ({
+          id: a.id, source: 'unit', bucket: 'unit-attachments',
+          unit_id: a.unit_id, kind: a.kind,
+          filename: a.filename, storage_path: a.storage_path,
+          created_at: a.created_at,
+        }))),
+        ...((invAtts || []).map(a => {
+          const inv = invById.get(a.invoice_id) || {};
+          return {
+            id: a.id, source: 'invoice', bucket: 'invoice-attachments',
+            unit_id: inv.unit_id || null,
+            invoice_id: a.invoice_id,
+            invoice_number: inv.invoice_number || null,
+            invoice_status: inv.status || null,
+            kind: a.kind,                              // 'invoice' | 'payment_proof'
+            filename: a.file_name,
+            storage_path: a.storage_path,
+            created_at: a.uploaded_at,
+          };
+        })).filter(a => a.unit_id != null),
+      ];
       setBuildings(bs || []);
       setUnits(us || []);
-      setAttachments(atts || []);
+      setAttachments(merged);
     } catch (e) {
       setError(String(e.message || e));
     }
@@ -484,11 +623,17 @@ const DocumentLibraryPage = ({ embedded } = {}) => {
   };
   useEffect(() => { reload(); }, []);
 
+  // --- Bucket / table helpers (normalised attachment shape) -----------
+  // Each merged attachment carries source='unit'|'invoice' and bucket
+  // so the file-management code paths work for both stores.
+  const bucketFor = (att) => att.bucket || DocumentLibrary_BUCKET;
+  const tableFor  = (att) => att.source === 'invoice' ? 'invoice_attachments' : 'unit_attachments';
+
   // --- Open a file: lazy signed-URL ------------------------------------
   const openAttachment = async (att) => {
     let url = signedUrls[att.id];
     if (!url) {
-      const { data, error: e } = await supabaseClient.storage.from(DocumentLibrary_BUCKET).createSignedUrl(att.storage_path, 600);
+      const { data, error: e } = await supabaseClient.storage.from(bucketFor(att)).createSignedUrl(att.storage_path, 600);
       if (e) { alert('Could not open: ' + e.message); return; }
       url = data.signedUrl;
       setSignedUrls(prev => ({ ...prev, [att.id]: url }));
@@ -497,10 +642,9 @@ const DocumentLibraryPage = ({ embedded } = {}) => {
   };
 
   // --- Download a file to local disk ----------------------------------
-  // Forces a browser download instead of opening the signed URL in a tab.
   const downloadAttachment = async (att) => {
     try {
-      const { data, error: e } = await supabaseClient.storage.from(DocumentLibrary_BUCKET).createSignedUrl(att.storage_path, 600, { download: att.filename });
+      const { data, error: e } = await supabaseClient.storage.from(bucketFor(att)).createSignedUrl(att.storage_path, 600, { download: att.filename });
       if (e) throw e;
       const a = document.createElement('a');
       a.href = data.signedUrl;
@@ -515,10 +659,8 @@ const DocumentLibraryPage = ({ embedded } = {}) => {
   const deleteAttachment = async (att) => {
     if (!window.confirm('Delete ' + (att.filename || 'this attachment') + '? This removes the file from storage and cannot be undone.')) return;
     try {
-      // Remove the storage object first; if the DB row stays, the user
-      // still sees nothing (broken link is harmless and easy to retry).
-      await supabaseClient.storage.from(DocumentLibrary_BUCKET).remove([att.storage_path]);
-      const { error: e } = await supabaseClient.from('unit_attachments').delete().eq('id', att.id);
+      await supabaseClient.storage.from(bucketFor(att)).remove([att.storage_path]);
+      const { error: e } = await supabaseClient.from(tableFor(att)).delete().eq('id', att.id);
       if (e) throw e;
       setAttachments(prev => prev.filter(x => x.id !== att.id));
     } catch (e) {
@@ -528,21 +670,20 @@ const DocumentLibraryPage = ({ embedded } = {}) => {
   };
 
   // --- Replace the file backing an attachment row ---------------------
-  // Same DB row, new file uploaded at the same kind, into a new path so
-  // the old storage object is then explicitly removed. Triggered by a
-  // hidden <input type=file> next to each row.
   const replaceAttachment = async (att, file) => {
     if (!file) return;
     try {
       const oldPath = att.storage_path;
       const safeName = (file.name || 'file').replace(/[^a-zA-Z0-9._-]/g, '_');
-      const newPath = att.unit_id + '/' + att.kind + '-' + Date.now() + '-' + safeName;
-      const { error: upErr } = await supabaseClient.storage.from(DocumentLibrary_BUCKET).upload(newPath, file, { contentType: file.type || undefined });
+      const newPath = (att.source === 'invoice' ? att.invoice_id : att.unit_id) + '/' + att.kind + '-' + Date.now() + '-' + safeName;
+      const { error: upErr } = await supabaseClient.storage.from(bucketFor(att)).upload(newPath, file, { contentType: file.type || undefined });
       if (upErr) throw upErr;
-      const { error: updErr } = await supabaseClient.from('unit_attachments').update({ filename: file.name, storage_path: newPath }).eq('id', att.id);
+      const updatePayload = att.source === 'invoice'
+        ? { file_name: file.name, storage_path: newPath, mime_type: file.type || null, size_bytes: file.size || null }
+        : { filename:  file.name, storage_path: newPath };
+      const { error: updErr } = await supabaseClient.from(tableFor(att)).update(updatePayload).eq('id', att.id);
       if (updErr) throw updErr;
-      // Best-effort cleanup of the old object.
-      try { await supabaseClient.storage.from(DocumentLibrary_BUCKET).remove([oldPath]); } catch (_) {}
+      try { await supabaseClient.storage.from(bucketFor(att)).remove([oldPath]); } catch (_) {}
       setSignedUrls(prev => { const out = { ...prev }; delete out[att.id]; return out; });
       await reload();
     } catch (e) {
@@ -741,16 +882,75 @@ const DocumentLibraryPage = ({ embedded } = {}) => {
     setTimeout(() => setGenStatus(null), 3500);
   };
 
-  // One-click sweep: runs photo → title deed → floor plan → tenancy contract
-  // → invoice PDFs for every unit/invoice missing them. Each pass is
-  // rate-limited by MAX_BATCH, so a large portfolio may need a re-click —
-  // the UI status says how many more remain.
+  // ---- Payment proofs (cheque image) ---------------------------------
+  // One PNG per PAID invoice, uploaded to invoice-attachments with
+  // kind='payment_proof'. Skips invoices that already have one.
+  const bulkGeneratePaymentProofs = async () => {
+    setGenStatus({ phase: 'Loading paid invoices…', current: 0, total: 0 });
+    const tenantMap = await loadResidentMap();
+    const { data: invs } = await supabaseClient
+      .from('invoices')
+      .select('id, unit_id, invoice_number, description, amount_aed, due_date, status, created_at')
+      .eq('status', 'Paid')
+      .order('due_date', { ascending: true });
+    const { data: existingAtt } = await supabaseClient
+      .from('invoice_attachments')
+      .select('invoice_id, kind');
+    const havePP = new Set((existingAtt || []).filter(a => a.kind === 'payment_proof').map(a => a.invoice_id));
+    const todo = (invs || []).filter(i => !havePP.has(i.id));
+    const batch = todo.slice(0, MAX_BATCH);
+    if (batch.length === 0) {
+      setGenStatus({ phase: 'Every paid invoice already has a proof.', current: 0, total: 0 });
+      setTimeout(() => setGenStatus(null), 2000);
+      return;
+    }
+    setGenStatus({ phase: 'Generating payment proofs…', current: 0, total: batch.length });
+    let done = 0, errors = 0;
+    for (const inv of batch) {
+      const u = units.find(x => x.id === inv.unit_id);
+      const b = u ? buildings.find(x => x.id === u.building_id) : null;
+      if (!u || !b) { done++; continue; }
+      try {
+        const tenant = tenantMap[u.id] || (u.tenant_name ? {
+          name: u.tenant_name, email: u.tenant_email || '', phone: u.tenant_phone || '',
+        } : null);
+        setGenStatus({ phase: 'Stamping ' + (inv.invoice_number || inv.id.slice(0, 8)), current: done, total: batch.length });
+        const blob = await generatePaymentProofBlob({ building: b, unit: u, invoice: inv, tenant });
+        const filename = 'payment-proof-' + (inv.invoice_number || inv.id.slice(0, 8)).replace(/[^A-Za-z0-9._-]/g, '_') + '.png';
+        const path = inv.id + '/payment_proof/' + filename;
+        const { error: upErr } = await supabaseClient.storage.from('invoice-attachments').upload(path, blob, { contentType: 'image/png', upsert: false });
+        if (upErr) throw upErr;
+        const { error: insErr } = await supabaseClient.from('invoice_attachments').insert({
+          invoice_id: inv.id, kind: 'payment_proof', file_name: filename, storage_path: path, mime_type: 'image/png',
+        });
+        if (insErr) throw insErr;
+        done++;
+      } catch (e) {
+        errors++; done++;
+        console.error('Payment proof for ' + inv.invoice_number + ' failed:', e);
+      }
+      setGenStatus({ phase: 'Uploaded ' + done + ' / ' + batch.length, current: done, total: batch.length });
+    }
+    const remaining = todo.length - batch.length;
+    setGenStatus({
+      phase: 'Done · ' + (done - errors) + ' uploaded, ' + errors + ' failed' + (remaining > 0 ? ' · ' + remaining + ' more pending (click again)' : ''),
+      current: done, total: batch.length,
+    });
+    setTimeout(() => setGenStatus(null), 3500);
+    await reload();
+  };
+
+  // One-click sweep: photo → title deed → floor plan → tenancy contract
+  // → invoice PDF → payment proof for every unit/invoice missing them.
+  // Each pass is rate-limited by MAX_BATCH so a large portfolio may need
+  // a re-click — the UI status says how many more remain.
   const bulkGenerateAllMissing = async () => {
     await bulkGenerateUnitPhotos();
     await bulkGenerateTitleDeeds();
     await bulkGenerateFloorPlans();
     await bulkGenerateAgreements();
     await bulkGenerateInvoicePdfs();
+    await bulkGeneratePaymentProofs();
   };
 
   // ---- Bulk ZIP export -------------------------------------------------
@@ -779,7 +979,7 @@ const DocumentLibraryPage = ({ embedded } = {}) => {
                      + '/' + safeFolderName(u ? u.unit_number : 'unknown-unit')
                      + '/' + att.kind;
         try {
-          const { data: signed, error } = await supabaseClient.storage.from(DocumentLibrary_BUCKET).createSignedUrl(att.storage_path, 600);
+          const { data: signed, error } = await supabaseClient.storage.from(bucketFor(att)).createSignedUrl(att.storage_path, 600);
           if (error) throw error;
           const resp = await fetch(signed.signedUrl);
           if (!resp.ok) throw new Error('HTTP ' + resp.status);
@@ -887,8 +1087,8 @@ const DocumentLibraryPage = ({ embedded } = {}) => {
   for (const a of attachments) (attsByUnit[a.unit_id] = attsByUnit[a.unit_id] || []).push(a);
 
   const lowerSearch = search.trim().toLowerCase();
-  const kindLabel = { photo: 'Photo', title_deed: 'Title deed', layout: 'Layout', other: 'Other' };
-  const kindColor = { photo: '#5a6b4f', title_deed: '#3E4C59', layout: '#a07d3c', other: '#61707D' };
+  const kindLabel = { photo: 'Photo', title_deed: 'Title deed', layout: 'Layout', other: 'Other', invoice: 'Invoice', payment_proof: 'Proof of payment' };
+  const kindColor = { photo: '#5a6b4f', title_deed: '#3E4C59', layout: '#a07d3c', other: '#61707D', invoice: '#8b4a42', payment_proof: '#7a5a1f' };
 
   // ---- Stats ---------------------------------------------------------
   const visibleAtts = attachments.filter(a => {
@@ -909,6 +1109,8 @@ const DocumentLibraryPage = ({ embedded } = {}) => {
     title_deed: visibleAtts.filter(a => a.kind === 'title_deed').length,
     layout: visibleAtts.filter(a => a.kind === 'layout').length,
     other: visibleAtts.filter(a => a.kind === 'other').length,
+    invoice: visibleAtts.filter(a => a.kind === 'invoice').length,
+    payment_proof: visibleAtts.filter(a => a.kind === 'payment_proof').length,
   };
 
   const fmtDate = (s) => { try { return new Date(s).toLocaleDateString('en-GB', { day:'2-digit', month:'short', year:'numeric' }); } catch (_) { return s; } };
@@ -928,7 +1130,8 @@ const DocumentLibraryPage = ({ embedded } = {}) => {
           <button className="btn" onClick={bulkGenerateTitleDeeds}   disabled={!!genStatus}>Title deeds</button>
           <button className="btn" onClick={bulkGenerateFloorPlans}   disabled={!!genStatus}>Floor plans</button>
           <button className="btn" onClick={bulkGenerateAgreements}   disabled={!!genStatus}>Tenancy contracts</button>
-          <button className="btn" onClick={bulkGenerateInvoicePdfs}  disabled={!!genStatus}>Invoice PDFs</button>
+          <button className="btn" onClick={bulkGenerateInvoicePdfs}     disabled={!!genStatus}>Invoice PDFs</button>
+          <button className="btn" onClick={bulkGeneratePaymentProofs}  disabled={!!genStatus}>Payment proofs</button>
           <button className="btn btn-primary" onClick={bulkGenerateAllMissing} disabled={!!genStatus}>Generate everything missing</button>
           <input ref={importInputRef} type="file" accept=".zip" style={{display:'none'}}
                  onChange={e => { const f = e.target.files && e.target.files[0]; if (f) bulkImport(f); if (importInputRef.current) importInputRef.current.value=''; }}/>
@@ -965,9 +1168,9 @@ const DocumentLibraryPage = ({ embedded } = {}) => {
       )}
 
       {/* KPI strip */}
-      <div style={{display:'grid',gridTemplateColumns:'repeat(5, minmax(0, 1fr))',gap:12,marginBottom:18}}>
+      <div style={{display:'grid',gridTemplateColumns:'repeat(7, minmax(0, 1fr))',gap:10,marginBottom:18}}>
         <div style={kpiBox}>
-          <div style={{fontSize:10,letterSpacing:'0.08em',textTransform:'uppercase',color:'var(--text-secondary)',fontWeight:600}}>Total Documents</div>
+          <div style={{fontSize:10,letterSpacing:'0.08em',textTransform:'uppercase',color:'var(--text-secondary)',fontWeight:600}}>Total</div>
           <div style={{fontSize:22,fontWeight:600}}>{stats.total}</div>
         </div>
         <div style={kpiBox}>
@@ -975,7 +1178,7 @@ const DocumentLibraryPage = ({ embedded } = {}) => {
           <div style={{fontSize:22,fontWeight:600,color:'#5a6b4f'}}>{stats.photo}</div>
         </div>
         <div style={kpiBox}>
-          <div style={{fontSize:10,letterSpacing:'0.08em',textTransform:'uppercase',color:'var(--text-secondary)',fontWeight:600}}>Title Deeds</div>
+          <div style={{fontSize:10,letterSpacing:'0.08em',textTransform:'uppercase',color:'var(--text-secondary)',fontWeight:600}}>Title deeds</div>
           <div style={{fontSize:22,fontWeight:600,color:'#3E4C59'}}>{stats.title_deed}</div>
         </div>
         <div style={kpiBox}>
@@ -983,8 +1186,16 @@ const DocumentLibraryPage = ({ embedded } = {}) => {
           <div style={{fontSize:22,fontWeight:600,color:'#a07d3c'}}>{stats.layout}</div>
         </div>
         <div style={kpiBox}>
-          <div style={{fontSize:10,letterSpacing:'0.08em',textTransform:'uppercase',color:'var(--text-secondary)',fontWeight:600}}>Other</div>
+          <div style={{fontSize:10,letterSpacing:'0.08em',textTransform:'uppercase',color:'var(--text-secondary)',fontWeight:600}}>Tenancy</div>
           <div style={{fontSize:22,fontWeight:600,color:'#61707D'}}>{stats.other}</div>
+        </div>
+        <div style={kpiBox}>
+          <div style={{fontSize:10,letterSpacing:'0.08em',textTransform:'uppercase',color:'var(--text-secondary)',fontWeight:600}}>Invoices</div>
+          <div style={{fontSize:22,fontWeight:600,color:'#8b4a42'}}>{stats.invoice}</div>
+        </div>
+        <div style={kpiBox}>
+          <div style={{fontSize:10,letterSpacing:'0.08em',textTransform:'uppercase',color:'var(--text-secondary)',fontWeight:600}}>Proofs</div>
+          <div style={{fontSize:22,fontWeight:600,color:'#7a5a1f'}}>{stats.payment_proof}</div>
         </div>
       </div>
 
@@ -998,7 +1209,9 @@ const DocumentLibraryPage = ({ embedded } = {}) => {
           <option value="photo">Photos</option>
           <option value="title_deed">Title deeds</option>
           <option value="layout">Layouts</option>
-          <option value="other">Other</option>
+          <option value="other">Tenancy contracts</option>
+          <option value="invoice">Invoices</option>
+          <option value="payment_proof">Proofs of payment</option>
         </select>
       </div>
 
