@@ -560,15 +560,14 @@ const PMCPropertiesPage = ({ setPage }) => {
                   </div>
                 )}
                 {(() => {
-                  // Al Qurm View trial: the 4 sub-buckets (Collected /
-                  // Pending / Upcoming / Future) collapse into a single
-                  // Total Billed tile that opens the slide-in financial
-                  // panel. Every other asset keeps the original 6/7 tile
-                  // row until we roll the trial out.
-                  const isTrial = b.name === 'Al Qurm View';
-                  const trialCols = isTrial ? 3 : cols;
+                  // Every asset now uses the same 3-tile layout:
+                  //   Units · Operating Revenue Billed · Open Service Requests
+                  // The Billed tile opens AssetFinancialPanel (Collected /
+                  // Pending / Upcoming / Future + per-unit breakdown +
+                  // invoices live inside the panel). Rolled out from the
+                  // Al Qurm View trial after sign-off.
                   return (
-                    <div style={{display:'grid',gridTemplateColumns:`repeat(${trialCols}, minmax(0, 1fr))`,gap:8,marginTop:14}}>
+                    <div style={{display:'grid',gridTemplateColumns:'repeat(3, minmax(0, 1fr))',gap:8,marginTop:14}}>
                       {/* Units tile (custom render — matches PMCStat shape) */}
                       <div
                         onClick={(e) => { e.stopPropagation(); open(); }}
@@ -580,21 +579,8 @@ const PMCPropertiesPage = ({ setPage }) => {
                         <div style={{fontSize:11,letterSpacing:'0.08em',textTransform:'uppercase',color:'var(--text-secondary)',marginBottom:6,fontWeight:500}}>Units</div>
                         <div style={{fontSize:16,fontWeight:600,color:'var(--text-dark)',letterSpacing:'-0.015em'}}>{b.unitCount} <span style={{fontSize:12,fontWeight:400,color:'var(--text-muted)',letterSpacing:0}}>· {occupancyPct}% occupied</span></div>
                       </div>
-                      {isCommercial && !isTrial && (
-                        <PMCStat label="Monthly Run-Rate"  value={'AED ' + Math.round(b.monthlyRev).toLocaleString()}          onClick={() => setDrill({ building: b, view: 'tenants' })}        hint="Tenants + lease rates"/>
-                      )}
-                      {isTrial ? (
-                        <PMCStat label="Total Billed" value={'AED ' + Math.round(totalBilled).toLocaleString()} onClick={() => setFinancialAsset(b)} hint="Open the asset's financial summary — collected, pending, upcoming + per-unit breakdown."/>
-                      ) : (
-                        <>
-                          <PMCStat label="Total Billed" value={'AED ' + Math.round(totalBilled).toLocaleString()}  onClick={() => setDrill({ building: b, view: 'invoices' })}  hint="All invoices for this building"/>
-                          <PMCStat label="Collected"    value={'AED ' + Math.round(b.collected).toLocaleString()} onClick={() => setDrill({ building: b, view: 'collected' })} color="#5a6b4f" hint="Paid invoices"/>
-                          <PMCStat label="Pending"      value={'AED ' + Math.round(b.pending).toLocaleString()}   onClick={() => setDrill({ building: b, view: 'pending' })}   color={b.pending  > 0 ? '#8b4a42' : null} hint="Past due — not paid yet"/>
-                          <PMCStat label="Upcoming"     value={'AED ' + Math.round(b.upcoming).toLocaleString()}  onClick={() => setDrill({ building: b, view: 'upcoming' })}  color={b.upcoming > 0 ? '#a07d3c' : null} hint="Due within next 30 days"/>
-                          <PMCStat label="Future"       value={'AED ' + Math.round(b.future).toLocaleString()}    onClick={() => setDrill({ building: b, view: 'future' })}    color={b.future   > 0 ? '#61707D' : null} hint="Due more than 30 days out"/>
-                        </>
-                      )}
-                      <PMCStat label="Open SRs"     value={b.openSRs + ' open · ' + b.totalSRs + ' total'}    onClick={() => setDrill({ building: b, view: 'srs' })}       hint="Service requests"/>
+                      <PMCStat label="Operating Revenue Billed" value={'AED ' + Math.round(totalBilled).toLocaleString()} onClick={() => setFinancialAsset(b)} hint="Open the asset's financial summary — collected, pending, upcoming + per-unit breakdown + invoices."/>
+                      <PMCStat label="Open Service Requests"   value={b.openSRs + ' open · ' + b.totalSRs + ' total'}    onClick={() => setDrill({ building: b, view: 'srs' })} hint="Service requests"/>
                     </div>
                   );
                 })()}
