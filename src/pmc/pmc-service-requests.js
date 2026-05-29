@@ -46,6 +46,8 @@ const PMCServiceRequestsPage = () => {
   const [search, setSearch] = useState('');
   const [selectedSR, setSelectedSR] = useState(null);
   const [showDownload, setShowDownload] = useState(false);
+  const [showCreate, setShowCreate] = useState(false);
+  const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
     let mounted = true;
@@ -81,7 +83,7 @@ const PMCServiceRequestsPage = () => {
       } catch (e) { if (mounted) setError(String(e.message || e)); }
     })();
     return () => { mounted = false; };
-  }, [selectedProperties.join(',')]);
+  }, [selectedProperties.join(','), reloadKey]);
 
   const filtered = (rows || []).filter(s => {
     if (statusFilter !== 'all' && s.status !== statusFilter) return false;
@@ -125,6 +127,7 @@ const PMCServiceRequestsPage = () => {
           <h1>Service Requests</h1>
         </div>
         <div className="btn-group">
+          <button className="btn btn-primary" onClick={() => setShowCreate(true)}>+ Create Service Request</button>
           <button className="btn" onClick={() => setShowDownload(true)} disabled={!rows || rows.length === 0}>Download Data</button>
         </div>
       </div>
@@ -198,11 +201,42 @@ const PMCServiceRequestsPage = () => {
       />
 
       <div className="kpi-row" style={{gridTemplateColumns:'repeat(5, minmax(0, 1fr))'}}>
-        <div className="kpi-card"><div className="label">Total</div><div className="value">{counts.total}</div></div>
-        <div className="kpi-card"><div className="label">Open</div><div className="value" style={{color:'#a07d3c'}}>{counts.open}</div></div>
-        <div className="kpi-card"><div className="label">In Progress</div><div className="value">{counts.inProgress}</div></div>
-        <div className="kpi-card"><div className="label">Done / Closed</div><div className="value" style={{color:'#5a6b4f'}}>{counts.done}</div></div>
-        <div className="kpi-card"><div className="label">Urgent open</div><div className="value" style={{color:'#8b4a42'}}>{counts.urgent}</div></div>
+        <PMCSRKpiTile
+          label="Total"
+          value={counts.total}
+          active={statusFilter === 'all' && priorityFilter === 'all' && categoryFilter === 'all' && !dateFrom && !dateTo && !search}
+          onClick={() => { setStatusFilter('all'); setPriorityFilter('all'); setCategoryFilter('all'); setDateFrom(''); setDateTo(''); setSearch(''); }}
+        />
+        {/* TODO: filter UI is single-select; 'Open' currently maps to status='New' only.
+            A multi-status mode (New + Acknowledged + In Progress) would require turning
+            statusFilter into an array and updating the <select> to a multi-select chip group. */}
+        <PMCSRKpiTile
+          label="Open"
+          value={counts.open}
+          valueColor="#a07d3c"
+          active={statusFilter === 'New' && priorityFilter === 'all'}
+          onClick={() => { setStatusFilter('New'); setPriorityFilter('all'); }}
+        />
+        <PMCSRKpiTile
+          label="In Progress"
+          value={counts.inProgress}
+          active={statusFilter === 'In Progress' && priorityFilter === 'all'}
+          onClick={() => { setStatusFilter('In Progress'); setPriorityFilter('all'); }}
+        />
+        <PMCSRKpiTile
+          label="Done / Closed"
+          value={counts.done}
+          valueColor="#5a6b4f"
+          active={statusFilter === 'Done' && priorityFilter === 'all'}
+          onClick={() => { setStatusFilter('Done'); setPriorityFilter('all'); }}
+        />
+        <PMCSRKpiTile
+          label="Urgent open"
+          value={counts.urgent}
+          valueColor="#8b4a42"
+          active={priorityFilter === 'Urgent' && statusFilter === 'New'}
+          onClick={() => { setPriorityFilter('Urgent'); setStatusFilter('New'); }}
+        />
       </div>
 
       <div className="card">
@@ -269,6 +303,254 @@ const PMCServiceRequestsPage = () => {
       </div>
 
       {selectedSR && <PMCServiceRequestDetailModal sr={selectedSR} onClose={() => setSelectedSR(null)}/>}
+      {showCreate && (
+        <CreateServiceRequestModal
+          onClose={() => setShowCreate(false)}
+          onCreated={() => { setShowCreate(false); setReloadKey(k => k + 1); }}
+        />
+      )}
+    </div>
+  );
+};
+
+// ==================== KPI TILE (clickable) ====================
+const PMCSRKpiTile = ({ label, value, valueColor, active, onClick }) => {
+  const [hover, setHover] = useState(false);
+  const bg = active ? 'var(--accent-warm-light)' : hover ? 'var(--accent-warm-light)' : '#fff';
+  const borderColor = active ? 'var(--accent-warm)' : hover ? 'var(--accent-warm)' : 'var(--border-light)';
+  return (
+    <div
+      className="kpi-card"
+      role="button"
+      tabIndex={0}
+      onClick={onClick}
+      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onClick && onClick(); } }}
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
+      style={{
+        cursor: 'pointer',
+        background: bg,
+        borderColor: borderColor,
+        transition: 'background 120ms ease, border-color 120ms ease, transform 120ms ease',
+        transform: hover ? 'translateY(-1px)' : 'none',
+      }}
+      title={'Filter: ' + label}
+    >
+      <div className="label">{label}</div>
+      <div className="value" style={valueColor ? { color: valueColor } : undefined}>{value}</div>
+    </div>
+  );
+};
+
+// ==================== CREATE SERVICE REQUEST MODAL ====================
+const CreateServiceRequestModal = ({ onClose, onCreated }) => {
+  const [buildings, setBuildings] = useState(null);
+  const [units, setUnits] = useState([]);
+  const [residents, setResidents] = useState([]);
+  const [loadingUnits, setLoadingUnits] = useState(false);
+  const [loadingResidents, setLoadingResidents] = useState(false);
+
+  const [buildingId, setBuildingId] = useState('');
+  const [unitId, setUnitId] = useState('');
+  const [residentId, setResidentId] = useState('');
+  const [category, setCategory] = useState('');
+  const [priority, setPriority] = useState('Normal');
+  const [description, setDescription] = useState('');
+  const [preferredDate, setPreferredDate] = useState('');
+  const [preferredTime, setPreferredTime] = useState('');
+
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState(null);
+
+  const CATEGORIES = ['Plumbing','Electrical','HVAC','General Handyman','Pest Control','Cleaning','Security','Other'];
+  const PRIORITIES = ['Low','Normal','High','Urgent'];
+
+  // Load buildings on mount
+  useEffect(() => {
+    let mounted = true;
+    (async () => {
+      if (!supabaseClient) { setError('Supabase not initialized'); return; }
+      const { data, error: e } = await supabaseClient.from('buildings').select('id, name, property_type').order('name');
+      if (!mounted) return;
+      if (e) { setError(e.message); return; }
+      setBuildings(data || []);
+    })();
+    return () => { mounted = false; };
+  }, []);
+
+  // Load units when building changes
+  useEffect(() => {
+    setUnitId('');
+    setUnits([]);
+    setResidentId('');
+    setResidents([]);
+    if (!buildingId || !supabaseClient) return;
+    let mounted = true;
+    setLoadingUnits(true);
+    (async () => {
+      const { data, error: e } = await supabaseClient.from('units').select('id, unit_number, floor').eq('building_id', buildingId).order('unit_number');
+      if (!mounted) return;
+      setLoadingUnits(false);
+      if (e) { setError(e.message); return; }
+      setUnits(data || []);
+    })();
+    return () => { mounted = false; };
+  }, [buildingId]);
+
+  // Load residents for selected unit
+  useEffect(() => {
+    setResidentId('');
+    setResidents([]);
+    if (!unitId || !supabaseClient) return;
+    let mounted = true;
+    setLoadingResidents(true);
+    (async () => {
+      const { data, error: e } = await supabaseClient
+        .from('resident_assignments')
+        .select('profile_id, profiles(full_name)')
+        .eq('unit_id', unitId);
+      if (!mounted) return;
+      setLoadingResidents(false);
+      if (e) { /* non-fatal: resident is optional */ setResidents([]); return; }
+      setResidents((data || []).map(r => ({
+        profile_id: r.profile_id,
+        full_name: (r.profiles && r.profiles.full_name) || '—',
+      })));
+    })();
+    return () => { mounted = false; };
+  }, [unitId]);
+
+  const validate = () => {
+    if (!buildingId) return 'Building is required.';
+    if (!unitId) return 'Unit is required.';
+    if (!category) return 'Category is required.';
+    if (!priority) return 'Priority is required.';
+    if (!description || description.trim().length < 10) return 'Description must be at least 10 characters.';
+    return null;
+  };
+
+  const submit = async () => {
+    const v = validate();
+    if (v) { setError(v); return; }
+    setError(null);
+    setBusy(true);
+    try {
+      const payload = {
+        unit_id: unitId,
+        resident_profile_id: residentId || null,
+        category,
+        description: description.trim(),
+        priority,
+        status: 'New',
+        preferred_date: preferredDate || null,
+        preferred_time: preferredTime || null,
+      };
+      const { error: e } = await supabaseClient.from('service_requests').insert(payload);
+      if (e) throw e;
+      onCreated && onCreated();
+    } catch (e) {
+      setError(String(e.message || e));
+      setBusy(false);
+    }
+  };
+
+  const labelStyle = { fontSize:11, color:'var(--text-secondary)', marginBottom:4, display:'block', fontWeight:500, letterSpacing:'0.04em', textTransform:'uppercase' };
+  const inputStyle = { width:'100%', padding:'10px 12px', border:'1px solid var(--border-light)', borderRadius:6, fontSize:13, fontFamily:'inherit', outline:'none', background:'#fff' };
+  const sectionLabel = { fontSize:10, letterSpacing:'0.08em', textTransform:'uppercase', color:'var(--text-muted)', marginBottom:10, fontWeight:600 };
+
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal" onClick={e => e.stopPropagation()} style={{maxWidth:640, maxHeight:'90vh', padding:0, display:'flex', flexDirection:'column', overflow:'hidden'}}>
+        <div className="modal-header" style={{position:'sticky',top:0,background:'#fff',padding:'24px 28px 18px 28px',margin:0,borderBottom:'1px solid var(--border-light)',zIndex:2}}>
+          <div>
+            <div style={{fontSize:10,letterSpacing:'0.08em',textTransform:'uppercase',color:'var(--text-muted)',marginBottom:4}}>New Service Request</div>
+            <h2>Create Service Request</h2>
+            <div className="modal-sub">PMC composer — file an SR on behalf of a building or resident.</div>
+          </div>
+          <button className="modal-close" onClick={onClose}>×</button>
+        </div>
+
+        <div style={{padding:'20px 28px 24px 28px', overflowY:'auto'}}>
+          {error && (
+            <div style={{padding:10,background:'#fdf2f1',color:'#8b4a42',borderRadius:6,fontSize:12,marginBottom:14}}>{error}</div>
+          )}
+
+          <div style={sectionLabel}>Property</div>
+          <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:12, marginBottom:18}}>
+            <div>
+              <label style={labelStyle}>Building <span style={{color:'#8b4a42'}}>*</span></label>
+              <select style={inputStyle} value={buildingId} onChange={e => setBuildingId(e.target.value)} disabled={buildings === null}>
+                <option value="">{buildings === null ? 'Loading…' : 'Select a building…'}</option>
+                {(buildings || []).map(b => (
+                  <option key={b.id} value={b.id}>{b.name}{b.property_type ? ' · ' + b.property_type : ''}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label style={labelStyle}>Unit <span style={{color:'#8b4a42'}}>*</span></label>
+              <select style={inputStyle} value={unitId} onChange={e => setUnitId(e.target.value)} disabled={!buildingId || loadingUnits}>
+                <option value="">{!buildingId ? 'Choose building first' : loadingUnits ? 'Loading…' : units.length === 0 ? 'No units' : 'Select a unit…'}</option>
+                {units.map(u => (
+                  <option key={u.id} value={u.id}>{u.unit_number}{u.floor != null ? ' · Floor ' + u.floor : ''}</option>
+                ))}
+              </select>
+            </div>
+            <div style={{gridColumn:'1 / -1'}}>
+              <label style={labelStyle}>Resident <span style={{color:'var(--text-muted)',fontWeight:400,textTransform:'none',letterSpacing:0}}>(optional)</span></label>
+              <select style={inputStyle} value={residentId} onChange={e => setResidentId(e.target.value)} disabled={!unitId || loadingResidents || residents.length === 0}>
+                <option value="">{!unitId ? 'Choose unit first' : loadingResidents ? 'Loading…' : residents.length === 0 ? 'No assigned residents' : 'No specific resident'}</option>
+                {residents.map(r => (
+                  <option key={r.profile_id} value={r.profile_id}>{r.full_name}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          <div style={sectionLabel}>Request</div>
+          <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:12, marginBottom:12}}>
+            <div>
+              <label style={labelStyle}>Category <span style={{color:'#8b4a42'}}>*</span></label>
+              <select style={inputStyle} value={category} onChange={e => setCategory(e.target.value)}>
+                <option value="">Select a category…</option>
+                {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+              </select>
+            </div>
+            <div>
+              <label style={labelStyle}>Priority <span style={{color:'#8b4a42'}}>*</span></label>
+              <select style={inputStyle} value={priority} onChange={e => setPriority(e.target.value)}>
+                {PRIORITIES.map(p => <option key={p} value={p}>{p}</option>)}
+              </select>
+            </div>
+          </div>
+          <div style={{marginBottom:18}}>
+            <label style={labelStyle}>Description <span style={{color:'#8b4a42'}}>*</span></label>
+            <textarea
+              style={{...inputStyle, minHeight:90, resize:'vertical', fontFamily:'inherit', lineHeight:1.5}}
+              value={description}
+              onChange={e => setDescription(e.target.value)}
+              placeholder="Describe the issue, location in the unit, and any relevant detail (min 10 chars)…"
+            />
+            <div style={{fontSize:11,color:'var(--text-muted)',marginTop:4}}>{description.trim().length} / 10 characters</div>
+          </div>
+
+          <div style={sectionLabel}>Scheduling (optional)</div>
+          <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:12, marginBottom:6}}>
+            <div>
+              <label style={labelStyle}>Preferred date</label>
+              <input type="date" style={inputStyle} value={preferredDate} onChange={e => setPreferredDate(e.target.value)}/>
+            </div>
+            <div>
+              <label style={labelStyle}>Preferred time</label>
+              <input type="time" style={inputStyle} value={preferredTime} onChange={e => setPreferredTime(e.target.value)}/>
+            </div>
+          </div>
+        </div>
+
+        <div style={{padding:'14px 28px 20px 28px', borderTop:'1px solid var(--border-light)', background:'#fff', display:'flex', justifyContent:'flex-end', gap:8}}>
+          <button className="btn" onClick={onClose} disabled={busy}>Cancel</button>
+          <button className="btn btn-primary" onClick={submit} disabled={busy}>{busy ? 'Creating…' : 'Create request'}</button>
+        </div>
+      </div>
     </div>
   );
 };

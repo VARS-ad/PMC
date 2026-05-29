@@ -311,7 +311,7 @@ const BuildingDrillModal = ({ building, view, onClose, setPage }) => {
 // Opens when a KPI tile on the Summary tab is clicked. Shows the underlying
 // records for the four portfolio views: Billed / Collected / Outstanding /
 // Future. Single shared table layout with a building filter on top.
-const PortfolioBillingDrillModal = ({ view, allInvoices, futureProjections, buildings, onClose }) => {
+const PortfolioBillingDrillModal = ({ view, allInvoices, buildings, onClose }) => {
   const fmt = (n) => 'AED ' + Math.round(Number(n) || 0).toLocaleString();
   const [buildingFilter, setBuildingFilter] = useState('all');
   const [sort, setSort] = useState({ key: 'amount_aed', dir: 'desc' });
@@ -325,41 +325,29 @@ const PortfolioBillingDrillModal = ({ view, allInvoices, futureProjections, buil
     return () => window.removeEventListener('keydown', onKey);
   }, []);
 
-  const isFuture = view === 'future';
   const titles = {
-    billed:      'Total Revenue Billed',
-    collected:   'Collected',
-    outstanding: 'Outstanding',
-    future:      'Future revenue · next 12 months',
+    billed:    'Total Revenue Billed',
+    collected: 'Collected',
+    overdue:   'Overdue · past due',
+    upcoming:  'Upcoming · next 30 days',
   };
 
-  let rows;
-  if (isFuture) {
-    rows = (futureProjections || []).filter(r => buildingFilter === 'all' || r.building_id === buildingFilter);
-    rows = [...rows].sort((a, b) => {
-      const k = sort.key === 'amount_aed' ? 'projected' : sort.key;
-      const av = a[k] ?? ''; const bv = b[k] ?? '';
-      if (av < bv) return sort.dir === 'asc' ? -1 : 1;
-      if (av > bv) return sort.dir === 'asc' ? 1 : -1;
-      return 0;
-    });
-  } else {
-    rows = (allInvoices || []).filter(i => {
-      if (view === 'collected'   && i.effective_status !== 'Paid') return false;
-      if (view === 'outstanding' && !['Pending','Upcoming','Future'].includes(i.effective_status)) return false;
+  const rows = (() => {
+    let filtered = (allInvoices || []).filter(i => {
+      if (view === 'collected' && i.effective_status !== 'Paid')     return false;
+      if (view === 'overdue'   && i.effective_status !== 'Pending')  return false;
+      if (view === 'upcoming'  && i.effective_status !== 'Upcoming') return false;
       if (buildingFilter !== 'all' && i.building_id !== buildingFilter) return false;
       return true;
     });
-    rows = [...rows].sort((a, b) => {
+    return [...filtered].sort((a, b) => {
       const av = a[sort.key] ?? ''; const bv = b[sort.key] ?? '';
       if (av < bv) return sort.dir === 'asc' ? -1 : 1;
       if (av > bv) return sort.dir === 'asc' ? 1 : -1;
       return 0;
     });
-  }
-  const total = isFuture
-    ? rows.reduce((s, r) => s + Number(r.projected || 0), 0)
-    : rows.reduce((s, r) => s + Number(r.amount_aed || 0), 0);
+  })();
+  const total = rows.reduce((s, r) => s + Number(r.amount_aed || 0), 0);
 
   const statusStyles = {
     'Paid':     { bg:'#e6efe1', fg:'#5a6b4f' },
@@ -376,7 +364,7 @@ const PortfolioBillingDrillModal = ({ view, allInvoices, futureProjections, buil
           <div>
             <div style={{fontSize:11,letterSpacing:'0.08em',textTransform:'uppercase',color:'var(--text-muted)',marginBottom:4}}>Portfolio</div>
             <h2>{titles[view] || 'Records'}</h2>
-            <div className="modal-sub">{rows.length} {isFuture ? (rows.length === 1 ? 'lease' : 'leases') : (rows.length === 1 ? 'invoice' : 'invoices')} · {fmt(total)}</div>
+            <div className="modal-sub">{rows.length} {rows.length === 1 ? 'invoice' : 'invoices'} · {fmt(total)}</div>
           </div>
           <button className="modal-close" onClick={onClose}>×</button>
         </div>
@@ -395,35 +383,8 @@ const PortfolioBillingDrillModal = ({ view, allInvoices, futureProjections, buil
 
         {rows.length === 0 ? (
           <div style={{padding:32,color:'var(--text-muted)',fontSize:13,textAlign:'center'}}>
-            {isFuture ? 'No future lease revenue projected.' : view === 'collected' ? 'No paid invoices.' : view === 'outstanding' ? 'Nothing outstanding ✓' : 'No invoices in this period.'}
+            {view === 'collected' ? 'No paid invoices.' : view === 'overdue' ? 'Nothing overdue ✓' : view === 'upcoming' ? 'No invoices due in the next 30 days.' : 'No invoices in this period.'}
           </div>
-        ) : isFuture ? (
-          <table className="data-table" style={{fontSize:12}}>
-            <thead>
-              <tr>
-                <th style={{width:'22%', cursor:'pointer'}} onClick={() => toggleSort('building_name')}>Building<Arrow col="building_name"/></th>
-                <th style={{width:'8%'}}>Unit</th>
-                <th style={{width:'22%'}}>Tenant</th>
-                <th style={{width:'14%', textAlign:'right', cursor:'pointer'}} onClick={() => toggleSort('monthly')}>Monthly<Arrow col="monthly"/></th>
-                <th style={{width:'12%', cursor:'pointer'}} onClick={() => toggleSort('lease_end')}>Lease end<Arrow col="lease_end"/></th>
-                <th style={{width:'10%', textAlign:'right', cursor:'pointer'}} onClick={() => toggleSort('monthsRemaining')}>Months<Arrow col="monthsRemaining"/></th>
-                <th style={{width:'14%', textAlign:'right', cursor:'pointer'}} onClick={() => toggleSort('amount_aed')}>Projected<Arrow col="amount_aed"/></th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((r, idx) => (
-                <tr key={r.building_id + '_' + r.unit_number + '_' + idx}>
-                  <td style={{fontWeight:500}}>{r.building_name}</td>
-                  <td>{r.unit_number}</td>
-                  <td>{r.tenant_name || '—'}</td>
-                  <td style={{textAlign:'right'}}>{fmt(r.monthly)}</td>
-                  <td style={{whiteSpace:'nowrap'}}>{r.lease_end || '—'}</td>
-                  <td style={{textAlign:'right'}}>{r.monthsRemaining}</td>
-                  <td style={{textAlign:'right', fontWeight:600}}>{fmt(r.projected)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
         ) : (
           <table className="data-table" style={{fontSize:12}}>
             <thead>
@@ -888,41 +849,16 @@ const PMCPropertiesPage = ({ setPage }) => {
             const overduePast = allInvoices.filter(i => i.effective_status === 'Pending').reduce((s, i) => s + Number(i.amount_aed || 0), 0);
             const collectionRate = billed > 0 ? Math.round((collected / billed) * 100) : 0;
 
-            // Future revenue = next 12 months of contracted lease income
-            // from active tenants. Anchored to today, capped at horizon
-            // so a 5-year lease doesn't drown the rest of the KPIs.
-            const futureProjections = (() => {
-              const today = new Date();
-              const horizonEnd = new Date(today.getFullYear() + 1, today.getMonth(), today.getDate());
-              const rows = [];
-              (buildings || []).forEach(b => {
-                (b.tenants || []).filter(t => t.lease_end && Number(t.monthly_payment_aed) > 0).forEach(t => {
-                  const end = new Date(t.lease_end);
-                  if (isNaN(end.getTime()) || end <= today) return;
-                  const effectiveEnd = end < horizonEnd ? end : horizonEnd;
-                  const monthsRemaining = Math.max(0,
-                    (effectiveEnd.getFullYear() - today.getFullYear()) * 12 +
-                    (effectiveEnd.getMonth() - today.getMonth())
-                  );
-                  if (monthsRemaining === 0) return;
-                  const monthly = Number(t.monthly_payment_aed);
-                  rows.push({
-                    building_id: b.id, building_name: b.name, property_type: b.property_type,
-                    unit_number: t.unit_number, tenant_name: t.resident_name, tenant_phone: t.resident_phone,
-                    monthly, monthsRemaining, lease_end: t.lease_end, projected: monthly * monthsRemaining,
-                  });
-                });
-              });
-              return rows;
-            })();
-            const futureRevenue = futureProjections.reduce((s, r) => s + r.projected, 0);
+            // Upcoming = invoices already issued and due within the next
+            // 30 days. Matches the Overview "Upcoming · 30 days" hero
+            // tile so the same number reads the same everywhere.
+            // (We previously had a "Future · 12 months" lease-projection
+            // tile here; user asked to align with Overview.)
+            const upcoming30 = allInvoices.filter(i => i.effective_status === 'Upcoming').reduce((s, i) => s + Number(i.amount_aed || 0), 0);
 
-            // Outstanding suffix — fix duplicate-number bug. If overdue
-            // equals the whole outstanding total, show "all overdue"
-            // instead of repeating the amount.
-            const outstandingSuffix = overduePast > 0
-              ? (overduePast >= outstanding ? '  ·  all overdue' : '  ·  ' + fmtMoney(overduePast) + ' overdue')
-              : '';
+            // (Outstanding suffix was here — removed when we renamed the
+            // tile from "Outstanding" to "Overdue" to align with Overview.
+            // The Overdue tile now shows only the past-due amount, no suffix.)
 
             // Revenue by construction type — billed + collected per type
             // so the user can compare which segment converts best.
@@ -970,20 +906,23 @@ const PMCPropertiesPage = ({ setPage }) => {
                   <span style={{color:'var(--text-muted)',fontWeight:400,letterSpacing:0,textTransform:'none',fontSize:13}}>· {buildings.length} {buildings.length === 1 ? 'asset' : 'assets'} across {typeBreakdown.filter(t => t.list.length > 0).length} types</span>
                 </div>
 
-                {/* 4 portfolio KPI tiles — all clickable, open the portfolio drill modal */}
+                {/* 4 portfolio KPI tiles — all clickable, open the portfolio drill modal.
+                    Labels intentionally mirror the Overview hero strip
+                    (Collected · Overdue · Upcoming · 30 days) so the
+                    same number reads the same name everywhere. */}
                 <div style={{display:'grid',gridTemplateColumns:'repeat(4, minmax(0, 1fr))',gap:12,marginBottom:24}}>
                   <PMCStat label="Total Revenue Billed" value={fmtMoney(billed)}
-                    onClick={() => setPortfolioDrill({ view: 'billed', allInvoices, futureProjections })}
+                    onClick={() => setPortfolioDrill({ view: 'billed', allInvoices })}
                     hint="Every billed invoice across the portfolio in the selected period."/>
                   <PMCStat label="Collected" value={fmtMoney(collected) + ' · ' + collectionRate + '%'} color="#5a6b4f"
-                    onClick={() => setPortfolioDrill({ view: 'collected', allInvoices, futureProjections })}
+                    onClick={() => setPortfolioDrill({ view: 'collected', allInvoices })}
                     hint="Paid invoices in the selected period."/>
-                  <PMCStat label="Outstanding" value={fmtMoney(outstanding) + outstandingSuffix} color={overduePast > 0 ? '#8b4a42' : 'var(--text-dark)'}
-                    onClick={() => setPortfolioDrill({ view: 'outstanding', allInvoices, futureProjections })}
-                    hint="Pending + Upcoming + Future invoices — unpaid."/>
-                  <PMCStat label="Future · next 12 months" value={fmtMoney(futureRevenue)} color="#a07d3c"
-                    onClick={() => setPortfolioDrill({ view: 'future', allInvoices, futureProjections })}
-                    hint="Projected revenue from active leases — monthly × remaining months, capped at 12."/>
+                  <PMCStat label="Overdue" value={fmtMoney(overduePast)} color={overduePast > 0 ? '#8b4a42' : 'var(--text-dark)'}
+                    onClick={() => setPortfolioDrill({ view: 'overdue', allInvoices })}
+                    hint="Past-due unpaid invoices in the selected period."/>
+                  <PMCStat label="Upcoming · 30 days" value={fmtMoney(upcoming30)} color="#a07d3c"
+                    onClick={() => setPortfolioDrill({ view: 'upcoming', allInvoices })}
+                    hint="Invoices already issued and due within the next 30 days."/>
                 </div>
 
                 {/* Revenue by construction type */}

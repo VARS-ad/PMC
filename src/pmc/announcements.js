@@ -7,18 +7,78 @@ const AnnouncementsPage = () => {
   const [showDelete, setShowDelete] = useState(null);
   const [editingAnn, setEditingAnn] = useState(null);
   const [annForm, setAnnForm] = useState({ title: '', body: '', priority: 'Normal', audience: 'All Residents', publishMode: 'now', ackRequired: false, scheduleDate: '', scheduleTime: '' });
+  const [submitting, setSubmitting] = useState(false);
 
   const resetForm = () => setAnnForm({ title: '', body: '', priority: 'Normal', audience: 'All Residents', publishMode: 'now', ackRequired: false, scheduleDate: '', scheduleTime: '' });
 
-  const liveCount = data.announcements.filter(a => a.status === 'Live').length;
-  const scheduledCount = data.announcements.filter(a => a.status === 'Scheduled').length;
-  const draftCount = data.announcements.filter(a => a.status === 'Draft').length;
-  const sentCount = data.announcements.filter(a => a.status === 'Sent').length;
+  // Tab semantics (per product spec):
+  //   Live      — already published AND not past its expiry/display-until date
+  //   Scheduled — scheduled_at is in the future (will go live later)
+  //   Draft     — expired announcements (used to be Live, now past their expiry date)
+  //   Sent      — already published (regardless of whether still live or expired)
+  // The announcement object on this app does NOT carry explicit `published_at` /
+  // `expires_at` fields — only `status`, `created` (string like "05 Apr, 09:44"),
+  // and optionally `scheduleDate` / `scheduleTime`. As a proxy, we treat any
+  // currently-"Live" item older than 30 days as expired (=> Draft bucket).
+  const EXPIRY_DAYS = 30;
+  const now = new Date();
+  const parseCreated = (s) => {
+    // Best-effort: "05 Apr, 09:44" -> Date in current year. Falls back to now.
+    if (!s) return now;
+    const d = new Date(s + ' ' + now.getFullYear());
+    return isNaN(d.getTime()) ? now : d;
+  };
+  const parseScheduled = (a) => {
+    if (!a.scheduleDate) return null;
+    const d = new Date(a.scheduleDate + 'T' + (a.scheduleTime || '00:00'));
+    return isNaN(d.getTime()) ? null : d;
+  };
+  const isExpired = (a) => {
+    const created = parseCreated(a.created);
+    return (now - created) > EXPIRY_DAYS * 24 * 60 * 60 * 1000;
+  };
+  const bucketOf = (a) => {
+    // Scheduled — future publish date
+    if (a.status === 'Scheduled') {
+      const sd = parseScheduled(a);
+      if (sd && sd > now) return 'Scheduled';
+    }
+    // Draft — was Live but now past expiry (proxy: created > 30 days ago)
+    if (a.status === 'Live' && isExpired(a)) return 'Draft';
+    // Live — published and not expired
+    if (a.status === 'Live') return 'Live';
+    // Sent — already delivered (Sent status, or expired Live which is also "sent")
+    if (a.status === 'Sent') return 'Sent';
+    // Legacy explicit Draft still maps to Draft
+    if (a.status === 'Draft') return 'Draft';
+    return a.status;
+  };
+  // An announcement can belong to multiple buckets — Sent covers any
+  // already-published item (Live OR expired-Draft OR explicit Sent).
+  const inBucket = (a, bucket) => {
+    if (bucket === 'All') return true;
+    if (bucket === 'Sent') {
+      // Anything that has been published counts as Sent
+      return a.status === 'Sent' || a.status === 'Live';
+    }
+    return bucketOf(a) === bucket;
+  };
+
+  const liveCount = data.announcements.filter(a => inBucket(a, 'Live')).length;
+  const scheduledCount = data.announcements.filter(a => inBucket(a, 'Scheduled')).length;
+  const draftCount = data.announcements.filter(a => inBucket(a, 'Draft')).length;
+  const sentCount = data.announcements.filter(a => inBucket(a, 'Sent')).length;
   const filters = [{label:'All',count:data.announcements.length},{label:'Live',count:liveCount},{label:'Scheduled',count:scheduledCount},{label:'Draft',count:draftCount},{label:'Sent',count:sentCount}];
-  const filtered = filter === 'All' ? data.announcements : data.announcements.filter(a => a.status === filter);
+  const filtered = data.announcements.filter(a => inBucket(a, filter));
 
   const handlePublish = () => {
+    if (submitting) return; // guard against double-submit
     if (!annForm.title.trim()) { showToast('Title is required'); return; }
+    if (annForm.publishMode === 'schedule' && (!annForm.scheduleDate || !annForm.scheduleTime)) {
+      showToast('Please pick a date and time for the scheduled publish');
+      return;
+    }
+    setSubmitting(true);
     const now = new Date();
     const timeStr = formatTime24(now);
     const dateStr = formatDateShort(now);
@@ -56,6 +116,7 @@ const AnnouncementsPage = () => {
     setShowComposer(false);
     setEditingAnn(null);
     resetForm();
+    setSubmitting(false);
   };
 
   const handleDelete = (ann) => {
@@ -92,8 +153,8 @@ const AnnouncementsPage = () => {
             <div style={{flex:1}}>
               <div className="tags">
                 <StatusBadge status={a.status}/>
-                {a.priority==='High' && <span style={{fontSize:11,color:'#61707D',border:'1px solid #D0D6D5',borderRadius:3,padding:'1px 8px'}}>△ {t('pm.markHighPriority')}</span>}
-                {a.ackRequired && <span style={{fontSize:11,color:'#61707D',border:'1px solid #D0D6D5',borderRadius:3,padding:'1px 8px'}}>{t('pm.ackRequiredLabel')} {t('pm.requireAck')}</span>}
+                {a.priority==='High' && <span style={{fontSize:11,color:'#61707D',border:'1px solid #D0D6D5',borderRadius:3,padding:'1px 8px'}}>△ High priority</span>}
+                {a.ackRequired && <span style={{fontSize:11,color:'#61707D',border:'1px solid #D0D6D5',borderRadius:3,padding:'1px 8px'}}>Acknowledgement required</span>}
               </div>
               <h3 style={{fontSize:16,fontWeight:600,marginBottom:6}}>{a.title}</h3>
               {a.body && <p style={{fontSize:13,color:'#7a6f66',margin:'4px 0 8px',lineHeight:1.5}}>{a.body}</p>}
@@ -310,8 +371,8 @@ const AnnouncementsPage = () => {
 
               <div className="grid-2">
                 <button className="btn" onClick={()=>setComposerStep(3)}>← Back</button>
-                <button className="btn btn-primary" style={{fontWeight:600}} onClick={handlePublish}>
-                  {annForm.publishMode==='now' ? 'Publish Now' : annForm.publishMode==='schedule' ? 'Schedule' : 'Save Draft'}
+                <button className="btn btn-primary" style={{fontWeight:600,opacity:submitting?0.6:1,pointerEvents:submitting?'none':'auto'}} disabled={submitting} onClick={handlePublish}>
+                  {submitting ? 'Working…' : annForm.publishMode==='now' ? 'Publish Now' : annForm.publishMode==='schedule' ? 'Schedule' : 'Save Draft'}
                 </button>
               </div>
             </div>)}

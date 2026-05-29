@@ -207,38 +207,185 @@ const exportReportPDF = async ({ title, subtitle, description, columns, rows, me
   // === Data table ===
   if (!doc.autoTable) { alert('PDF table plugin failed to load — please reload the page'); return; }
   const aoa = _rowsToAOA(rows, columns);
+  const bodyStrings = aoa.map(r =>
+    r.map(v => v == null ? '' : (typeof v === 'number' ? _formatNumber(v) : String(v)))
+  );
 
-  // Treat column `width` as a relative weight and scale so the table fills the
-  // page. Without this, autoTable interprets raw widths as points (1pt ≈ 1/72")
-  // and the table ends up ~20% of page width with text wrapping per character.
+  // ------- Smart column-width allocation (word-aware) -------
+  //
+  // Bug being fixed: when many columns are exported (e.g. Buildings has 13),
+  // autoTable squeezed them into ~equal slots and broke long single words
+  // ("Residential", "Commercial", "Upcoming", "Occupied") mid-character.
+  // Fix: measure each column's
+  //   - minWidth   = widest single word that must never wrap, in points
+  //   - prefWidth  = widest full line we'd like to fit, capped per type
+  // and allocate the table's usable width proportionally to prefWidth, but
+  // never below minWidth. If even the sum of minWidths exceeds the page, we
+  // scale every minWidth down evenly (last-resort) — the alternative would
+  // be silent mid-word breaks, which is what the bug report described.
+  //
+  // We sample up to 200 body rows for width measurement so giant exports
+  // don't pay an O(rows × cols) cost; the longest words almost always show
+  // up in the first hundred rows anyway.
   const usableW = pageW - marginX * 2;
-  const totalWeight = columns.reduce((s, c) => s + (c.width || 14), 0);
+  const CELL_PAD_PT     = 5;      // matches styles.cellPadding below (left + right ⇒ ×2)
+  const HEAD_PAD_PT     = 6;
+  const BODY_FONT_PT    = 9;
+  const HEAD_FONT_PT    = 9;
+  const MIN_COL_PT      = 36;     // absolute floor (~12.7mm) — fits "Residential" at 9pt
+  const PREF_CAP_PT     = 180;    // a single col shouldn't claim more than ~63mm on its own pref
+  const SAMPLE_ROWS     = Math.min(bodyStrings.length, 200);
+
+  // Helper: measure a string's rendered width in points using jsPDF's metrics
+  // for a given font weight + size.
+  const measure = (text, sizePt, bold) => {
+    doc.setFont('helvetica', bold ? 'bold' : 'normal');
+    doc.setFontSize(sizePt);
+    return doc.getStringUnitWidth(String(text || '')) * sizePt;
+  };
+  // Widest word in a string (after splitting on whitespace AND hyphens — so
+  // "Pre-Approved" doesn't force a 60pt min just because it's hyphenated).
+  const widestWordPt = (text, sizePt, bold) => {
+    const words = String(text || '').split(/[\s\-/]+/).filter(Boolean);
+    if (!words.length) return 0;
+    let max = 0;
+    for (const w of words) {
+      const wpt = measure(w, sizePt, bold);
+      if (wpt > max) max = wpt;
+    }
+    return max;
+  };
+
+  const colMetrics = columns.map((c, idx) => {
+    // Header contribution — bold, slightly larger padding allowance
+    const headWordPt = widestWordPt(c.header, HEAD_FONT_PT, true) + HEAD_PAD_PT * 2;
+    const headLinePt = measure(c.header, HEAD_FONT_PT, true) + HEAD_PAD_PT * 2;
+
+    // Body contribution — scan sampled rows
+    let bodyWordPt = 0;
+    let bodyLinePt = 0;
+    for (let i = 0; i < SAMPLE_ROWS; i++) {
+      const cell = bodyStrings[i][idx] || '';
+      // Only the first line matters for "longest word" since linebreaks fall
+      // on whitespace; but we still measure the full string for prefWidth.
+      const w = widestWordPt(cell, BODY_FONT_PT, false) + CELL_PAD_PT * 2;
+      if (w > bodyWordPt) bodyWordPt = w;
+      const ln = measure(cell, BODY_FONT_PT, false) + CELL_PAD_PT * 2;
+      if (ln > bodyLinePt) bodyLinePt = ln;
+    }
+
+    // minWidth: the column must be wide enough that the longest single word
+    // in either the header or the body fits on one line without breaking.
+    const minPt = Math.max(MIN_COL_PT, headWordPt, bodyWordPt);
+    // prefWidth: we'd like the column to fit the longest full line, but
+    // capped (long Notes / Description cells will wrap onto multiple lines —
+    // that's fine, autoTable handles it).
+    const prefPt = Math.min(PREF_CAP_PT, Math.max(minPt, headLinePt, bodyLinePt));
+
+    return { minPt, prefPt };
+  });
+
+  const sumMin  = colMetrics.reduce((s, m) => s + m.minPt,  0);
+  const sumPref = colMetrics.reduce((s, m) => s + m.prefPt, 0);
+
+  let widths;
+  if (sumPref <= usableW) {
+    // Everything fits at preferred width — distribute the slack
+    // proportionally to prefWidth so long-content columns get the extra room.
+    const slack = usableW - sumPref;
+    widths = colMetrics.map(m => m.prefPt + slack * (m.prefPt / sumPref));
+  } else if (sumMin <= usableW) {
+    // Preferred is too wide but minimums fit — start at minWidth, distribute
+    // remaining width proportionally to (prefWidth − minWidth). Columns with
+    // long content (Notes, Description) get most of the extra; fixed-format
+    // columns (Floor, Units) stay tight.
+    const slack = usableW - sumMin;
+    const sumStretch = colMetrics.reduce((s, m) => s + (m.prefPt - m.minPt), 0) || 1;
+    widths = colMetrics.map(m =>
+      m.minPt + slack * ((m.prefPt - m.minPt) / sumStretch)
+    );
+  } else {
+    // Even the minimums don't fit — the table genuinely has too many columns
+    // for landscape A4. Scale every minWidth down by the same factor.
+    // This is rare; the resulting widths still respect the MIN_COL_PT floor
+    // as much as possible by uniform scaling.
+    const scale = usableW / sumMin;
+    widths = colMetrics.map(m => m.minPt * scale);
+  }
+
   const colStyles = columns.reduce((acc, c, idx) => {
-    const w = c.width || 14;
-    acc[idx] = { cellWidth: (w / totalWeight) * usableW };
+    acc[idx] = { cellWidth: widths[idx] };
     if (c.halign) acc[idx].halign = c.halign;
     return acc;
   }, {});
 
+  // Word-aware pre-wrapping. autoTable's built-in linebreak mode happily
+  // breaks mid-word when a single word is wider than the cell — which is
+  // exactly the bug we're fixing. By pre-splitting each cell on whitespace
+  // and reassembling with explicit \n line breaks that fit the allocated
+  // column width, we guarantee whole-word wrapping for both header and body.
+  const wrapWordAware = (text, maxPt, sizePt, bold) => {
+    const s = String(text == null ? '' : text);
+    if (!s) return '';
+    doc.setFont('helvetica', bold ? 'bold' : 'normal');
+    doc.setFontSize(sizePt);
+    // Honour explicit newlines first
+    const paragraphs = s.split(/\r?\n/);
+    const out = [];
+    for (const para of paragraphs) {
+      const words = para.split(/\s+/).filter(Boolean);
+      if (!words.length) { out.push(''); continue; }
+      let line = '';
+      for (const w of words) {
+        const trial = line ? line + ' ' + w : w;
+        const trialPt = doc.getStringUnitWidth(trial) * sizePt;
+        if (trialPt <= maxPt || !line) {
+          line = trial;
+        } else {
+          out.push(line);
+          line = w;
+        }
+      }
+      if (line) out.push(line);
+    }
+    return out.join('\n');
+  };
+
+  const headerStrings = columns.map((c, idx) => {
+    const cellInnerPt = widths[idx] - HEAD_PAD_PT * 2;
+    return wrapWordAware(c.header, cellInnerPt, HEAD_FONT_PT, true);
+  });
+  const wrappedBody = bodyStrings.map(row =>
+    row.map((cell, idx) => {
+      const cellInnerPt = widths[idx] - CELL_PAD_PT * 2;
+      return wrapWordAware(cell, cellInnerPt, BODY_FONT_PT, false);
+    })
+  );
+
   doc.autoTable({
     startY: y,
-    head: [columns.map(c => c.header)],
-    body: aoa.map(r => r.map(v => v == null ? '' : (typeof v === 'number' ? _formatNumber(v) : String(v)))),
+    head: [headerStrings],
+    body: wrappedBody,
     theme: 'grid',
     tableWidth: usableW,
     styles: {
-      font: 'helvetica', fontSize: 9, cellPadding: 5,
+      font: 'helvetica', fontSize: BODY_FONT_PT, cellPadding: CELL_PAD_PT,
       textColor: REPORT_BRAND.textDarkRgb, lineColor: REPORT_BRAND.borderRgb,
       lineWidth: 0.3, overflow: 'linebreak', valign: 'top',
+      // cellWidth: 'wrap' would auto-grow cells past our allocations; we
+      // already sized them, so leave the default ('auto') and rely on
+      // columnStyles below.
     },
     headStyles: {
       fillColor: REPORT_BRAND.primaryRgb, textColor: [255, 255, 255],
-      fontSize: 9, fontStyle: 'bold', halign: 'left', cellPadding: 6,
-      lineColor: REPORT_BRAND.primaryRgb, valign: 'middle',
+      fontSize: HEAD_FONT_PT, fontStyle: 'bold', halign: 'left', cellPadding: HEAD_PAD_PT,
+      lineColor: REPORT_BRAND.primaryRgb, valign: 'middle', overflow: 'linebreak',
     },
     alternateRowStyles: { fillColor: REPORT_BRAND.surfaceRgb },
     columnStyles: colStyles,
     margin: { left: marginX, right: marginX, bottom: 36 },
+    pageBreak: 'auto',
+    rowPageBreak: 'avoid',
     didDrawPage: () => {
       const footerY = pageH - 20;
       doc.setDrawColor(...REPORT_BRAND.borderRgb);
