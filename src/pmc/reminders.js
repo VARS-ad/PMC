@@ -133,7 +133,7 @@ const PMCRemindersPage = ({ setPage }) => {
         supabaseClient.from('contracts').select('id,name,counterparty,contract_type,end_date,building_id'),
         supabaseClient.from('reminder_dismissals').select('id,source_type,source_id,lead_days,dismissal_anchor,dismissed_at,dismissed_by,note'),
         supabaseClient.from('units').select('id,unit_number,floor,building_id'),
-        supabaseClient.from('buildings').select('id,name'),
+        supabaseClient.from('buildings').select('id,name,address,property_type'),
         supabaseClient.from('profiles').select('id,full_name').eq('role','resident'),
       ]);
       const uMap = Object.fromEntries((us || []).map(u => [u.id, u]));

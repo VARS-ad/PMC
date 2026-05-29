@@ -45,7 +45,7 @@ const PMCOverviewPage = ({ setPage }) => {
       if (!supabaseClient) { setError('Supabase not initialized'); return; }
       try {
         const filterB = selectedProperties.length > 0 ? selectedProperties : null;
-        const { data: buildings } = await supabaseClient.from('buildings').select('id,name');
+        const { data: buildings } = await supabaseClient.from('buildings').select('id,name,address,property_type');
         const { data: units } = await supabaseClient.from('units').select('id,building_id,unit_number,floor');
         const filteredUnits = (units || []).filter(u => !filterB || filterB.includes(u.building_id));
         const fIds = filteredUnits.map(u => u.id);

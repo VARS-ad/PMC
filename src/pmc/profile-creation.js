@@ -263,6 +263,7 @@ const PC_TEMPLATES = {
     ],
   },
   contracts:        { label: 'Contracts',        singlePane: true },
+  documents:        { label: 'Documents',        singlePane: true },
   reminderSettings: { label: 'Reminder Email',   singlePane: true },
   invoiceDocuments: { label: 'Invoice Docs',     singlePane: true },
   amenities:        { label: 'Amenities',        readOnly: true },
@@ -418,6 +419,7 @@ const ProfileCreationPage = () => {
       )}
 
       {isSinglePane && section === 'contracts'        && <ContractsSection/>}
+      {isSinglePane && section === 'documents'        && <DocumentLibraryPage embedded/>}
       {isSinglePane && section === 'reminderSettings' && <ReminderSettingsSection/>}
       {isSinglePane && section === 'invoiceDocuments' && <InvoiceDocumentsBulkSection/>}
       {!isSinglePane && effectiveInner === 'summary' && <PCSummary section={section}/>}
