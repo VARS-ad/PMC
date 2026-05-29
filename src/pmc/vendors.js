@@ -586,7 +586,7 @@ const VendorDetailModal = ({ vendor, buildings, vendorBuildingIds, onClose, onEd
 
   return (
     <div className="modal-overlay" onClick={onClose}>
-      <div className="modal modal-wide" onClick={e => e.stopPropagation()} style={{maxWidth: 820, maxHeight: '90vh', overflowY: 'auto'}}>
+      <div className="modal modal-wide" onClick={e => e.stopPropagation()} style={{maxWidth: 1180, maxHeight: '90vh', overflowY: 'auto'}}>
         <div className="modal-header">
           <div>
             <div style={{fontSize:10, letterSpacing:'0.08em', textTransform:'uppercase', color:'var(--text-muted)', marginBottom: 4}}>{vendor.service_category}</div>
@@ -678,24 +678,24 @@ const VendorDetailModal = ({ vendor, buildings, vendorBuildingIds, onClose, onEd
               <table className="data-table" style={{fontSize: 12}}>
                 <thead>
                   <tr>
-                    <th style={{width:'11%'}}>{t('vendors.pay.th.invoice')}</th>
-                    <th style={{width:'11%'}}>{t('vendors.pay.th.date')}</th>
-                    <th style={{width:'26%'}}>{t('vendors.pay.th.description')}</th>
-                    <th style={{width:'11%',textAlign:'right'}}>{t('vendors.pay.th.amount')}</th>
-                    <th style={{width:'13%'}}>{t('vendors.pay.th.status')}</th>
+                    <th style={{width:'12%',whiteSpace:'nowrap'}}>{t('vendors.pay.th.invoice')}</th>
+                    <th style={{width:'10%',whiteSpace:'nowrap'}}>{t('vendors.pay.th.date')}</th>
+                    <th style={{width:'28%'}}>{t('vendors.pay.th.description')}</th>
+                    <th style={{width:'10%',textAlign:'right',whiteSpace:'nowrap'}}>{t('vendors.pay.th.amount')}</th>
+                    <th style={{width:'10%',whiteSpace:'nowrap'}}>{t('vendors.pay.th.status')}</th>
                     <th style={{width:'9%',textAlign:'center'}}>Invoice</th>
-                    <th style={{width:'14%',textAlign:'center'}}>Proof of payment</th>
-                    <th style={{width:'5%'}}></th>
+                    <th style={{width:'13%',textAlign:'center'}}>Proof of payment</th>
+                    <th style={{width:'4%'}}></th>
                   </tr>
                 </thead>
                 <tbody>
                   {payments.map(p => (
                     <tr key={p.id} style={{cursor:'pointer'}} onClick={() => setEditingPayment(p)}>
-                      <td>{p.invoice_number || '—'}</td>
-                      <td>{p.invoice_date || '—'}</td>
+                      <td style={{whiteSpace:'nowrap'}}>{p.invoice_number || '—'}</td>
+                      <td style={{whiteSpace:'nowrap'}}>{p.invoice_date || '—'}</td>
                       <td>{p.description}</td>
-                      <td style={{textAlign:'right'}}>{fmtAED(p.amount_aed)}</td>
-                      <td>{paymentStatusBadge(p.payment_status, t(_payKey(p.payment_status)))}</td>
+                      <td style={{textAlign:'right',whiteSpace:'nowrap'}}>{fmtAED(p.amount_aed)}</td>
+                      <td style={{whiteSpace:'nowrap'}}>{paymentStatusBadge(p.payment_status, t(_payKey(p.payment_status)))}</td>
                       <VendorSlotCell payment={p} vendorId={vendor.id} slot="invoice"/>
                       <VendorSlotCell payment={p} vendorId={vendor.id} slot="payment_receipt"/>
                       <td style={{textAlign:'right'}}><button onClick={(e) => { e.stopPropagation(); handleDeletePayment(p); }} style={{background:'none', border:'none', color:'#8b4a42', cursor:'pointer', fontSize: 11}}>×</button></td>
@@ -922,16 +922,51 @@ const PMCVendorsPage = ({ setPage }) => {
         ]}
       />
 
-      <div className="kpi-row" style={{gridTemplateColumns:'repeat(5, minmax(0, 1fr))'}}>
-        <div className="kpi-card"><div className="label">{t('vendors.kpi.total')}</div><div className="value">{counts.total}</div></div>
-        <div className="kpi-card"><div className="label">{t('vendors.kpi.active')}</div><div className="value" style={{color:'#5a6b4f'}}>{counts.active}</div></div>
-        <div className="kpi-card"><div className="label">{t('vendors.kpi.expiringSoon')}</div><div className="value" style={{color:'#a07d3c'}}>{counts.expiring}</div></div>
-        <div className="kpi-card"><div className="label">{t('vendors.kpi.expired')}</div><div className="value" style={{color:'#8b4a42'}}>{counts.expired}</div></div>
-        <div className="kpi-card" style={{cursor:'pointer', borderColor: outstandingOnly ? 'var(--bg-warm-dark)' : undefined}} onClick={() => setOutstandingOnly(!outstandingOnly)}>
-          <div className="label">{t('vendors.kpi.outstanding')}</div>
-          <div className="value" style={{color:'#8b4a42'}}>{counts.withOutstanding}</div>
-        </div>
-      </div>
+      {(() => {
+        // KPI tiles drive the status filter. Click a tile → that filter
+        // applies; click the same tile again → clears (toggle). Total
+        // clears everything; With Outstanding toggles its own flag.
+        const tileStyle = (active) => ({
+          cursor:'pointer',
+          borderColor: active ? 'var(--bg-warm-dark)' : undefined,
+          background:  active ? 'var(--accent-warm-light)' : undefined,
+          transition: 'background 0.15s, border-color 0.15s',
+        });
+        const setStatus = (s) => () => setStatusFilter(prev => prev === s ? 'all' : s);
+        const totalActive       = statusFilter === 'all' && !outstandingOnly;
+        const activeActive      = statusFilter === 'Active';
+        const expiringActive    = statusFilter === 'Expiring Soon';
+        const expiredActive     = statusFilter === 'Expired';
+        const outstandingActive = outstandingOnly;
+        return (
+          <div className="kpi-row" style={{gridTemplateColumns:'repeat(5, minmax(0, 1fr))'}}>
+            <div className="kpi-card" style={tileStyle(totalActive)}
+              onClick={() => { setStatusFilter('all'); setOutstandingOnly(false); }}
+              title="Show every maintenance company">
+              <div className="label">{t('vendors.kpi.total')}</div>
+              <div className="value">{counts.total}</div>
+            </div>
+            <div className="kpi-card" style={tileStyle(activeActive)} onClick={setStatus('Active')} title="Filter to Active contracts">
+              <div className="label">{t('vendors.kpi.active')}</div>
+              <div className="value" style={{color:'#5a6b4f'}}>{counts.active}</div>
+            </div>
+            <div className="kpi-card" style={tileStyle(expiringActive)} onClick={setStatus('Expiring Soon')} title="Filter to contracts expiring within 60 days">
+              <div className="label">{t('vendors.kpi.expiringSoon')}</div>
+              <div className="value" style={{color:'#a07d3c'}}>{counts.expiring}</div>
+            </div>
+            <div className="kpi-card" style={tileStyle(expiredActive)} onClick={setStatus('Expired')} title="Filter to expired contracts">
+              <div className="label">{t('vendors.kpi.expired')}</div>
+              <div className="value" style={{color:'#8b4a42'}}>{counts.expired}</div>
+            </div>
+            <div className="kpi-card" style={tileStyle(outstandingActive)}
+              onClick={() => setOutstandingOnly(!outstandingOnly)}
+              title="Filter to companies with outstanding payments">
+              <div className="label">{t('vendors.kpi.outstanding')}</div>
+              <div className="value" style={{color:'#8b4a42'}}>{counts.withOutstanding}</div>
+            </div>
+          </div>
+        );
+      })()}
 
       <div className="card">
         <div style={{display:'flex', gap: 12, flexWrap: 'wrap', alignItems:'flex-end', marginBottom: 14}}>

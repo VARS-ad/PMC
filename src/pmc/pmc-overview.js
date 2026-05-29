@@ -272,7 +272,7 @@ const PMCOverviewPage = ({ setPage }) => {
         const fIds = filteredUnits.map(u => u.id);
         const probe = fIds.length ? fIds : ['00000000-0000-0000-0000-000000000000'];
 
-        const [{ data: ras }, { data: invoices }, { data: srs }, { data: visits }, { data: attsForAttention }, { data: photoAtts }] = await Promise.all([
+        const [{ data: ras }, { data: invoices }, { data: srs }, { data: visits }, { data: attsForAttention }, { data: photoAtts }, { data: profiles }] = await Promise.all([
           supabaseClient.from('resident_assignments').select('profile_id,unit_id,lease_end,tenure,monthly_payment_aed').in('unit_id', probe),
           supabaseClient.from('invoices').select('id,amount_aed,status,due_date,unit_id,created_at,resident_profile_id').in('unit_id', probe),
           supabaseClient.from('service_requests').select('id,category,description,status,priority,created_at,resolved_at,unit_id,resident_profile_id').in('unit_id', probe).order('created_at', { ascending: false }),
@@ -281,6 +281,11 @@ const PMCOverviewPage = ({ setPage }) => {
           supabaseClient.from('unit_attachments').select('unit_id,kind').eq('kind', 'title_deed'),
           // First photo per unit so each Asset card can show a thumbnail.
           supabaseClient.from('unit_attachments').select('unit_id,storage_path,created_at').eq('kind', 'photo').order('created_at', { ascending: true }),
+          // Resident profiles so the overdue drill modal can resolve
+          // human names from invoice.resident_profile_id and
+          // resident_assignments.profile_id (instead of a generic
+          // "Tenant" placeholder).
+          supabaseClient.from('profiles').select('id,full_name').eq('role', 'resident'),
         ]);
         if (!mounted) return;
 
@@ -375,6 +380,10 @@ const PMCOverviewPage = ({ setPage }) => {
         // -------- Per-unit payment activity (SELECTED PERIOD) --------
         const uMap = Object.fromEntries(filteredUnits.map(u => [u.id, u]));
         const bMap = Object.fromEntries((buildings || []).map(b => [b.id, b]));
+        // Profile lookup → used by residentLabelFor so the overdue
+        // attention drill shows real resident names (e.g. "Sofia Conti")
+        // instead of a generic "Tenant" placeholder.
+        const pMap = Object.fromEntries((profiles || []).map(p => [p.id, p]));
         const enrich = (u_id, amount, count, oldest_due) => {
           const u = uMap[u_id];
           const b = u && bMap[u.building_id];
@@ -433,15 +442,30 @@ const PMCOverviewPage = ({ setPage }) => {
         // tenant_name on the unit when no assignment is found.
         const raByUnit = {};
         (ras || []).forEach(r => { if (!raByUnit[r.unit_id]) raByUnit[r.unit_id] = r; });
-        // Resident-name resolver: prefer the assignment's profile, fall
-        // back to the unit's denormalised tenant_name. Profile-name
-        // fetching is out of scope here — the resident_assignments row
-        // doesn't carry a name, so we lean on tenant_name and the unit
-        // number as the human label.
-        const residentLabelFor = (unitId) => {
+        // Resident-name resolver. Resolution order:
+        //   1) invoice.resident_profile_id → profiles.full_name (most
+        //      reliable: the invoice itself names the resident).
+        //   2) resident_assignments.profile_id → profiles.full_name
+        //      (covers units with an assignment but no invoice in scope).
+        //   3) unit.tenant_name (commercial occupants live here, e.g.
+        //      "Cobalt Engineering Ltd").
+        //   4) 'Account' — neutral fallback since the row can be either
+        //      a residential tenant or a commercial occupant.
+        // If both (1) and (2) resolve to different profiles, the invoice
+        // wins because the invoice's resident is the actually-billed
+        // party, while the resident_assignments row may lag (e.g. a
+        // recent move-in/out).
+        const residentLabelFor = (unitId, invoice) => {
+          if (invoice && invoice.resident_profile_id && pMap[invoice.resident_profile_id] && pMap[invoice.resident_profile_id].full_name) {
+            return pMap[invoice.resident_profile_id].full_name;
+          }
+          const ra = raByUnit[unitId];
+          if (ra && ra.profile_id && pMap[ra.profile_id] && pMap[ra.profile_id].full_name) {
+            return pMap[ra.profile_id].full_name;
+          }
           const u = uMap[unitId];
           if (u && u.tenant_name) return u.tenant_name;
-          return 'Tenant';
+          return 'Account';
         };
         const overdueInvs = (invoices || []).filter(i => i._eff === 'Overdue');
         if (overdueInvs.length > 0) {
@@ -453,12 +477,20 @@ const PMCOverviewPage = ({ setPage }) => {
           const dayLag = worst.due_date ? Math.max(0, Math.floor((nowLocal - new Date(worst.due_date)) / dayMsLocal)) : 0;
           // Build the per-tenant drill list: one row per unit (not per
           // invoice) so AED is summed and days-late shows the oldest.
+          // We also keep one representative invoice per unit so the row
+          // can resolve a resident_profile_id → real name.
           const byUnit = {};
           overdueInvs.forEach(i => {
-            if (!byUnit[i.unit_id]) byUnit[i.unit_id] = { amount: 0, oldest_due: null };
+            if (!byUnit[i.unit_id]) byUnit[i.unit_id] = { amount: 0, oldest_due: null, sample_invoice: i };
             byUnit[i.unit_id].amount += Number(i.amount_aed);
             if (!byUnit[i.unit_id].oldest_due || (i.due_date && i.due_date < byUnit[i.unit_id].oldest_due)) {
               byUnit[i.unit_id].oldest_due = i.due_date;
+              byUnit[i.unit_id].sample_invoice = i;
+            }
+            // Prefer an invoice that actually carries a resident_profile_id
+            // for label resolution, if the current sample doesn't have one.
+            if (!byUnit[i.unit_id].sample_invoice || !byUnit[i.unit_id].sample_invoice.resident_profile_id) {
+              if (i.resident_profile_id) byUnit[i.unit_id].sample_invoice = i;
             }
           });
           const overdueItems = Object.entries(byUnit).map(([uid, v]) => {
@@ -466,7 +498,7 @@ const PMCOverviewPage = ({ setPage }) => {
             const daysLate = v.oldest_due ? Math.max(0, Math.floor((nowLocal - new Date(v.oldest_due)) / dayMsLocal)) : 0;
             return {
               id: uid,
-              resident_name: residentLabelFor(uid),
+              resident_name: residentLabelFor(uid, v.sample_invoice),
               building_id: b ? b.id : null,
               building_name: b ? b.name : '—',
               unit_number: u ? u.unit_number : '—',
@@ -477,7 +509,7 @@ const PMCOverviewPage = ({ setPage }) => {
           attention.push({
             kind: 'overdue',
             severity: 'red',
-            title: overdueUnits + ' tenant' + (overdueUnits===1?'':'s') + ' overdue · ' + fmt(overdueTotal) + ' at risk',
+            title: overdueUnits + ' account' + (overdueUnits===1?'':'s') + ' overdue · ' + fmt(overdueTotal) + ' at risk',
             detail: 'Worst: ' + (wU ? (wU.unit_number + (wB ? ' · ' + wB.name : '')) : '—') + (dayLag ? ' · ' + dayLag + 'd late' : ''),
             page: 'payment',
             items: overdueItems,
