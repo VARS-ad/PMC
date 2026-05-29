@@ -237,7 +237,7 @@ const PMCPropertiesPage = ({ setPage }) => {
         if (['Residential','Commercial','Villa','Commercial Land'].includes(fromOverview)) return fromOverview;
       }
     } catch (_) {}
-    return 'Residential';
+    return 'Summary';
   });
   const monthsBack = ({ '1m': 1, '2m': 2, '3m': 3, '12m': 12 })[timeRange] || 1;
 
@@ -614,11 +614,172 @@ const PMCPropertiesPage = ({ setPage }) => {
           const commercialLand = buildings.filter(b => b.property_type === 'Commercial Land');
 
           const tabs = [
+            { key:'Summary',         label:'Summary',              count: buildings.length },
             { key:'Residential',     label:'Residential',          count: residential.length },
             { key:'Commercial',      label:'Commercial buildings', count: commercial.length },
             { key:'Villa',           label:'Villas',               count: villas.length },
             { key:'Commercial Land', label:'Lands',                count: commercialLand.length },
           ];
+
+          // ===== Portfolio summary (Summary tab) =====
+          // Three KPI tiles + revenue-by-type + two ranking lists. The
+          // numbers honour the same period bounds the type tabs use, so
+          // the time-range picker still drives everything you see here.
+          const renderSummary = () => {
+            const fmtMoney = (n) => 'AED ' + Math.round(Number(n) || 0).toLocaleString();
+            // Roll up every building's invoices into portfolio totals.
+            const allInvoices = (buildings || []).flatMap(b =>
+              (b.invoices || []).map(i => ({ ...i, building_id: b.id, building_name: b.name, building_ref: b }))
+            );
+            const billed      = allInvoices.reduce((s, i) => s + Number(i.amount_aed || 0), 0);
+            const collected   = allInvoices.filter(i => i.effective_status === 'Paid').reduce((s, i) => s + Number(i.amount_aed || 0), 0);
+            const outstanding = allInvoices.filter(i => ['Pending','Upcoming','Future'].includes(i.effective_status)).reduce((s, i) => s + Number(i.amount_aed || 0), 0);
+            const overduePast = allInvoices.filter(i => i.effective_status === 'Pending').reduce((s, i) => s + Number(i.amount_aed || 0), 0);
+            const collectionRate = billed > 0 ? Math.round((collected / billed) * 100) : 0;
+
+            // Revenue by construction type — billed + collected per type
+            // so the user can compare which segment converts best.
+            const typeBreakdown = [
+              { key:'Residential',     label:'Residential',          color:'#5a6b4f', list: residential },
+              { key:'Commercial',      label:'Commercial buildings', color:'#3E4C59', list: commercial },
+              { key:'Villa',           label:'Villas',               color:'#a07d3c', list: villas },
+              { key:'Commercial Land', label:'Lands',                color:'#61707D', list: commercialLand },
+            ].map(t => {
+              const tBilled = t.list.reduce((s, b) => s + (b.collected + b.pending + b.upcoming + b.future), 0);
+              const tCollected = t.list.reduce((s, b) => s + b.collected, 0);
+              return { ...t, billed: tBilled, collected: tCollected, share: billed > 0 ? (tBilled / billed) : 0, collectionRate: tBilled > 0 ? Math.round((tCollected / tBilled) * 100) : 0 };
+            }).sort((a, b) => b.billed - a.billed);
+
+            // Top revenue contributors — buildings ranked by billed.
+            const topContributors = [...buildings]
+              .map(b => ({ ...b, billed: b.collected + b.pending + b.upcoming + b.future }))
+              .filter(b => b.billed > 0)
+              .sort((a, b) => b.billed - a.billed)
+              .slice(0, 6);
+            const topMax = topContributors[0]?.billed || 1;
+
+            // Main outstanding invoices — past-due first (descending amount),
+            // then upcoming, then future. Cap at 6 so the strip stays compact.
+            const outstandingInvoices = allInvoices
+              .filter(i => ['Pending','Upcoming','Future'].includes(i.effective_status))
+              .sort((a, b) => {
+                const rank = { 'Pending': 0, 'Upcoming': 1, 'Future': 2 };
+                if (rank[a.effective_status] !== rank[b.effective_status]) return rank[a.effective_status] - rank[b.effective_status];
+                return Number(b.amount_aed || 0) - Number(a.amount_aed || 0);
+              })
+              .slice(0, 6);
+            const statusStyles = {
+              'Pending':  { bg:'#fdf2f1', fg:'#8b4a42' },
+              'Upcoming': { bg:'#fdf2dc', fg:'#7a5a1f' },
+              'Future':   { bg:'#E6EAE9', fg:'#61707D' },
+            };
+
+            const sectionEyebrowSmall = { fontSize:11, letterSpacing:'0.08em', textTransform:'uppercase', color:'var(--text-secondary)', fontWeight:600, marginBottom:12 };
+
+            return (
+              <div style={{marginBottom:40}}>
+                <div style={{...sectionEyebrow, marginBottom:18, display:'flex', alignItems:'baseline', gap:12, paddingBottom:8, borderBottom:'1px solid var(--border-light)'}}>
+                  <span>Portfolio summary</span>
+                  <span style={{color:'var(--text-muted)',fontWeight:400,letterSpacing:0,textTransform:'none',fontSize:13}}>· {buildings.length} {buildings.length === 1 ? 'asset' : 'assets'} across {typeBreakdown.filter(t => t.list.length > 0).length} types</span>
+                </div>
+
+                {/* 3 portfolio KPI tiles */}
+                <div style={{display:'grid',gridTemplateColumns:'repeat(3, minmax(0, 1fr))',gap:12,marginBottom:24}}>
+                  <PMCStat label="Total Revenue Billed" value={fmtMoney(billed)} hint={'Sum across all ' + buildings.length + ' assets in the selected period.'}/>
+                  <PMCStat label="Collected"            value={fmtMoney(collected) + ' · ' + collectionRate + '%'} color="#5a6b4f" hint="Paid invoices in the selected period."/>
+                  <PMCStat label="Outstanding"          value={fmtMoney(outstanding) + (overduePast > 0 ? '  ·  ' + fmtMoney(overduePast) + ' overdue' : '')} color={overduePast > 0 ? '#8b4a42' : 'var(--text-dark)'} hint="Pending + Upcoming + Future invoices."/>
+                </div>
+
+                {/* Revenue by construction type */}
+                <div className="card" style={{padding:'18px 22px', marginBottom:18}}>
+                  <div style={sectionEyebrowSmall}>Revenue by construction type</div>
+                  {typeBreakdown.every(t => t.billed === 0) ? (
+                    <div style={{color:'var(--text-muted)', fontSize:13, padding:'8px 0'}}>No revenue recorded in the selected period.</div>
+                  ) : typeBreakdown.map(t => {
+                    if (t.list.length === 0) return null;
+                    const sharePct = Math.round(t.share * 100);
+                    return (
+                      <div key={t.key}
+                        onClick={() => setActiveAssetType(t.key)}
+                        style={{display:'grid', gridTemplateColumns:'160px 1fr 130px 90px', gap:14, alignItems:'center', padding:'10px 6px', cursor:'pointer', borderRadius:6, transition:'background 0.12s'}}
+                        onMouseEnter={e => { e.currentTarget.style.background = 'rgba(160,125,60,0.06)'; }}
+                        onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
+                        title={'Open the ' + t.label + ' tab'}>
+                        <div style={{display:'flex', alignItems:'center', gap:8}}>
+                          <span style={{width:8, height:8, borderRadius:2, background:t.color, flexShrink:0}}/>
+                          <span style={{fontSize:13, fontWeight:500, color:'var(--text-dark)'}}>{t.label}</span>
+                          <span style={{fontSize:11, color:'var(--text-muted)'}}>· {t.list.length}</span>
+                        </div>
+                        <div style={{height:8, background:'#f4f1ec', borderRadius:4, overflow:'hidden', position:'relative'}}>
+                          <div style={{position:'absolute', left:0, top:0, bottom:0, width:(sharePct + '%'), background:t.color, transition:'width 0.3s', borderRadius:4}}/>
+                        </div>
+                        <div style={{fontSize:13, fontWeight:600, color:'var(--text-dark)', textAlign:'right'}}>{fmtMoney(t.billed)}</div>
+                        <div style={{fontSize:11, color:'var(--text-muted)', textAlign:'right'}}>
+                          {sharePct}% · {t.collectionRate}% coll
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {/* Two-up: Top contributors / Outstanding invoices */}
+                <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:18}}>
+                  {/* Top revenue contributors */}
+                  <div className="card" style={{padding:'18px 22px'}}>
+                    <div style={sectionEyebrowSmall}>Top revenue contributors</div>
+                    {topContributors.length === 0 ? (
+                      <div style={{color:'var(--text-muted)', fontSize:13, padding:'8px 0'}}>No billed revenue yet.</div>
+                    ) : topContributors.map(b => {
+                      const widthPct = Math.max(4, Math.round((b.billed / topMax) * 100));
+                      const tColor = ({ 'Residential':'#5a6b4f', 'Commercial':'#3E4C59', 'Villa':'#a07d3c', 'Commercial Land':'#61707D' })[b.property_type] || '#61707D';
+                      return (
+                        <div key={b.id}
+                          onClick={() => setFinancialAsset(b)}
+                          style={{display:'grid', gridTemplateColumns:'1fr 110px', gap:14, alignItems:'center', padding:'9px 6px', cursor:'pointer', borderRadius:6, transition:'background 0.12s'}}
+                          onMouseEnter={e => { e.currentTarget.style.background = 'rgba(160,125,60,0.06)'; }}
+                          onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
+                          title={'Open the financial summary for ' + b.name}>
+                          <div style={{minWidth:0}}>
+                            <div style={{fontSize:13, fontWeight:500, color:'var(--text-dark)', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}>{b.name}</div>
+                            <div style={{height:6, background:'#f4f1ec', borderRadius:3, overflow:'hidden', marginTop:5}}>
+                              <div style={{height:'100%', width:(widthPct + '%'), background:tColor, borderRadius:3}}/>
+                            </div>
+                          </div>
+                          <div style={{fontSize:13, fontWeight:600, color:'var(--text-dark)', textAlign:'right'}}>{fmtMoney(b.billed)}</div>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {/* Main outstanding invoices */}
+                  <div className="card" style={{padding:'18px 22px'}}>
+                    <div style={sectionEyebrowSmall}>Main outstanding invoices</div>
+                    {outstandingInvoices.length === 0 ? (
+                      <div style={{color:'#5a6b4f', fontSize:13, padding:'8px 0'}}>Nothing outstanding ✓</div>
+                    ) : outstandingInvoices.map(i => {
+                      const c = statusStyles[i.effective_status] || { bg:'#E6EAE9', fg:'#61707D' };
+                      return (
+                        <div key={i.id}
+                          onClick={() => setFinancialAsset(i.building_ref)}
+                          style={{display:'grid', gridTemplateColumns:'1fr 80px 110px', gap:10, alignItems:'center', padding:'9px 6px', cursor:'pointer', borderRadius:6, transition:'background 0.12s'}}
+                          onMouseEnter={e => { e.currentTarget.style.background = 'rgba(160,125,60,0.06)'; }}
+                          onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
+                          title={'Open ' + i.building_name + ' financial summary'}>
+                          <div style={{minWidth:0}}>
+                            <div style={{fontSize:13, fontWeight:500, color:'var(--text-dark)', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}>{i.building_name}</div>
+                            <div style={{fontSize:11, color:'var(--text-muted)', marginTop:2, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}>{i.description || i.invoice_number || '—'}</div>
+                          </div>
+                          <span style={{display:'inline-block', padding:'2px 8px', borderRadius:4, fontSize:10, fontWeight:600, background:c.bg, color:c.fg, textAlign:'center', whiteSpace:'nowrap'}}>{i.effective_status}</span>
+                          <div style={{fontSize:13, fontWeight:600, color:'var(--text-dark)', textAlign:'right'}}>{fmtMoney(i.amount_aed)}</div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+            );
+          };
+
           return (
             <>
               <div style={{display:'flex', gap:4, marginBottom:24, borderBottom:'1px solid var(--border-light)'}}>
@@ -640,6 +801,7 @@ const PMCPropertiesPage = ({ setPage }) => {
                   );
                 })}
               </div>
+              {activeAssetType === 'Summary'         && renderSummary()}
               {activeAssetType === 'Residential'     && renderSection('Residential',     'Residential',     residential)}
               {activeAssetType === 'Commercial'      && renderSection('Commercial',      'Commercial',      commercial)}
               {activeAssetType === 'Villa'           && renderSection('Villas',          'Villa',           villas)}
