@@ -57,7 +57,17 @@ const STOCK_BUILDING_PHOTOS = {
     'https://images.unsplash.com/photo-1587293852726-70cdb56c2866?w=1600&auto=format&fit=crop&q=85',
   ],
 };
-const pickStockPhoto = (assetId, propertyType) => {
+// Per-building hard overrides — used when two assets of the same
+// property_type happen to hash to the same stock photo (so the user
+// sees identical cards), or when a specific asset needs a more
+// recognisable look (e.g. lush forest villa).
+const BUILDING_PHOTO_OVERRIDES = {
+  'Marina Trade Centre':         'https://images.unsplash.com/photo-1577415124269-fc1140a69e91?w=1600&auto=format&fit=crop&q=85',
+  'Boulevard Plaza Offices':     'https://images.unsplash.com/photo-1497366754035-f200968a6e72?w=1600&auto=format&fit=crop&q=85',
+  'Al Barari Forest Villa F-3':  'https://images.unsplash.com/photo-1600585154340-be6161a56a0c?w=1600&auto=format&fit=crop&q=85',
+};
+const pickStockPhoto = (assetId, propertyType, name) => {
+  if (name && BUILDING_PHOTO_OVERRIDES[name]) return BUILDING_PHOTO_OVERRIDES[name];
   const pool = STOCK_BUILDING_PHOTOS[propertyType] || STOCK_BUILDING_PHOTOS['Residential'];
   const idx = Math.abs((assetId || '').split('').reduce((a, c) => a + c.charCodeAt(0), 0)) % pool.length;
   return pool[idx];
@@ -82,7 +92,7 @@ const AssetCardPhoto = ({ storagePath, assetId, typeChipColor, propertyType, nam
   //            like an actual building rather than a placeholder
   // 3rd pick: the designed initials cover (kept as defensive fallback
   //            if Unsplash is unreachable)
-  const effectiveUrl = url || pickStockPhoto(assetId, propertyType);
+  const effectiveUrl = url || pickStockPhoto(assetId, propertyType, name);
   if (effectiveUrl) {
     return (
       <div style={{position:'relative',height,background:'url(' + effectiveUrl + ') center/cover no-repeat',borderBottom:'1px solid var(--border-light)'}}>
