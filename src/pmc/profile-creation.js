@@ -1023,6 +1023,10 @@ const PCBulkUpload = ({ section }) => {
   // Lets the preview show ONLY that type's columns (e.g. residential should
   // never display Plot area / Villa count / Commercial use / GLA / Parking).
   const [previewType, setPreviewType] = useState(null);
+  // Live progress for the in-flight upload — { label, current, total }.
+  // uploadBuildingsBulk calls back on every building / unit / onboarding
+  // step so the UI can show a percent + a description of what it's doing.
+  const [progress, setProgress] = useState(null);
 
   // For Buildings ('Assets') each property type has its own Upload control
   // wired to its own header list (Residential / Commercial / Villa /
@@ -1057,9 +1061,10 @@ const PCBulkUpload = ({ section }) => {
   const submit = async () => {
     if (!parsedRows || parsedRows.length === 0) return;
     setUploading(true); setError(null); setResults(null);
+    setProgress({ label: 'Preparing…', current: 0, total: 0 });
     try {
       if (section === 'buildings') {
-        const res = await uploadBuildingsBulk(parsedRows, conflictMode);
+        const res = await uploadBuildingsBulk(parsedRows, conflictMode, (p) => setProgress(p));
         setResults(res);
         // Tell the TopBar (and any other listener) to re-fetch buildings so
         // newly-onboarded properties appear in the property selector and
@@ -1108,6 +1113,7 @@ const PCBulkUpload = ({ section }) => {
       setError(String(e.message || e));
     }
     setUploading(false);
+    setProgress(null);
   };
 
   return (
@@ -1307,9 +1313,38 @@ const PCBulkUpload = ({ section }) => {
                 </table>
                 {parsedRows.length > 50 && <div style={{padding:8,fontSize:11,color:'var(--text-muted)',textAlign:'center'}}>… and {parsedRows.length - 50} more rows.</div>}
               </div>
-              <button className="btn btn-primary" style={{marginTop:14}} disabled={uploading} onClick={submit}>
-                {uploading ? 'Uploading…' : 'Create ' + parsedRows.length + ' record' + (parsedRows.length === 1 ? '' : 's')}
-              </button>
+              {(() => {
+                const pct = progress && progress.total > 0
+                  ? Math.min(100, Math.round((progress.current / progress.total) * 100))
+                  : null;
+                return (
+                  <>
+                    <button className="btn btn-primary" style={{marginTop:14}} disabled={uploading} onClick={submit}>
+                      {uploading
+                        ? (pct != null ? 'Uploading… ' + pct + '%' : 'Uploading…')
+                        : 'Create ' + parsedRows.length + ' record' + (parsedRows.length === 1 ? '' : 's')}
+                    </button>
+                    {uploading && progress && (
+                      <div style={{marginTop:12,padding:'12px 14px',background:'var(--bg-surface)',border:'1px solid var(--border-light)',borderRadius:8}}>
+                        <div style={{display:'flex',justifyContent:'space-between',gap:10,fontSize:12,color:'var(--text-secondary)',marginBottom:8}}>
+                          <span style={{whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{progress.label || 'Working…'}</span>
+                          <span style={{fontWeight:600,color:'var(--text-dark)',whiteSpace:'nowrap'}}>
+                            {progress.total > 0 ? `${progress.current} / ${progress.total}` : ''}{pct != null ? ` · ${pct}%` : ''}
+                          </span>
+                        </div>
+                        <div style={{width:'100%',height:6,background:'#e6eae9',borderRadius:3,overflow:'hidden'}}>
+                          <div style={{
+                            width: (pct != null ? pct : 0) + '%',
+                            height:'100%',
+                            background:'#3E4C59',
+                            transition:'width 0.2s ease',
+                          }}/>
+                        </div>
+                      </div>
+                    )}
+                  </>
+                );
+              })()}
             </div>
           );
         })()}
@@ -1493,7 +1528,16 @@ async function downloadCurrentBuildingsAsXlsx(typeKey) {
   downloadAsXlsx(cfg.filename + '-current-' + stamp, cfg.headers, rows);
 }
 
-async function uploadBuildingsBulk(parsedRows, conflictMode = 'skip') {
+async function uploadBuildingsBulk(parsedRows, conflictMode = 'skip', onProgress = null) {
+  // Yield to the React render thread between steps so the progress bar
+  // actually paints — otherwise the whole synchronous-await chain blocks
+  // until the end and the bar jumps from 0% straight to 100%.
+  const report = (label, current, total) => {
+    if (onProgress) {
+      try { onProgress({ label, current, total }); } catch (_) {}
+    }
+  };
+  const yieldToUi = () => new Promise(r => setTimeout(r, 0));
   const results = [];
   const residentRecords = []; // accumulated for one bulk-onboard call at the end
   const buildingMap = {};
@@ -1609,9 +1653,20 @@ async function uploadBuildingsBulk(parsedRows, conflictMode = 'skip') {
     }
   }
 
-  for (const bname of Object.keys(buildingMap)) {
+  // Total progress steps = one per building + one per unit + one final
+  // bulk-onboard step (always 1 unit of work, even if it ends up no-op).
+  const buildingNames = Object.keys(buildingMap);
+  const totalUnitsAcrossBuildings = buildingNames.reduce((s, n) => s + (buildingMap[n].units.length || 1), 0);
+  const totalSteps = buildingNames.length + totalUnitsAcrossBuildings + 1;
+  let step = 0;
+  report('Starting…', 0, totalSteps);
+
+  for (const bname of buildingNames) {
     const b = buildingMap[bname];
     const propType = (b.property_type || 'Residential').toString().trim();
+    step++;
+    report('Processing ' + bname, step, totalSteps);
+    await yieldToUi();
     if (!validPropTypes.has(propType)) {
       results.push({ building: bname, ok: false, error: 'Unknown Property type "' + propType + '" — must be one of: Residential, Commercial, Villa, Commercial Land.' });
       continue;
@@ -1660,7 +1715,14 @@ async function uploadBuildingsBulk(parsedRows, conflictMode = 'skip') {
       const { data: existingUnits } = await supabaseClient.from('units').select('id,unit_number').eq('building_id', buildingId);
       const existingByNumber = Object.fromEntries((existingUnits || []).map(u => [u.unit_number || '__solo__', u]));
 
+      let unitIdx = 0;
       for (const u of b.units) {
+        unitIdx++;
+        step++;
+        report(bname + ' · unit ' + (u.unit_number || unitIdx) + ' (' + unitIdx + '/' + b.units.length + ')', step, totalSteps);
+        // Yield every 5 units so the progress bar paints without slowing
+        // the upload down too much. (Network roundtrip is the real cost.)
+        if (unitIdx % 5 === 0) await yieldToUi();
         const owner = u.owner || b.defaultOwner;
         const ownerPayload = owner ? {
           owner_name:             owner.name             || null,
@@ -1748,6 +1810,11 @@ async function uploadBuildingsBulk(parsedRows, conflictMode = 'skip') {
           residentsQueued++;
         }
       }
+    } else {
+      // Building had no units to process — still consume the one
+      // "phantom" step we reserved in totalSteps so the bar advances.
+      step++;
+      report(bname + ' · no units', step, totalSteps);
     }
     results.push({ building: bname, ok: true, action: buildingAction, property_type: propType, units_added: unitsAdded, units_skipped: unitsSeen - unitsAdded, residents_queued: residentsQueued, tenants_recorded: tenantsRecorded });
   }
@@ -1757,7 +1824,10 @@ async function uploadBuildingsBulk(parsedRows, conflictMode = 'skip') {
   // + conflict mode in a single round-trip. Result rows for residents are
   // surfaced to the caller alongside the building rows.
   let residentResults = [];
+  step++;
   if (residentRecords.length > 0) {
+    report('Onboarding ' + residentRecords.length + ' resident' + (residentRecords.length === 1 ? '' : 's') + '…', step, totalSteps);
+    await yieldToUi();
     try {
       const { data: { session } } = await supabaseClient.auth.getSession();
       const headers = { 'Content-Type': 'application/json' };
@@ -1771,7 +1841,10 @@ async function uploadBuildingsBulk(parsedRows, conflictMode = 'skip') {
     } catch (e) {
       residentResults = [{ ok: false, error: 'Resident onboarding failed: ' + (e.message || e) }];
     }
+  } else {
+    report('No residents to onboard', step, totalSteps);
   }
+  report('Done', totalSteps, totalSteps);
   return { results, resident_results: residentResults };
 }
 
