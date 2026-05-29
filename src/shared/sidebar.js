@@ -2,23 +2,27 @@
 const Sidebar = ({ page, setPage, isOpen, onClose, onLogout }) => {
   const { t } = useApp();
 
-  // Three-group sidebar: Dashboard (analytical surfaces),
-  // Operational (day-to-day workflow), Settings (admin / setup).
-  // Mirrors the supervisor app sidebar pattern.
+  // Three-group sidebar:
+  //   Dashboard   — analytical surfaces (Overview, Assets, Reports, Vendors)
+  //   Operational — day-to-day workflow (SRs, Announcements, Visitors,
+  //                 Guards, Reminders)
+  //   Settings    — admin / setup (Database)
+  // Operating Revenue (formerly under Dashboard) was removed: its content
+  // now lives on Assets → Summary. Vendors moved up to Dashboard since
+  // the user treats it as analytical rather than day-to-day.
   const groups = [
     { label: 'Dashboard', items: [
       { id: 'overview',    label: 'Overview',          icon: 'overview' },
       { id: 'properties',  label: t('nav.properties'), icon: 'properties' },
-      { id: 'payment',     label: t('nav.payment'),    icon: 'payment' },
       { id: 'reports',     label: t('nav.reports'),    icon: 'reports' },
+      { id: 'vendors',     label: t('nav.vendors'),    icon: 'vendors' },
     ]},
     { label: 'Operational', items: [
       { id: 'service',         label: t('nav.service'),       icon: 'service' },
-      { id: 'reminders',       label: 'Reminders',            icon: 'announcements' },
       { id: 'announcements',   label: t('nav.announcements'), icon: 'announcements' },
       { id: 'visitors',        label: t('nav.visitors'),      icon: 'visitors' },
-      { id: 'vendors',         label: t('nav.vendors'),       icon: 'vendors' },
       { id: 'guards',          label: t('nav.guards'),        icon: 'guards' },
+      { id: 'reminders',       label: 'Reminders',            icon: 'announcements' },
     ]},
     { label: 'Settings', items: [
       { id: 'profileCreation', label: 'Database',              icon: 'reports' },
