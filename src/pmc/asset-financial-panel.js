@@ -129,12 +129,31 @@ const AssetFinancialPanel = ({ building, onClose }) => {
     .map(r => ({ ...r, paid_pct: r.billed > 0 ? Math.round(100 * r.collected / r.billed) : null }))
     .sort((a, b) => b.billed - a.billed);
 
-  // ---- 12-month chart series (independent of period) -----------------
+  // ---- Chart series — matches the selected period --------------------
+  // The chart walks (year, month) buckets from periodStartIso →
+  // periodEndIso. 1m preset = 1 bar; 24m = 24 bars; custom 15 Mar →
+  // 28 May = 3 bars. Empty months inside the range still draw so the
+  // shape of the timeline is intact.
   const series = [];
-  for (let i = 11; i >= 0; i--) {
-    const d = new Date(today.getFullYear(), today.getMonth() - i, 1);
-    const key = d.toISOString().slice(0, 7);
-    series.push({ month: key, label: d.toLocaleString('en-GB', { month: 'short' }), collected: 0, outstanding: 0 });
+  {
+    const startD = new Date(periodStartIso); startD.setDate(1);
+    const endD   = new Date(periodEndIso);   endD.setDate(1);
+    const cursor = new Date(startD);
+    // Defensive cap — pathological custom ranges shouldn't draw 500 bars.
+    let guard = 0;
+    while (cursor <= endD && guard < 120) {
+      const key = cursor.toISOString().slice(0, 7);
+      // Year suffix on the label when the range spans multiple years
+      // so 'Mar 2025' and 'Mar 2026' don't read the same.
+      const showYear = startD.getFullYear() !== endD.getFullYear();
+      series.push({
+        month: key,
+        label: cursor.toLocaleString('en-GB', { month: 'short' }) + (showYear ? ' ' + String(cursor.getFullYear()).slice(2) : ''),
+        collected: 0, outstanding: 0,
+      });
+      cursor.setMonth(cursor.getMonth() + 1);
+      guard++;
+    }
   }
   const byMonth = Object.fromEntries(series.map(s => [s.month, s]));
   for (const i of annotated) {
@@ -144,6 +163,10 @@ const AssetFinancialPanel = ({ building, onClose }) => {
     if (i.effective_status === 'Paid') bucket.collected += Number(i.amount_aed || 0);
     else if (i.effective_status === 'Pending' || i.effective_status === 'Upcoming') bucket.outstanding += Number(i.amount_aed || 0);
   }
+  // Totals for the period — the headline strip sitting above the chart.
+  const chartCollected = series.reduce((s, m) => s + m.collected, 0);
+  const chartOutstanding = series.reduce((s, m) => s + m.outstanding, 0);
+  const chartBilled = chartCollected + chartOutstanding;
 
   // ---- Hand-drawn SVG chart (replaces Chart.js) ----------------------
   // SVG sidesteps the canvas sizing race entirely AND gives us pixel-
@@ -191,16 +214,46 @@ const AssetFinancialPanel = ({ building, onClose }) => {
       ? ((padLeft + (hoveredIdx + 0.5) * groupW) / W) * 100
       : 0;
 
+    // Skip every other month label when bars get tight, so 24-month
+    // ranges stay readable instead of a wall of overlapping text.
+    const showLabel = (i) => data.length <= 18 || i % 2 === 0;
+
     return (
       <div style={{position:'relative'}}>
         <svg viewBox={'0 0 ' + W + ' ' + H} preserveAspectRatio="xMidYMid meet" style={{display:'block',width:'100%',height:280,overflow:'visible'}}>
+          {/* SVG defs — gradients give the bars a subtle two-tone depth;
+              the soft drop shadow lifts them off the background. */}
+          <defs>
+            <linearGradient id="afp-grad-collected" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%"  stopColor="#7e8f73"/>
+              <stop offset="100%" stopColor="#475641"/>
+            </linearGradient>
+            <linearGradient id="afp-grad-collected-hi" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%"  stopColor="#9aa78f"/>
+              <stop offset="100%" stopColor="#5a6b4f"/>
+            </linearGradient>
+            <linearGradient id="afp-grad-outstanding" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%"  stopColor="#b87870"/>
+              <stop offset="100%" stopColor="#7e3f36"/>
+            </linearGradient>
+            <linearGradient id="afp-grad-outstanding-hi" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%"  stopColor="#c89289"/>
+              <stop offset="100%" stopColor="#8b4a42"/>
+            </linearGradient>
+            <filter id="afp-bar-shadow" x="-30%" y="-30%" width="160%" height="160%">
+              <feGaussianBlur in="SourceAlpha" stdDeviation="2.2"/>
+              <feOffset dx="0" dy="2.5"/>
+              <feComponentTransfer><feFuncA type="linear" slope="0.18"/></feComponentTransfer>
+              <feMerge><feMergeNode/><feMergeNode in="SourceGraphic"/></feMerge>
+            </filter>
+          </defs>
           {/* Gridlines + Y labels */}
           {Array.from({ length: ySteps + 1 }).map((_, i) => {
             const v = i * step;
             const ly = y(v);
             return (
               <g key={i}>
-                <line x1={padLeft} x2={W - padRight} y1={ly} y2={ly} stroke="#eef0ec" strokeWidth="1"/>
+                <line x1={padLeft} x2={W - padRight} y1={ly} y2={ly} stroke="#eef0ec" strokeDasharray={i === 0 ? '0' : '3 4'} strokeWidth="1"/>
                 <text x={padLeft - 10} y={ly + 4} fontSize="12" fill="#8a98a2" textAnchor="end" fontFamily="inherit">{fmtTick(v)}</text>
               </g>
             );
@@ -217,6 +270,8 @@ const AssetFinancialPanel = ({ building, onClose }) => {
             const isHovered = hoveredIdx === i;
             const isSelected = selectedMonth && selectedMonth === d.month;
             const dim = (selectedMonth || hoveredIdx != null) && !isHovered && !isSelected;
+            const fillCol = isHovered || isSelected ? 'url(#afp-grad-collected-hi)' : 'url(#afp-grad-collected)';
+            const fillOut = isHovered || isSelected ? 'url(#afp-grad-outstanding-hi)' : 'url(#afp-grad-outstanding)';
             return (
               <g key={i}
                 style={{cursor:'pointer'}}
@@ -225,23 +280,35 @@ const AssetFinancialPanel = ({ building, onClose }) => {
                 onClick={() => onSelectMonth && onSelectMonth(isSelected ? null : d.month)}>
                 {/* Lane highlight on hover / selected */}
                 {(isHovered || isSelected) && (
-                  <rect x={laneX + 2} y={padTop - 4} width={groupW - 4} height={chartH + 8} fill={isSelected ? '#3E4C59' : '#131F23'} opacity={isSelected ? 0.07 : 0.04} rx="6"/>
+                  <rect x={laneX + 2} y={padTop - 4} width={groupW - 4} height={chartH + 8} fill={isSelected ? '#3E4C59' : '#131F23'} opacity={isSelected ? 0.07 : 0.04} rx="8"/>
                 )}
                 {/* Invisible click-target spanning the lane */}
                 <rect x={laneX} y={padTop - 4} width={groupW} height={chartH + 32} fill="transparent" pointerEvents="all"/>
-                {/* Outstanding (top, slate-red) */}
+                {/* Outstanding (top, slate-red gradient) */}
                 {outH > 0 && (
-                  <rect x={cx} y={outY} width={barW} height={Math.max(2, outH)} fill="#8b4a42" opacity={dim ? 0.3 : 0.82} rx="4" ry="4" style={{transition:'opacity 0.15s'}}/>
+                  <rect x={cx} y={outY} width={barW} height={Math.max(2, outH)}
+                    fill={fillOut} opacity={dim ? 0.4 : 0.92} rx="5" ry="5"
+                    filter="url(#afp-bar-shadow)"
+                    style={{transition:'opacity 0.18s ease, fill 0.18s ease'}}/>
                 )}
-                {/* Collected (bottom, slate-green) */}
+                {/* Collected (bottom, slate-green gradient) */}
                 {colH > 0 && (
-                  <rect x={cx} y={colY} width={barW} height={Math.max(2, colH)} fill="#5a6b4f" opacity={dim ? 0.32 : 1} rx="4" ry="4" style={{transition:'opacity 0.15s'}}/>
+                  <rect x={cx} y={colY} width={barW} height={Math.max(2, colH)}
+                    fill={fillCol} opacity={dim ? 0.45 : 1} rx="5" ry="5"
+                    filter="url(#afp-bar-shadow)"
+                    style={{transition:'opacity 0.18s ease, fill 0.18s ease'}}/>
+                )}
+                {/* Highlight strip on top of Collected — adds a polished sheen */}
+                {colH > 4 && (
+                  <rect x={cx + 1.5} y={colY + 1.5} width={Math.max(0, barW - 3)} height={2} fill="#ffffff" opacity={dim ? 0.04 : 0.18} rx="1.5" pointerEvents="none"/>
                 )}
                 {/* Month label */}
-                <text x={cx + barW / 2} y={padTop + chartH + 22} fontSize="12" fill={isSelected ? '#131F23' : '#61707D'} fontWeight={isSelected ? 700 : 400} textAnchor="middle" fontFamily="inherit">{d.label}</text>
-                {/* Total value above the bar — only when the bar has data */}
+                {showLabel(i) && (
+                  <text x={cx + barW / 2} y={padTop + chartH + 22} fontSize="12" fill={isSelected ? '#131F23' : '#61707D'} fontWeight={isSelected ? 700 : 500} textAnchor="middle" fontFamily="inherit">{d.label}</text>
+                )}
+                {/* Total value above the bar — only when bar has data */}
                 {monthly > 0 && !isHovered && (
-                  <text x={cx + barW / 2} y={Math.max(padTop + 10, outY - 8)} fontSize="11" fill="#131F23" textAnchor="middle" fontWeight="600" fontFamily="inherit" opacity={dim ? 0.35 : 1}>{fmtTick(monthly)}</text>
+                  <text x={cx + barW / 2} y={Math.max(padTop + 10, outY - 9)} fontSize="11" fill="#131F23" textAnchor="middle" fontWeight="700" fontFamily="inherit" opacity={dim ? 0.4 : 1}>{fmtTick(monthly)}</text>
                 )}
               </g>
             );
@@ -416,8 +483,26 @@ const AssetFinancialPanel = ({ building, onClose }) => {
             </Section>
 
             {/* 12-month chart */}
-            <Section label="Income Timeline · 12 months" right={<span style={{fontSize:11,color:'var(--text-muted)'}}>Collected vs outstanding · click a bar to filter</span>}>
+            <Section label={'Income Timeline · ' + (series.length === 1 ? '1 month' : series.length + ' months')} right={<span style={{fontSize:11,color:'var(--text-muted)'}}>{periodLabel} · click a bar to filter</span>}>
               <div style={{background:'#fff',border:'1px solid var(--border-light)',borderRadius:10,padding:'18px 22px'}}>
+                {/* Totals strip directly above the chart — same period
+                    as the bars so the headline reads at a glance. */}
+                <div style={{display:'flex',gap:32,alignItems:'baseline',flexWrap:'wrap',paddingBottom:14,marginBottom:14,borderBottom:'1px solid var(--border-light)'}}>
+                  <div>
+                    <div style={{fontSize:10,letterSpacing:'0.08em',textTransform:'uppercase',color:'var(--text-secondary)',fontWeight:600,marginBottom:4}}>Total Billed</div>
+                    <div style={{fontSize:20,fontWeight:600,letterSpacing:'-0.018em',color:'var(--text-dark)',lineHeight:1}}>{fmt(chartBilled)}</div>
+                  </div>
+                  <div style={{width:1,height:36,background:'var(--border-light)'}}/>
+                  <div>
+                    <div style={{fontSize:10,letterSpacing:'0.08em',textTransform:'uppercase',color:'var(--text-secondary)',fontWeight:600,marginBottom:4}}>Collected</div>
+                    <div style={{fontSize:20,fontWeight:600,letterSpacing:'-0.018em',color:'#5a6b4f',lineHeight:1}}>{fmt(chartCollected)}</div>
+                  </div>
+                  <div style={{width:1,height:36,background:'var(--border-light)'}}/>
+                  <div>
+                    <div style={{fontSize:10,letterSpacing:'0.08em',textTransform:'uppercase',color:'var(--text-secondary)',fontWeight:600,marginBottom:4}}>Outstanding</div>
+                    <div style={{fontSize:20,fontWeight:600,letterSpacing:'-0.018em',color: chartOutstanding > 0 ? '#8b4a42' : 'var(--text-dark)',lineHeight:1}}>{fmt(chartOutstanding)}</div>
+                  </div>
+                </div>
                 <TimelineChart data={series} selectedMonth={selectedMonth} onSelectMonth={setSelectedMonth}/>
               </div>
             </Section>
