@@ -1311,7 +1311,10 @@ const PCBulkUpload = ({ section }) => {
         })()}
         {results && (
           <div style={{marginTop:16,padding:14,background:'var(--bg-surface)',borderRadius:8,border:'1px solid var(--border-light)'}}>
-            <div style={{fontSize:13,fontWeight:600,marginBottom:8}}>Upload results</div>
+            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8,gap:12,flexWrap:'wrap'}}>
+              <div style={{fontSize:13,fontWeight:600}}>Upload results</div>
+              <button type="button" className="btn btn-sm" onClick={clearPreview} title="Reset every picker, preview, and these results so you can start a fresh upload.">Clear all & start over</button>
+            </div>
             <BulkUploadResults section={section} results={results}/>
           </div>
         )}
