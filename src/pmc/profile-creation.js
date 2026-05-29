@@ -433,6 +433,10 @@ const PCSummary = ({ section }) => {
   const [selectedBuilding, setSelectedBuilding] = useState(null);
   const [editing, setEditing] = useState(null); // { kind: 'building' | 'resident' | 'security', record }
   const [viewingResident, setViewingResident] = useState(null);
+  // Cascade-delete confirm modal. Shape: { building, counts, deleting }
+  // where counts has units / residents / invoices / etc. so the user
+  // sees exactly what's about to be erased before confirming.
+  const [deleteConfirm, setDeleteConfirm] = useState(null);
 
   const reload = async () => {
     setError(null); setRows(null);
@@ -622,17 +626,58 @@ const PCSummary = ({ section }) => {
       (byType[t] = byType[t] || []).push(b);
     });
     const fmtNum = (n) => (n == null ? '—' : Number(n).toLocaleString());
-    const deleteBuilding = (b) => {
-      if (!window.confirm('Delete "' + b.name + '" and all its ' + (b.units||[]).length + ' unit(s)? This cannot be undone.')) return;
-      supabaseClient.from('buildings').delete().eq('id', b.id).then(({error}) => {
-        if (error) alert('Delete failed: ' + error.message); else reload();
-      });
+    // Two-step delete: first open the modal with live dependent counts, then
+    // call the cascading RPC on confirm. The RPC drops residents'
+    // assignments, invoices, visits, SRs, attachments, bookings, vendor
+    // links, security assignments, contracts, units, and the building in
+    // one transaction so the FK constraints are satisfied.
+    const openDeleteConfirm = async (b) => {
+      setDeleteConfirm({ building: b, counts: null, deleting: false });
+      // Count dependents in parallel so the modal can show the user what
+      // they're about to erase. Each query is scoped to this building.
+      try {
+        const { data: unitRows } = await supabaseClient.from('units').select('id').eq('building_id', b.id);
+        const unitIds = (unitRows || []).map(u => u.id);
+        const counts = { units: unitIds.length, residents: 0, invoices: 0, visits: 0, srs: 0, attachments: 0, bookings: 0 };
+        if (unitIds.length > 0) {
+          const [ra, inv, vis, srs, att, bk] = await Promise.all([
+            supabaseClient.from('resident_assignments').select('profile_id', { count: 'exact', head: true }).in('unit_id', unitIds),
+            supabaseClient.from('invoices').select('id', { count: 'exact', head: true }).in('unit_id', unitIds),
+            supabaseClient.from('visits').select('id', { count: 'exact', head: true }).in('unit_id', unitIds),
+            supabaseClient.from('service_requests').select('id', { count: 'exact', head: true }).in('unit_id', unitIds),
+            supabaseClient.from('unit_attachments').select('id', { count: 'exact', head: true }).in('unit_id', unitIds),
+            supabaseClient.from('amenity_bookings').select('id', { count: 'exact', head: true }).in('unit_id', unitIds),
+          ]);
+          counts.residents   = ra.count   || 0;
+          counts.invoices    = inv.count  || 0;
+          counts.visits      = vis.count  || 0;
+          counts.srs         = srs.count  || 0;
+          counts.attachments = att.count  || 0;
+          counts.bookings    = bk.count   || 0;
+        }
+        setDeleteConfirm(prev => prev && prev.building.id === b.id ? { ...prev, counts } : prev);
+      } catch (_) {
+        setDeleteConfirm(prev => prev && prev.building.id === b.id ? { ...prev, counts: { units: 0, residents: 0, invoices: 0, visits: 0, srs: 0, attachments: 0, bookings: 0 } } : prev);
+      }
+    };
+    const performCascadeDelete = async () => {
+      if (!deleteConfirm || !deleteConfirm.building) return;
+      setDeleteConfirm(prev => ({ ...prev, deleting: true }));
+      const { error: rpcErr } = await supabaseClient.rpc('delete_building_cascade', { p_building_id: deleteConfirm.building.id });
+      if (rpcErr) {
+        alert('Delete failed: ' + rpcErr.message);
+        setDeleteConfirm(prev => ({ ...prev, deleting: false }));
+        return;
+      }
+      setDeleteConfirm(null);
+      try { window.dispatchEvent(new CustomEvent('vars:buildings-changed')); } catch (_) {}
+      reload();
     };
     const editBtn = (b) => (
       <button onClick={(e) => { e.stopPropagation(); setEditing({ kind: 'building', record: b }); }} style={{padding:'4px 10px',fontSize:11,background:'#fff',border:'1px solid #D0D6D5',borderRadius:4,color:'var(--text-dark)',cursor:'pointer',marginRight:6}}>Edit</button>
     );
     const delBtn = (b) => (
-      <button onClick={(e) => { e.stopPropagation(); deleteBuilding(b); }} style={{padding:'4px 10px',fontSize:11,background:'#fff',border:'1px solid #D0D6D5',borderRadius:4,color:'#8b4a42',cursor:'pointer'}}>Delete</button>
+      <button onClick={(e) => { e.stopPropagation(); openDeleteConfirm(b); }} style={{padding:'4px 10px',fontSize:11,background:'#fff',border:'1px solid #D0D6D5',borderRadius:4,color:'#8b4a42',cursor:'pointer'}}>Delete</button>
     );
     const tableFor = (type, list) => {
       const isStructure = type === 'Residential' || type === 'Commercial';
@@ -723,6 +768,59 @@ const PCSummary = ({ section }) => {
         })}
         {selectedBuilding && <BuildingDetailModal building={selectedBuilding} onClose={() => setSelectedBuilding(null)}/>}
         {editing && <EditRecordModal kind={editing.kind} record={editing.record} onClose={() => setEditing(null)} onSaved={reload}/>}
+        {deleteConfirm && (() => {
+          const { building, counts, deleting } = deleteConfirm;
+          const T = { ink:'#131F23', muted:'#61707D', border:'#E6EAE9', danger:'#8b4a42', dangerBg:'#fdf2f1', warm:'#F4EEE4' };
+          const rows = counts && [
+            { label: 'Units',                count: counts.units },
+            { label: 'Resident assignments', count: counts.residents },
+            { label: 'Invoices',             count: counts.invoices },
+            { label: 'Visits',               count: counts.visits },
+            { label: 'Service requests',     count: counts.srs },
+            { label: 'Unit attachments',     count: counts.attachments },
+            { label: 'Amenity bookings',     count: counts.bookings },
+          ];
+          return (
+            <div onClick={() => { if (!deleting) setDeleteConfirm(null); }} style={{position:'fixed',inset:0,background:'rgba(19,31,35,0.5)',zIndex:9999,display:'flex',alignItems:'center',justifyContent:'center',padding:20}}>
+              <div onClick={e => e.stopPropagation()} style={{background:'#fff',borderRadius:12,maxWidth:520,width:'100%',border:'1px solid '+T.border,boxShadow:'0 20px 60px rgba(19,31,35,0.25)',overflow:'hidden'}}>
+                <div style={{padding:'20px 24px 16px',borderBottom:'1px solid '+T.border,background:T.dangerBg}}>
+                  <div style={{fontSize:11,letterSpacing:'0.1em',textTransform:'uppercase',color:T.danger,fontWeight:600,marginBottom:4}}>Permanent deletion</div>
+                  <div style={{fontSize:18,fontWeight:600,color:T.ink}}>Delete "{building.name}"?</div>
+                </div>
+                <div style={{padding:'18px 24px 8px',fontSize:13,color:T.muted,lineHeight:1.55}}>
+                  This action cannot be undone. The building and every row that references it will be permanently removed from the database.
+                </div>
+                <div style={{padding:'4px 24px 16px'}}>
+                  {!counts ? (
+                    <div style={{padding:'12px 0',fontSize:12,color:T.muted}}>Loading impacted records…</div>
+                  ) : (
+                    <div style={{background:T.warm,borderRadius:8,padding:'10px 14px'}}>
+                      <div style={{fontSize:11,letterSpacing:'0.06em',textTransform:'uppercase',color:T.muted,fontWeight:600,marginBottom:8}}>Will also delete</div>
+                      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'6px 18px'}}>
+                        {rows.map(r => (
+                          <div key={r.label} style={{display:'flex',justifyContent:'space-between',fontSize:12,color:r.count > 0 ? T.ink : T.muted}}>
+                            <span>{r.label}</span>
+                            <span style={{fontWeight:600}}>{r.count}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+                <div style={{padding:'14px 24px 18px',background:'#FAFAFA',borderTop:'1px solid '+T.border,display:'flex',justifyContent:'flex-end',gap:10}}>
+                  <button type="button" disabled={deleting} onClick={() => setDeleteConfirm(null)}
+                    style={{padding:'9px 16px',fontSize:13,fontWeight:500,background:'#fff',border:'1px solid '+T.border,borderRadius:6,cursor: deleting ? 'default' : 'pointer',color:T.ink}}>
+                    Cancel
+                  </button>
+                  <button type="button" disabled={deleting || !counts} onClick={performCascadeDelete}
+                    style={{padding:'9px 18px',fontSize:13,fontWeight:500,background:T.danger,border:'none',borderRadius:6,cursor:(deleting || !counts) ? 'default' : 'pointer',color:'#fff',opacity:(deleting || !counts) ? 0.6 : 1}}>
+                    {deleting ? 'Deleting…' : 'Delete permanently'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          );
+        })()}
       </>
     );
   }
