@@ -77,12 +77,27 @@ const AssetCardPhoto = ({ storagePath, assetId, typeChipColor, propertyType, nam
     });
     return () => { mounted = false; };
   }, [storagePath]);
+  // Probe the candidate URL with `new Image()` so we can detect 404 /
+  // Unsplash rate-limit failures and fall back to the designed cover
+  // instead of showing an empty card (`background:url(...)` swallows
+  // load errors silently).
+  const candidateUrl = url || pickStockPhoto(assetId, propertyType);
+  const [imgOk, setImgOk] = useState(true);
+  useEffect(() => {
+    if (!candidateUrl) { setImgOk(false); return; }
+    setImgOk(true);
+    const probe = new Image();
+    probe.onload  = () => setImgOk(true);
+    probe.onerror = () => setImgOk(false);
+    probe.src = candidateUrl;
+    return () => { probe.onload = probe.onerror = null; };
+  }, [candidateUrl]);
   // 1st pick: real uploaded photo (signed URL from Supabase storage)
   // 2nd pick: a curated Unsplash stock photo by property type — looks
   //            like an actual building rather than a placeholder
   // 3rd pick: the designed initials cover (kept as defensive fallback
   //            if Unsplash is unreachable)
-  const effectiveUrl = url || pickStockPhoto(assetId, propertyType);
+  const effectiveUrl = (candidateUrl && imgOk) ? candidateUrl : null;
   if (effectiveUrl) {
     return (
       <div style={{position:'relative',height,background:'url(' + effectiveUrl + ') center/cover no-repeat',borderBottom:'1px solid var(--border-light)'}}>
