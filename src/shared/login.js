@@ -151,11 +151,18 @@ const LoginPage = ({ onLogin, syncStatus }) => {
     if (!supabaseClient)           { safeSetError('Sign-up is not available right now.'); return; }
     setSubmitting(true);
     try {
-      const { data, error: signErr } = await supabaseClient.auth.signUp({
+      // Hard 20s timeout on the signup call so the user is never stuck
+      // on "Working…". Supabase normally responds in 1-3s; anything
+      // longer almost always means SMTP is misconfigured and the
+      // confirmation email is timing out somewhere.
+      const signupCall = supabaseClient.auth.signUp({
         email,
         password,
         options: { data: { full_name: (fullName || '').trim() || null } },
       });
+      const timeoutCall = new Promise((_, rej) =>
+        setTimeout(() => rej(new Error('Sign-up is taking longer than expected. Email delivery may be misconfigured — try again, or contact support if this keeps happening.')), 20000));
+      const { data, error: signErr } = await Promise.race([signupCall, timeoutCall]);
       if (signErr) { safeSetError(signErr); setSubmitting(false); return; }
       if (data && data.session) {
         // Already signed in — set currentUser and route to PMC overview.
