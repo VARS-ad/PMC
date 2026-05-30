@@ -52,25 +52,34 @@ try {
     // level flag so LoginPage can recover it synchronously on mount.
     try {
       window._varspmAuthCallback = null;
+      // Snapshot the URL right now so we can correlate later events with
+      // whether we actually landed from an auth link.
+      const _urlAtLoad = (typeof window !== 'undefined' && window.location)
+        ? (window.location.pathname + window.location.search + window.location.hash) : '';
+      console.log('[auth] URL at load:', _urlAtLoad);
       supabaseClient.auth.onAuthStateChange((event, session) => {
+        console.log('[auth] event:', event, 'session?', !!session, 'user?', session && session.user && session.user.email);
         if (event === 'PASSWORD_RECOVERY') {
+          console.log('[auth] PASSWORD_RECOVERY captured -> setting kind=recovery');
           window._varspmAuthCallback = { kind: 'recovery' };
           window.dispatchEvent(new CustomEvent('varspm:auth-callback', { detail: { kind: 'recovery' } }));
         } else if (event === 'SIGNED_IN' && !window._varspmAuthCallback) {
-          // Only treat SIGNED_IN as a confirm callback if the URL still
-          // carries a code= or access_token= signal (i.e. we just landed
-          // from an email link). Otherwise this fires on every normal
-          // sign-in.
           const u = (typeof window !== 'undefined' && window.location)
             ? (window.location.hash + window.location.search) : '';
-          if (/access_token=/.test(u) || /[?&]code=/.test(u)) {
+          // Use the snapshot too — supabase JS strips the URL after the
+          // exchange so by the time SIGNED_IN fires, .hash/.search may
+          // already be clean.
+          const hadAuthParams = /access_token=/.test(_urlAtLoad) || /[?&]code=/.test(_urlAtLoad)
+                             || /access_token=/.test(u) || /[?&]code=/.test(u);
+          console.log('[auth] SIGNED_IN — had auth params?', hadAuthParams);
+          if (hadAuthParams) {
             const email = (session && session.user && session.user.email) || '';
             window._varspmAuthCallback = { kind: 'confirm', email };
             window.dispatchEvent(new CustomEvent('varspm:auth-callback', { detail: { kind: 'confirm', email } }));
           }
         }
       });
-    } catch (_) {}
+    } catch (e) { console.log('[auth] listener setup failed:', e.message); }
   } else {
     console.log('createClient not found. supabase type:', typeof _sb, 'keys:', _sb ? Object.keys(_sb) : 'N/A');
   }
