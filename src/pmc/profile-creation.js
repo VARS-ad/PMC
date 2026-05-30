@@ -274,21 +274,6 @@ function downloadAsXlsx(filename, headers, rows) {
   window.XLSX.writeFile(wb, filename + '.xlsx');
 }
 
-function downloadAsCsv(filename, headers, rows) {
-  const esc = (v) => {
-    if (v == null) return '';
-    const s = String(v);
-    return /[,"\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
-  };
-  const csv = [headers, ...rows].map(r => r.map(esc).join(',')).join('\n');
-  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = filename + '.csv';
-  a.click();
-  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
-}
-
 async function parseUploadedFile(file) {
   if (!window.XLSX) throw new Error('XLSX library not available');
   const isCsv = /\.csv$/i.test(file.name);
@@ -927,11 +912,8 @@ const PCSummary = ({ section }) => {
       <>
       <div className="card">
         <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:12,gap:10,flexWrap:'wrap'}}>
-          <div style={{display:'flex',alignItems:'center',gap:10}}>
-            <span style={{display:'inline-block',padding:'4px 10px',borderRadius:10,background:'var(--bg-surface)',border:'1px solid var(--border-light)',fontSize:12,fontWeight:600,color:'var(--text-dark)'}}>
-              {rows.length} maintenance compan{rows.length === 1 ? 'y' : 'ies'}
-            </span>
-            <span style={{fontSize:12,color:'var(--text-muted)'}}>· click a row to view documents & payments</span>
+          <div style={{fontSize:13,color:'var(--text-muted)'}}>
+            {rows.length} maintenance compan{rows.length === 1 ? 'y' : 'ies'} · click a row to view documents & payments
           </div>
           <button className="btn btn-sm" onClick={reload}>Refresh</button>
         </div>
@@ -1303,7 +1285,6 @@ const PCBulkUpload = ({ section }) => {
                   <div style={{fontSize:14,fontWeight:600,color:'var(--text-dark)',letterSpacing:'-0.01em'}}>{t.label}</div>
                   <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
                     <button className="btn btn-sm btn-primary" onClick={() => downloadAsXlsx(t.filename, t.headers, t.examples)}>Download .xlsx</button>
-                    <button className="btn btn-sm" onClick={() => downloadAsCsv(t.filename, t.headers, t.examples)}>Download .csv</button>
                   </div>
                 </div>
                 <div className="data-table-scroll">
@@ -1336,11 +1317,8 @@ const PCBulkUpload = ({ section }) => {
 
           <div className="card">
             <div style={{fontSize:12,letterSpacing:'0.1em',textTransform:'uppercase',color:'var(--text-secondary)',marginBottom:8,fontWeight:600}}>2 · Download template</div>
-            <div style={{fontSize:13,color:'var(--text-muted)',marginBottom:16}}>Same rows as above, in your preferred format.</div>
-            <div style={{display:'flex',gap:10}}>
-              <button className="btn btn-primary" onClick={() => downloadAsXlsx(cfg.filename, cfg.headers, cfg.examples)}>Download .xlsx</button>
-              <button className="btn" onClick={() => downloadAsCsv(cfg.filename, cfg.headers, cfg.examples)}>Download .csv</button>
-            </div>
+            <div style={{fontSize:13,color:'var(--text-muted)',marginBottom:16}}>Excel template with the example rows ready to replace.</div>
+            <button className="btn btn-primary" onClick={() => downloadAsXlsx(cfg.filename, cfg.headers, cfg.examples)}>Download .xlsx</button>
           </div>
         </>
       )}
