@@ -6,8 +6,14 @@ const DEVICE_ID = (function() {
   if (!id) { id = 'dev_' + Math.random().toString(36).slice(2) + Date.now(); localStorage.setItem('varspm_device_id', id); }
   return id;
 })();
-const SUPABASE_URL = 'https://khhguxuxvkxvycndkron.supabase.co';
-const SUPABASE_KEY = 'sb_publishable_JFWXeWDyB2_-po46Qyu6rA_HH7Uueyj';
+// Supabase target — replaced at build time by build.mjs.
+//   working build (default) → "VARS - PMC" project
+//   demo build (--target=demo) → "VARS - Demo" project
+// In dev mode (no build, babel-standalone in the browser) the placeholders
+// are left literal — the IIFEs detect that and fall back to the working
+// project so opening index.html directly still works.
+const SUPABASE_URL = (() => { const v = '@@SUPABASE_URL@@'; return v.startsWith('@@') ? 'https://khhguxuxvkxvycndkron.supabase.co' : v; })();
+const SUPABASE_KEY = (() => { const v = '@@SUPABASE_KEY@@'; return v.startsWith('@@') ? 'sb_publishable_JFWXeWDyB2_-po46Qyu6rA_HH7Uueyj' : v; })();
 
 let supabaseClient = null;
 let supabaseReady = false;

@@ -1,14 +1,16 @@
 // Production build: compiles JSX in src/**/*.js to plain JS using esbuild,
 // then assembles a self-contained dist/ folder for GitHub Pages.
 //
-// Two modes:
-//   node build.mjs            — one-shot prod build into dist/
-//   node build.mjs --watch    — keep dist/ in sync as src/ changes AND
-//                               serve it on http://localhost:8080. Open
-//                               that URL instead of index.html directly
-//                               so the browser runs the pre-compiled
-//                               files and skips the ~700KB babel-
-//                               standalone transpile on every reload.
+// Modes:
+//   node build.mjs                       — one-shot prod build (working Supabase)
+//   node build.mjs --watch               — watch + serve dev (working Supabase)
+//   node build.mjs --target=demo         — one-shot prod build (demo Supabase)
+//   node build.mjs --target=demo --watch — watch + serve dev (demo Supabase)
+//
+// The --target flag selects which Supabase project the built bundle talks
+// to. The supabase-client.js source carries placeholder strings (@@SUPABASE_URL@@,
+// @@SUPABASE_KEY@@); we replace them per target right before esbuild
+// transpiles the file. Anything else in src/ is left alone.
 
 import { promises as fs } from 'node:fs';
 import fsSync from 'node:fs';
@@ -21,6 +23,42 @@ const DIST_DIR = 'dist';
 const INDEX_HTML = 'index.html';
 const WATCH = process.argv.includes('--watch');
 const SERVE_PORT = 8080;
+
+// ----- Supabase target config -----
+// Add new targets here. Each entry must carry { url, key, label }. The
+// label is only used for the build banner so the developer can see at
+// a glance which project the bundle is pointing at.
+const TARGETS = {
+  working: {
+    label: 'VARS - PMC (working / production)',
+    url:   'https://khhguxuxvkxvycndkron.supabase.co',
+    key:   'sb_publishable_JFWXeWDyB2_-po46Qyu6rA_HH7Uueyj',
+  },
+  demo: {
+    label: 'VARS - PMC Demo (prospect playground)',
+    url:   'https://ftcdcyigzownsabzqsoi.supabase.co',
+    key:   'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZ0Y2RjeWlnem93bnNhYnpxc29pIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODAxMjg0NDksImV4cCI6MjA5NTcwNDQ0OX0.PhhsACa9ninyZE0K_ghdIgvp1-XemGVgyzZ2-Zmsd9g',
+  },
+};
+const TARGET_KEY = (() => {
+  const arg = process.argv.find(a => a.startsWith('--target='));
+  if (!arg) return 'working';
+  const v = arg.split('=')[1];
+  if (!TARGETS[v]) {
+    console.error('Unknown --target=' + v + '. Known: ' + Object.keys(TARGETS).join(', '));
+    process.exit(1);
+  }
+  return v;
+})();
+const TARGET = TARGETS[TARGET_KEY];
+// File-path → placeholder map. Only the supabase client needs swaps today,
+// but keeping the lookup table here means adding more later is one line.
+const PLACEHOLDER_REPLACEMENTS = {
+  'src/lib/supabase-client.js': [
+    [/@@SUPABASE_URL@@/g, TARGET.url],
+    [/@@SUPABASE_KEY@@/g, TARGET.key],
+  ],
+};
 
 async function walk(dir) {
   const out = [];
@@ -36,7 +74,15 @@ async function transpileFile(file, { minify }) {
   const out = path.join(DIST_DIR, file);
   await fs.mkdir(path.dirname(out), { recursive: true });
   if (file.endsWith('.js')) {
-    const source = await fs.readFile(file, 'utf8');
+    let source = await fs.readFile(file, 'utf8');
+    // Apply per-target placeholder swaps before transpilation. The file's
+    // own IIFE-with-startsWith check makes unreplaced placeholders fall
+    // back to the working project, so dev mode (no build step) still works.
+    const norm = file.split(path.sep).join('/');
+    const repls = PLACEHOLDER_REPLACEMENTS[norm];
+    if (repls) {
+      for (const [pat, val] of repls) source = source.replace(pat, val);
+    }
     const result = await esbuild.transform(source, {
       loader: 'jsx',
       jsx: 'transform',
@@ -148,6 +194,7 @@ function startDevServer() {
 }
 
 async function main() {
+  console.log('Supabase target: ' + TARGET_KEY + ' (' + TARGET.label + ')');
   if (WATCH) {
     const { transformed, copied } = await fullBuild({ minify: false });
     console.log('Initial build: ' + transformed + ' JS, ' + copied + ' assets.');

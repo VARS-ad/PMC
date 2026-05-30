@@ -5,8 +5,10 @@
   "description": "VARS Property Manager — static SPA. Source uses JSX (compiled to plain JS by build.mjs for production).",
   "type": "module",
   "scripts": {
-    "build": "node build.mjs",
-    "dev": "node build.mjs --watch"
+    "build":      "node build.mjs",
+    "build:demo": "node build.mjs --target=demo",
+    "dev":        "node build.mjs --watch",
+    "dev:demo":   "node build.mjs --target=demo --watch"
   },
   "devDependencies": {
     "esbuild": "^0.25.0"
