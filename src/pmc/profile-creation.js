@@ -1122,14 +1122,12 @@ const BuildingDetailModal = ({ building, onClose }) => {
                   const hoverBg    = occ ? '#d8e6cf' : '#fbeccf';
                   const borderCol  = occ ? '#c8d4be' : '#efe1be';
                   const labelCol   = occ ? '#3d4d33' : '#7a5a1f';
-                  const dotColor   = occ ? '#5a6b4f' : '#a07d3c';
                   return (
                     <div key={u.id} onClick={() => setSelectedUnit(u)}
                       style={{position:'relative',padding:'10px 10px',border:'1px solid ' + borderCol,borderRadius:6,fontSize:12,fontWeight:600,background: restBg,color: labelCol,textAlign:'center',cursor:'pointer',transition:'background 0.15s, border-color 0.15s'}}
                       onMouseEnter={e => { e.currentTarget.style.background = hoverBg; }}
                       onMouseLeave={e => { e.currentTarget.style.background = restBg; }}
                       title={unitChipTitle(u) + ' · ' + (occ ? 'Occupied' : 'Vacant')}>
-                      <span aria-hidden="true" style={{position:'absolute',top:6,right:6,width:9,height:9,borderRadius:'50%',background:dotColor,boxShadow:'0 0 0 2px ' + restBg}}/>
                       {u.unit_number}
                     </div>
                   );
