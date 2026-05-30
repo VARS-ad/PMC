@@ -511,8 +511,8 @@ const LoginPage = ({ onLogin, syncStatus }) => {
         visibility: splashStage === 'ready' ? 'visible' : 'hidden'}}>
         {/* Header — VARS brand mark side-by-side (icon + wordmark in a row).
             Wordmark is the visual anchor; the icon sits to its left. */}
-        <div style={{display:'flex',flexDirection:'column',alignItems:'center',marginBottom:32}}>
-          <div style={{display:'flex',alignItems:'center',gap:12}}>
+        <div style={{display:'flex',flexDirection:'column',alignItems:'center',marginBottom:32,width:'100%'}}>
+          <div style={{display:'inline-flex',alignItems:'center',justifyContent:'center',gap:12}}>
             <svg width="42" height="42" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg" aria-label="VARS" style={{display:'block',flexShrink:0}}>
               <rect width="100" height="100" rx="4" fill="#3E4C59"/>
               <path d="M33.3 16.7 L50 16.7 L58.1 25.2 L66.7 33.3 L66.7 83.3 L50 83.3 L33.3 66.7 Z" fill="#ffffff"/>
