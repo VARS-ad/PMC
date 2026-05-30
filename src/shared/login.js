@@ -13,8 +13,21 @@ const LoginPage = ({ onLogin, syncStatus }) => {
   const [error, setError] = useState('');
   // Splash sequence: 'splash' (full-screen intro) → 'transition' (fade out
   // splash + fade in login card) → 'ready' (login card only).
-  const [splashStage, setSplashStage] = useState('splash');
+  // Skip the whole sequence when we just came back from a logout — the
+  // brand intro is for first arrivals, not for someone signing in again
+  // after they explicitly signed out. The flag is set by handleLogout in
+  // app.js and consumed here so the very next mount starts in 'ready'.
+  const [splashStage, setSplashStage] = useState(() => {
+    try {
+      if (sessionStorage.getItem('varspm_just_logged_out') === '1') {
+        sessionStorage.removeItem('varspm_just_logged_out');
+        return 'ready';
+      }
+    } catch (_) {}
+    return 'splash';
+  });
   useEffect(() => {
+    if (splashStage === 'ready') return;
     // ~3.0s of full-visibility static + 0.7s fade = ~3.7s total so the
     // welcome tagline has time to be read on first arrival.
     const t1 = setTimeout(() => setSplashStage('transition'), 3000);

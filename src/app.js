@@ -257,6 +257,10 @@ const App = () => {
   const handleLogout = () => {
     try { localStorage.removeItem('varspm_role'); } catch(e) {}
     if (supabaseClient) { try { supabaseClient.auth.signOut(); } catch(e) {} }
+    // Mark this transition so LoginPage skips the brand splash — coming
+    // back to the login screen from a logout shouldn't play the welcome
+    // animation again. The flag is consumed on the next LoginPage mount.
+    try { sessionStorage.setItem('varspm_just_logged_out', '1'); } catch(e) {}
     setRole(null);
   };
 
