@@ -316,20 +316,18 @@ const LoginPage = ({ onLogin, syncStatus }) => {
       <div className="login-card" style={{maxWidth:460,padding:'40px 44px',border:'1px solid var(--border-light)',boxShadow:'0 8px 40px rgba(146,137,137,0.18)',borderRadius:14,
         animation: splashStage === 'ready' ? 'vars-login-in .55s cubic-bezier(.2,.7,.2,1) both' : 'none',
         visibility: splashStage === 'ready' ? 'visible' : 'hidden'}}>
-        {/* Header — VARS brand mark, explicitly centered with a flex column.
-            Was relying on textAlign:center + inline-flex which let the
-            asymmetric icon+wordmark slide slightly left of true centre.
-            flex-direction:column + alignItems:center guarantees both the
-            lockup and the eyebrow sit on the card's vertical axis. */}
+        {/* Header — VARS brand mark stacked vertically (icon on top of
+            wordmark). Side-by-side lockup kept reading slightly off-axis
+            because the door icon's visual weight pulled the row left of
+            true centre. Stacked matches the splash screen and is a clean
+            centre regardless of card width. */}
         <div style={{display:'flex',flexDirection:'column',alignItems:'center',marginBottom:32}}>
-          <div style={{display:'flex',alignItems:'center',gap:14,marginBottom:10}}>
-            <svg width="56" height="56" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg" aria-label="VARS">
-              <rect width="100" height="100" rx="4" fill="#3E4C59"/>
-              <path d="M33.3 16.7 L50 16.7 L58.1 25.2 L66.7 33.3 L66.7 83.3 L50 83.3 L33.3 66.7 Z" fill="#ffffff"/>
-            </svg>
-            <h1 style={{fontSize:38,fontWeight:500,letterSpacing:'-0.01em',margin:0,color:'#131F23',lineHeight:1}}>VARS</h1>
-          </div>
-          <p style={{fontSize:10,letterSpacing:'0.16em',textTransform:'uppercase',color:'var(--text-secondary)',margin:'8px 0 0',fontWeight:400,textAlign:'center'}}>{t('login.subtitle')}</p>
+          <svg width="50" height="50" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg" aria-label="VARS" style={{display:'block'}}>
+            <rect width="100" height="100" rx="4" fill="#3E4C59"/>
+            <path d="M33.3 16.7 L50 16.7 L58.1 25.2 L66.7 33.3 L66.7 83.3 L50 83.3 L33.3 66.7 Z" fill="#ffffff"/>
+          </svg>
+          <h1 style={{fontSize:36,fontWeight:500,letterSpacing:'-0.01em',margin:'12px 0 0',color:'#131F23',lineHeight:1}}>VARS</h1>
+          <p style={{fontSize:10,letterSpacing:'0.16em',textTransform:'uppercase',color:'var(--text-secondary)',margin:'14px 0 0',fontWeight:400,textAlign:'center'}}>{t('login.subtitle')}</p>
         </div>
 
         {/* Demo: a quiet outlined "Create a free demo account" pill above
