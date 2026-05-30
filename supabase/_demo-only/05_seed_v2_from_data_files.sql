@@ -149,11 +149,11 @@ BEGIN
   BEGIN
     FOR cfg IN
       SELECT * FROM (VALUES
-        (b_aljil,   5, 4, 'A'),
-        (b_skyline, 4, 5, 'S'),
-        (b_qurm,    5, 4, 'Q'),
-        (b_marina,  4, 3, ''),
-        (b_boulev,  4, 3, '')
+        (b_aljil,   5, 5, 'A'),  -- 25 units
+        (b_skyline, 5, 5, 'S'),  -- 25 units
+        (b_qurm,    5, 5, 'Q'),  -- 25 units
+        (b_marina,  5, 4, ''),   -- 20 commercial
+        (b_boulev,  5, 4, '')    -- 20 commercial
       ) AS x(bid, floors, ups, prefix)
     LOOP
       FOR i IN 1..cfg.floors LOOP
@@ -340,33 +340,108 @@ BEGIN
     (v_urban,b_skyline,p_uid),(v_urban,b_qurm,p_uid);
 
   -- =========================================================================
-  -- 7. Invoices (~110, spread across 6 months)
+  -- 7. Invoices (~200, spread across 12 months — residents + commercial)
   -- =========================================================================
   DECLARE
     rec record;
     i int := 0;
+    seq int := 0;
     inv_due date; inv_created date;
   BEGIN
-    -- One invoice per tenant resident per month, last 5 months + current month
+    -- Residential tenant invoices: each tenant gets 6 months of invoices
     FOR rec IN
       SELECT ra.profile_id, ra.unit_id, COALESCE(ra.monthly_payment_aed, 9000) AS amt
       FROM public.resident_assignments ra
       WHERE ra.owner_id = p_uid AND ra.tenure = 'Tenant'
       ORDER BY ra.unit_id
     LOOP
+      seq := seq + 1;
       FOR i IN 0..5 LOOP
         inv_created := (date_trunc('month', current_date) - (i * interval '1 month'))::date + 1;
         inv_due     := inv_created + 5;
         INSERT INTO public.invoices (invoice_number, unit_id, resident_profile_id, description, amount_aed, status, due_date, created_at, owner_id)
-          VALUES ('RNT-' || to_char(inv_created, 'YYYYMM') || '-' || substr(rec.unit_id::text, 1, 4),
+          VALUES ('RNT-' || to_char(inv_created, 'YYYYMM') || '-' || lpad(seq::text, 4, '0'),
                   rec.unit_id, rec.profile_id, 'Monthly rent - ' || to_char(inv_created, 'Mon YYYY'),
                   rec.amt,
                   CASE
                     WHEN i = 0 THEN 'Pending'
-                    WHEN i = 1 AND ((rec.unit_id::text)::bytea)[0] % 5 = 0 THEN 'Overdue'
+                    WHEN i = 1 AND seq % 5 = 0 THEN 'Overdue'
                     ELSE 'Paid'
                   END,
                   inv_due, inv_created, p_uid);
+      END LOOP;
+    END LOOP;
+
+    -- Commercial tenant invoices: each occupied commercial unit gets 4 months
+    FOR rec IN
+      SELECT u.id AS unit_id, u.tenant_monthly_payment_aed AS amt
+      FROM public.units u
+      WHERE u.owner_id = p_uid
+        AND u.tenant_name IS NOT NULL
+        AND u.tenant_monthly_payment_aed IS NOT NULL
+      ORDER BY u.unit_number
+    LOOP
+      seq := seq + 1;
+      FOR i IN 0..3 LOOP
+        inv_created := (date_trunc('month', current_date) - (i * interval '1 month'))::date + 1;
+        inv_due     := inv_created + 5;
+        INSERT INTO public.invoices (invoice_number, unit_id, resident_profile_id, description, amount_aed, status, due_date, created_at, owner_id)
+          VALUES ('CMT-' || to_char(inv_created, 'YYYYMM') || '-' || lpad(seq::text, 4, '0'),
+                  rec.unit_id, NULL, 'Office lease - ' || to_char(inv_created, 'Mon YYYY'),
+                  rec.amt,
+                  CASE WHEN i = 0 THEN 'Pending' WHEN i = 1 AND seq % 7 = 0 THEN 'Overdue' ELSE 'Paid' END,
+                  inv_due, inv_created, p_uid);
+      END LOOP;
+    END LOOP;
+
+    -- Service charge invoices for all owner-occupied residential units (4/yr)
+    FOR rec IN
+      SELECT ra.profile_id, ra.unit_id, 3500 AS amt
+      FROM public.resident_assignments ra
+      WHERE ra.owner_id = p_uid AND ra.tenure = 'Owner'
+      ORDER BY ra.unit_id
+      LIMIT 30
+    LOOP
+      seq := seq + 1;
+      FOR i IN 0..1 LOOP
+        inv_created := (date_trunc('month', current_date) - (i * interval '3 month'))::date + 1;
+        inv_due     := inv_created + 14;
+        INSERT INTO public.invoices (invoice_number, unit_id, resident_profile_id, description, amount_aed, status, due_date, created_at, owner_id)
+          VALUES ('SCG-' || to_char(inv_created, 'YYYYMM') || '-' || lpad(seq::text, 4, '0'),
+                  rec.unit_id, rec.profile_id, 'Service charge - Q' || to_char(inv_created, 'Q YYYY'),
+                  rec.amt,
+                  CASE WHEN i = 0 THEN 'Pending' ELSE 'Paid' END,
+                  inv_due, inv_created, p_uid);
+      END LOOP;
+    END LOOP;
+  END;
+
+  -- =========================================================================
+  -- 7b. Unit attachments — photo / title_deed / layout metadata for each unit
+  --     (Storage objects don't actually exist; the app shows placeholder cards
+  --      when it can't fetch them, but the rows make the Document database
+  --      table actually have content.)
+  -- =========================================================================
+  DECLARE
+    rec record;
+    kinds text[] := ARRAY['photo','title_deed','layout','other'];
+    i int := 0;
+    n_per int;
+    k_idx int;
+  BEGIN
+    FOR rec IN
+      SELECT u.id AS unit_id, u.unit_number FROM public.units u
+      WHERE u.owner_id = p_uid
+      ORDER BY u.unit_number
+    LOOP
+      i := i + 1;
+      n_per := 2 + (i % 3);   -- 2-4 attachments per unit
+      FOR k_idx IN 1..n_per LOOP
+        INSERT INTO public.unit_attachments (unit_id, kind, storage_path, file_name, mime_type, size_bytes, owner_id)
+          VALUES (rec.unit_id, kinds[1 + ((i + k_idx) % array_length(kinds, 1))],
+                  rec.unit_id::text || '/' || kinds[1 + ((i + k_idx) % array_length(kinds, 1))] || '-' || k_idx || '.jpg',
+                  'unit-' || rec.unit_number || '-' || kinds[1 + ((i + k_idx) % array_length(kinds, 1))] || '-' || k_idx || '.jpg',
+                  'image/jpeg', 250000 + ((i*13 + k_idx*7) % 800000), p_uid);
       END LOOP;
     END LOOP;
   END;
@@ -462,3 +537,18 @@ DROP TRIGGER IF EXISTS on_demo_user_signup ON auth.users;
 CREATE TRIGGER on_demo_user_signup
   AFTER INSERT ON auth.users
   FOR EACH ROW EXECUTE FUNCTION public.seed_demo_user_portfolio();
+
+
+-- -----------------------------------------------------------------------------
+-- 3. Backfill — re-seed every existing demo user with the new data shape so
+--    you don't need to delete + re-sign-up to see it.
+-- -----------------------------------------------------------------------------
+DO $$
+DECLARE
+  u record;
+BEGIN
+  FOR u IN SELECT id FROM auth.users LOOP
+    PERFORM public.seed_demo_portfolio_for(u.id);
+  END LOOP;
+END $$;
+
