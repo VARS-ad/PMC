@@ -19,10 +19,44 @@ const AnnouncementsPage = () => {
   const [composerStep, setComposerStep] = useState(1);
   const [showDelete, setShowDelete] = useState(null);
   const [editingAnn, setEditingAnn] = useState(null);
-  const [annForm, setAnnForm] = useState({ title: '', body: '', priority: 'Normal', audience: 'All Residents', publishMode: 'now', ackRequired: false, scheduleDate: '', scheduleTime: '' });
+  // Audience is now a structured object: { scope: 'all'|'specific',
+  // building_ids: [], building_names: [], property_types: [] }. Legacy
+  // string audiences ("All Residents", "Tower B") survive on existing
+  // rows via audienceLabel() and are converted on edit.
+  const initialAudience = () => ({ scope: 'all', building_ids: [], building_names: [], property_types: [] });
+  const [annForm, setAnnForm] = useState({ title: '', body: '', priority: 'Normal', audience: initialAudience(), publishMode: 'now', scheduleDate: '', scheduleTime: '', attachment: null });
   const [submitting, setSubmitting] = useState(false);
+  // Buildings for the audience picker — loaded from Supabase on first
+  // composer open and cached for the rest of the session.
+  const [audBuildings, setAudBuildings] = useState(null);
+  useEffect(() => {
+    if (!showComposer || audBuildings || !supabaseClient) return;
+    (async () => {
+      const { data: bs } = await supabaseClient.from('buildings').select('id,name,property_type').order('name');
+      setAudBuildings(bs || []);
+    })();
+  }, [showComposer]);
 
-  const resetForm = () => setAnnForm({ title: '', body: '', priority: 'Normal', audience: 'All Residents', publishMode: 'now', ackRequired: false, scheduleDate: '', scheduleTime: '' });
+  const resetForm = () => setAnnForm({ title: '', body: '', priority: 'Normal', audience: initialAudience(), publishMode: 'now', scheduleDate: '', scheduleTime: '', attachment: null });
+
+  // Convert any legacy string audience to a structured object for the form.
+  const audienceFromAnn = (raw) => {
+    if (raw && typeof raw === 'object') {
+      return {
+        scope: raw.scope || 'all',
+        building_ids:   Array.isArray(raw.building_ids)   ? raw.building_ids   : [],
+        building_names: Array.isArray(raw.building_names) ? raw.building_names : [],
+        property_types: Array.isArray(raw.property_types) ? raw.property_types : [],
+      };
+    }
+    if (typeof raw === 'string') {
+      if (!raw || raw === 'All Residents' || raw === 'All Residents + Guards') return initialAudience();
+      // Best-effort: dump the legacy string in building_names so the user
+      // can re-pick the right buildings from the proper list.
+      return { scope: 'specific', building_ids: [], building_names: [raw], property_types: [] };
+    }
+    return initialAudience();
+  };
 
   // Tab semantics (per product spec):
   //   Live      — already published AND not past its expiry/display-until date
@@ -97,12 +131,20 @@ const AnnouncementsPage = () => {
     const dateStr = formatDateShort(now);
     const status = annForm.publishMode === 'now' ? 'Live' : annForm.publishMode === 'schedule' ? 'Scheduled' : 'Draft';
 
+    // Attachment metadata: file object isn't persistable, so capture
+    // name/size/type for the audit trail. (Upload to storage is Phase 2.)
+    const attachmentMeta = annForm.attachment ? {
+      name: annForm.attachment.name,
+      size: annForm.attachment.size,
+      type: annForm.attachment.type,
+    } : null;
     if (editingAnn) {
       setData(prev => ({
         ...prev,
         announcements: prev.announcements.map(a => a.id === editingAnn.id ? {
-          ...a, title: annForm.title, audience: annForm.audience, priority: annForm.priority, ackRequired: annForm.ackRequired, status: status, body: annForm.body,
-          scheduleDate: annForm.scheduleDate, scheduleTime: annForm.scheduleTime
+          ...a, title: annForm.title, audience: annForm.audience, priority: annForm.priority, status: status, body: annForm.body,
+          scheduleDate: annForm.scheduleDate, scheduleTime: annForm.scheduleTime,
+          attachment: attachmentMeta || a.attachment || null,
         } : a)
       }));
       showToast('Announcement updated');
@@ -116,12 +158,12 @@ const AnnouncementsPage = () => {
         created: dateStr + ', ' + timeStr,
         status: status,
         priority: annForm.priority,
-        ackRequired: annForm.ackRequired,
         delivered: status === 'Live' ? 1240 : 0,
         read: 0,
         acknowledged: 0,
         scheduleDate: annForm.scheduleDate,
-        scheduleTime: annForm.scheduleTime
+        scheduleTime: annForm.scheduleTime,
+        attachment: attachmentMeta,
       };
       setData(prev => ({ ...prev, announcements: [newAnn, ...prev.announcements] }));
       showToast('Announcement ' + (status === 'Live' ? 'published — visible to residents now' : status === 'Scheduled' ? 'scheduled for ' + annForm.scheduleDate + ' ' + annForm.scheduleTime : 'saved as draft'));
@@ -140,15 +182,29 @@ const AnnouncementsPage = () => {
 
   const handleEdit = (ann) => {
     setEditingAnn(ann);
-    setAnnForm({ title: ann.title, body: ann.body || '', priority: ann.priority, audience: ann.audience, publishMode: ann.status === 'Scheduled' ? 'schedule' : ann.status === 'Draft' ? 'draft' : 'now', ackRequired: ann.ackRequired, scheduleDate: ann.scheduleDate || '', scheduleTime: ann.scheduleTime || '' });
+    setAnnForm({
+      title: ann.title,
+      body: ann.body || '',
+      priority: ann.priority || 'Normal',
+      audience: audienceFromAnn(ann.audience),
+      publishMode: ann.status === 'Scheduled' ? 'schedule' : ann.status === 'Draft' ? 'draft' : 'now',
+      scheduleDate: ann.scheduleDate || '',
+      scheduleTime: ann.scheduleTime || '',
+      attachment: null, // user re-attaches if they want
+    });
     setComposerStep(1);
     setShowComposer(true);
   };
 
-  // Simple toolbar button
+  // Compact rich-text toolbar button — was 32×32, dropped to 26×26 so the
+  // row doesn't dominate the body section vertically.
   const ToolBtn = ({ children }) => (
-    <span style={{display:'inline-flex',alignItems:'center',justifyContent:'center',width:32,height:32,border:'1px solid #D0D6D5',borderRadius:4,cursor:'pointer',fontSize:13,fontWeight:600,color:'#131F23',background:'#fff'}}>{children}</span>
+    <span style={{display:'inline-flex',alignItems:'center',justifyContent:'center',height:26,minWidth:26,padding:'0 6px',border:'1px solid #D0D6D5',borderRadius:4,cursor:'pointer',fontSize:11,fontWeight:600,color:'#131F23',background:'#fff'}}>{children}</span>
   );
+
+  // File picker for the Attachment block. Stores the chosen File object on
+  // the form so it can be uploaded later; we only persist the metadata.
+  const attachInputRef = useRef(null);
 
   return (
     <div>
@@ -216,14 +272,14 @@ const AnnouncementsPage = () => {
 
             {/* Step 1: Compose */}
             {composerStep===1 && (<div>
-              <div style={{marginBottom:20}}>
+              <div style={{marginBottom:18}}>
                 <label style={{fontSize:11,fontWeight:600,letterSpacing:'0.06em',textTransform:'uppercase',color:'#131F23',display:'block',marginBottom:8}}>{t('pm.titleLabel')} *</label>
                 <input className="form-input" placeholder="Announcement title" value={annForm.title} onChange={e => setAnnForm(p => ({...p, title: e.target.value}))} style={{padding:'12px 14px',fontSize:13}}/>
               </div>
-              <div style={{marginBottom:20}}>
+              <div style={{marginBottom:18}}>
                 <label style={{fontSize:11,fontWeight:600,letterSpacing:'0.06em',textTransform:'uppercase',color:'#131F23',display:'block',marginBottom:8}}>{t('pm.bodyLabel')}</label>
-                {/* Rich text toolbar */}
-                <div style={{display:'flex',gap:4,marginBottom:8}}>
+                {/* Compact rich-text toolbar */}
+                <div style={{display:'flex',gap:4,marginBottom:6}}>
                   <ToolBtn>B</ToolBtn>
                   <ToolBtn><em>I</em></ToolBtn>
                   <ToolBtn><u>U</u></ToolBtn>
@@ -232,64 +288,190 @@ const AnnouncementsPage = () => {
                 </div>
                 <textarea className="form-input" rows={4} placeholder="Write your announcement here..." value={annForm.body} onChange={e => setAnnForm(p => ({...p, body: e.target.value}))} style={{resize:'vertical',padding:'12px 14px',fontSize:13}}/>
               </div>
-              <div style={{marginBottom:20}}>
+              {/* Priority — centered, max 360px so the pills don't stretch the modal */}
+              <div style={{marginBottom:18,textAlign:'center'}}>
                 <label style={{fontSize:11,fontWeight:600,letterSpacing:'0.06em',textTransform:'uppercase',color:'#131F23',display:'block',marginBottom:8}}>{t('pm.announcePriority')}</label>
-                <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
+                <div style={{display:'inline-flex',gap:8,maxWidth:360,width:'100%'}}>
                   <div onClick={() => setAnnForm(p => ({...p, priority:'Normal'}))}
-                    style={{padding:'14px 16px',textAlign:'center',border: annForm.priority==='Normal' ? '1.5px solid var(--bg-warm-dark)' : '1px solid var(--border-light)',borderRadius:8,cursor:'pointer',background: annForm.priority==='Normal' ? 'var(--bg-warm-dark)' : '#fff',color: annForm.priority==='Normal' ? '#fff' : 'var(--text-dark)',fontWeight:500,fontSize:13,transition:'all 0.15s'}}>
+                    style={{flex:1,padding:'10px 12px',textAlign:'center',border: annForm.priority==='Normal' ? '1.5px solid var(--bg-warm-dark)' : '1px solid var(--border-light)',borderRadius:8,cursor:'pointer',background: annForm.priority==='Normal' ? 'var(--bg-warm-dark)' : '#fff',color: annForm.priority==='Normal' ? '#fff' : 'var(--text-dark)',fontWeight:500,fontSize:13,transition:'all 0.15s'}}>
                     {t('pm.normalPriority')}
                   </div>
                   <div onClick={() => setAnnForm(p => ({...p, priority:'High'}))}
-                    style={{padding:'14px 16px',textAlign:'center',border: annForm.priority==='High' ? '1.5px solid #8b4a42' : '1px solid var(--border-light)',borderRadius:8,cursor:'pointer',background: annForm.priority==='High' ? '#8b4a42' : '#fff',color: annForm.priority==='High' ? '#fff' : 'var(--text-dark)',fontWeight:500,fontSize:13,transition:'all 0.15s'}}>
+                    style={{flex:1,padding:'10px 12px',textAlign:'center',border: annForm.priority==='High' ? '1.5px solid #8b4a42' : '1px solid var(--border-light)',borderRadius:8,cursor:'pointer',background: annForm.priority==='High' ? '#8b4a42' : '#fff',color: annForm.priority==='High' ? '#fff' : 'var(--text-dark)',fontWeight:500,fontSize:13,transition:'all 0.15s'}}>
                     △ {t('pm.highPriorityLabel')}
                   </div>
                 </div>
               </div>
-              <div style={{marginBottom:20}}>
+              {/* Attachment — real file picker. Click anywhere on the box to open. */}
+              <div style={{marginBottom:22}}>
                 <label style={{fontSize:11,fontWeight:600,letterSpacing:'0.06em',textTransform:'uppercase',color:'#131F23',display:'block',marginBottom:8}}>{t('pm.announceAttachment')}</label>
-                <div style={{display:'flex',alignItems:'center',gap:10,padding:'14px 16px',border:'1px solid #E6EAE9',borderRadius:8,background:'#fff'}}>
+                <input ref={attachInputRef} type="file" accept="image/*,.pdf" style={{display:'none'}}
+                  onChange={e => { const f = e.target.files && e.target.files[0]; if (f) setAnnForm(p => ({...p, attachment: f})); e.target.value = ''; }}/>
+                <div onClick={() => attachInputRef.current && attachInputRef.current.click()}
+                  style={{display:'flex',alignItems:'center',gap:10,padding:'14px 16px',border:'1px dashed #D0D6D5',borderRadius:8,background:'#fff',cursor:'pointer'}}>
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#61707D" strokeWidth="1.5"><path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48"/></svg>
-                  <span style={{color:'#61707D',fontSize:12}}>Upload image or document<br/>JPG, PNG, PDF up to 10MB</span>
+                  <div style={{flex:1,minWidth:0}}>
+                    {annForm.attachment ? (
+                      <>
+                        <div style={{fontSize:12,fontWeight:500,color:'var(--text-dark)',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{annForm.attachment.name}</div>
+                        <div style={{fontSize:11,color:'#61707D'}}>{Math.round(annForm.attachment.size / 1024)} KB · click to replace</div>
+                      </>
+                    ) : (
+                      <>
+                        <div style={{fontSize:12,fontWeight:500,color:'var(--text-dark)'}}>Upload image or document</div>
+                        <div style={{fontSize:11,color:'#61707D'}}>JPG, PNG, PDF up to 10MB</div>
+                      </>
+                    )}
+                  </div>
+                  {annForm.attachment && (
+                    <button onClick={e => { e.stopPropagation(); setAnnForm(p => ({...p, attachment: null})); }}
+                      style={{border:'none',background:'transparent',color:'#61707D',cursor:'pointer',fontSize:18,lineHeight:1,padding:'0 4px'}}>×</button>
+                  )}
                 </div>
-              </div>
-              <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:24}}>
-                <div>
-                  <div style={{fontSize:13,fontWeight:600,color:'#131F23'}}>Acknowledgement Required</div>
-                  <div style={{fontSize:11,color:'#61707D'}}>{t('pm.ackRequiredDesc')}</div>
-                </div>
-                <Toggle value={annForm.ackRequired} onChange={() => setAnnForm(p => ({...p, ackRequired: !p.ackRequired}))}/>
               </div>
               <button className="btn btn-primary" style={{width:'100%',padding:'14px 0',fontSize:14,fontWeight:600,borderRadius:8}} onClick={()=>setComposerStep(2)}>{t('pm.continueAudience')}</button>
             </div>)}
 
-            {/* Step 2: Audience */}
-            {composerStep===2 && (<div>
-              <p style={{color:'#61707D',marginBottom:16,fontSize:13}}>{t('pm.selectWhoReceive')}</p>
-              {[
-                {label:t('pm.allResidents'),sub:'1,240 ' + t('pm.recipientCount'),val:'All Residents'},
-                {label:t('pm.allResidentsGuards'),sub:'1,258 ' + t('pm.recipientCount'),val:'All Residents + Guards'},
-                {label:t('pm.specificBuildings'),sub:'Tower A, B, C, D',val:'Specific Buildings'},
-                {label:t('pm.specificFlats'),sub:'Select individual units',val:'Specific Flats'},
-                {label:t('pm.securityGuards'),sub:'18 guards on duty',val:'Security Guards'},
-                {label:t('pm.ownersOnly'),sub:'Property owners',val:'Owners Only'}
-              ].map((a,i) => (
-                <div key={i} onClick={() => setAnnForm(p => ({...p, audience: a.val}))}
-                  style={{display:'flex',alignItems:'center',gap:12,marginBottom:8,cursor:'pointer',background: annForm.audience===a.val ? 'var(--accent-warm-light)' : '#fff',borderRadius:8,padding:'14px 16px',border: annForm.audience===a.val ? '1.5px solid var(--bg-warm-dark)' : '1px solid var(--border-light)',transition:'all 0.15s'}}>
-                  <div style={{width:36,height:36,background: annForm.audience===a.val ? 'var(--bg-warm-dark)' : 'var(--bg-surface)',borderRadius:'50%',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,border: annForm.audience===a.val ? 'none' : '1px solid var(--border-light)'}}>
-                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke={annForm.audience===a.val ? '#fff' : 'var(--text-secondary)'} strokeWidth="1.6"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg>
+            {/* Step 2: Audience — Everyone OR specific (buildings + property types) */}
+            {composerStep===2 && (() => {
+              const aud = annForm.audience;
+              const types = ['Residential', 'Villa', 'Commercial', 'Commercial Land'];
+              const blds = audBuildings || [];
+              // If a property type is selected, narrow the building list to that
+              // type so the user only sees relevant rows.
+              const visibleBuildings = aud.property_types.length > 0
+                ? blds.filter(b => aud.property_types.includes(b.property_type || 'Residential'))
+                : blds;
+              const setAud = (next) => setAnnForm(p => ({...p, audience: { ...p.audience, ...next }}));
+              const toggleType = (t) => {
+                const has = aud.property_types.includes(t);
+                setAud({ property_types: has ? aud.property_types.filter(x => x !== t) : [...aud.property_types, t] });
+              };
+              const toggleBuilding = (b) => {
+                const has = aud.building_ids.includes(b.id);
+                if (has) {
+                  setAud({
+                    building_ids:   aud.building_ids.filter(x => x !== b.id),
+                    building_names: aud.building_names.filter(n => n !== b.name),
+                  });
+                } else {
+                  setAud({
+                    building_ids:   [...aud.building_ids, b.id],
+                    building_names: [...aud.building_names, b.name],
+                  });
+                }
+              };
+              const allVisibleSelected = visibleBuildings.length > 0 && visibleBuildings.every(b => aud.building_ids.includes(b.id));
+              const toggleSelectAllVisible = () => {
+                if (allVisibleSelected) {
+                  const remove = new Set(visibleBuildings.map(b => b.id));
+                  setAud({
+                    building_ids:   aud.building_ids.filter(id => !remove.has(id)),
+                    building_names: aud.building_names.filter((_, i) => !remove.has(aud.building_ids[i])),
+                  });
+                } else {
+                  const addIds = visibleBuildings.map(b => b.id).filter(id => !aud.building_ids.includes(id));
+                  const addNames = visibleBuildings.filter(b => addIds.includes(b.id)).map(b => b.name);
+                  setAud({
+                    building_ids:   [...aud.building_ids, ...addIds],
+                    building_names: [...aud.building_names, ...addNames],
+                  });
+                }
+              };
+              return (
+                <div style={{maxWidth:520,margin:'0 auto'}}>
+                  <p style={{color:'#61707D',marginBottom:16,fontSize:13,textAlign:'center'}}>{t('pm.selectWhoReceive')}</p>
+
+                  {/* Everyone vs specific scope */}
+                  <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginBottom:18}}>
+                    {[
+                      { val: 'all',      label: 'Everyone',          sub: 'All residents across every building' },
+                      { val: 'specific', label: 'Specific audience', sub: 'Pick buildings or property types' },
+                    ].map(opt => {
+                      const on = aud.scope === opt.val;
+                      return (
+                        <div key={opt.val} onClick={() => setAud({ scope: opt.val })}
+                          style={{padding:'14px 14px',textAlign:'center',cursor:'pointer',borderRadius:8,
+                            border: on ? '1.5px solid var(--bg-warm-dark)' : '1px solid var(--border-light)',
+                            background: on ? 'var(--bg-warm-dark)' : '#fff',color: on ? '#fff' : 'var(--text-dark)',transition:'all .15s'}}>
+                          <div style={{fontSize:13,fontWeight:600,marginBottom:3}}>{opt.label}</div>
+                          <div style={{fontSize:11,opacity: on ? 0.85 : 0.6}}>{opt.sub}</div>
+                        </div>
+                      );
+                    })}
                   </div>
-                  <div style={{flex:1}}>
-                    <div style={{fontSize:13,fontWeight: annForm.audience===a.val ? 600 : 500,color:'var(--text-dark)'}}>{a.label}</div>
-                    <div style={{fontSize:11,color:'var(--text-muted)',marginTop:2}}>{a.sub}</div>
+
+                  {aud.scope === 'specific' && (
+                    <div style={{border:'1px solid var(--border-light)',borderRadius:10,padding:'14px 16px',marginBottom:16}}>
+                      {/* Property type chips */}
+                      <div style={{marginBottom:14}}>
+                        <div style={{fontSize:10,letterSpacing:'0.06em',textTransform:'uppercase',color:'var(--text-secondary)',fontWeight:600,marginBottom:8}}>Property type</div>
+                        <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
+                          {types.map(t2 => {
+                            const on = aud.property_types.includes(t2);
+                            return (
+                              <span key={t2} onClick={() => toggleType(t2)}
+                                style={{padding:'5px 12px',borderRadius:14,fontSize:12,cursor:'pointer',
+                                  background: on ? 'var(--bg-warm-dark)' : '#fff',color: on ? '#fff' : 'var(--text-dark)',
+                                  border: on ? '1px solid var(--bg-warm-dark)' : '1px solid var(--border-light)',userSelect:'none'}}>
+                                {t2}
+                              </span>
+                            );
+                          })}
+                        </div>
+                        <div style={{fontSize:11,color:'var(--text-muted)',marginTop:6}}>Leave blank to include every type.</div>
+                      </div>
+
+                      {/* Building list */}
+                      <div>
+                        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}}>
+                          <div style={{fontSize:10,letterSpacing:'0.06em',textTransform:'uppercase',color:'var(--text-secondary)',fontWeight:600}}>Buildings ({aud.building_ids.length} selected)</div>
+                          {visibleBuildings.length > 0 && (
+                            <button onClick={toggleSelectAllVisible}
+                              style={{border:'none',background:'transparent',color:'var(--bg-warm-dark)',fontSize:11,fontWeight:500,cursor:'pointer',padding:0}}>
+                              {allVisibleSelected ? 'Clear all' : 'Select all visible'}
+                            </button>
+                          )}
+                        </div>
+                        {audBuildings === null ? (
+                          <div style={{fontSize:12,color:'var(--text-muted)',padding:'10px 0'}}>Loading buildings…</div>
+                        ) : visibleBuildings.length === 0 ? (
+                          <div style={{fontSize:12,color:'var(--text-muted)',padding:'10px 0'}}>
+                            {blds.length === 0 ? 'No buildings yet — add some in Database → Assets.' : 'No buildings match the selected property types.'}
+                          </div>
+                        ) : (
+                          <div style={{maxHeight:200,overflowY:'auto',border:'1px solid var(--border-light)',borderRadius:6}}>
+                            {visibleBuildings.map(b => {
+                              const on = aud.building_ids.includes(b.id);
+                              return (
+                                <label key={b.id}
+                                  style={{display:'flex',alignItems:'center',gap:10,padding:'9px 12px',cursor:'pointer',borderBottom:'1px solid var(--border-light)',background: on ? 'var(--accent-warm-light)' : '#fff'}}>
+                                  <input type="checkbox" checked={on} onChange={() => toggleBuilding(b)} style={{accentColor:'var(--bg-warm-dark)'}}/>
+                                  <div style={{flex:1,minWidth:0}}>
+                                    <div style={{fontSize:13,color:'var(--text-dark)',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{b.name}</div>
+                                  </div>
+                                  <span style={{fontSize:10,color:'var(--text-muted)',padding:'2px 7px',background:'var(--bg-surface)',borderRadius:3,whiteSpace:'nowrap'}}>{b.property_type || 'Residential'}</span>
+                                </label>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Recap line */}
+                  <div style={{fontSize:12,color:'var(--text-secondary)',marginBottom:14,textAlign:'center'}}>
+                    Sending to: <strong style={{color:'var(--text-dark)'}}>{audienceLabel(aud)}</strong>
                   </div>
-                  {annForm.audience===a.val && <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--bg-warm-dark)" strokeWidth="2.5"><path d="M20 6L9 17l-5-5"/></svg>}
+
+                  <div className="grid-2" style={{marginTop:8}}>
+                    <button className="btn" onClick={()=>setComposerStep(1)}>← Back</button>
+                    <button className="btn btn-primary" onClick={()=>setComposerStep(3)}>Continue to Schedule →</button>
+                  </div>
                 </div>
-              ))}
-              <div className="grid-2" style={{marginTop:20}}>
-                <button className="btn" onClick={()=>setComposerStep(1)}>← Back</button>
-                <button className="btn btn-primary" onClick={()=>setComposerStep(3)}>Continue to Schedule →</button>
-              </div>
-            </div>)}
+              );
+            })()}
 
             {/* Step 3: Schedule */}
             {composerStep===3 && (<div>
@@ -338,22 +520,21 @@ const AnnouncementsPage = () => {
                 <div style={{display:'flex',gap:6,marginBottom:8}}>
                   <StatusBadge status={annForm.publishMode==='now'?'Live':annForm.publishMode==='schedule'?'Scheduled':'Draft'}/>
                   {annForm.priority==='High' && <span style={{fontSize:11,border:'1px solid #D0D6D5',borderRadius:3,padding:'1px 8px',background:'#fff'}}>△ High Priority</span>}
-                  {annForm.ackRequired && <span style={{fontSize:11,border:'1px solid #D0D6D5',borderRadius:3,padding:'1px 8px',background:'#fff'}}>Ack Required</span>}
                 </div>
                 <div style={{fontWeight:600,fontSize:15,marginBottom:4}}>{annForm.title || '[Untitled]'}</div>
                 {annForm.body && <p style={{fontSize:13,color:'#7a6f66',margin:'0 0 8px',lineHeight:1.5}}>{annForm.body}</p>}
-                <div style={{fontSize:12,color:'#61707D'}}>Audience: {annForm.audience}</div>
+                <div style={{fontSize:12,color:'#61707D'}}>Audience: {audienceLabel(annForm.audience)}</div>
+                {annForm.attachment && <div style={{fontSize:12,color:'#61707D',marginTop:2}}>Attachment: {annForm.attachment.name}</div>}
                 {annForm.publishMode === 'schedule' && annForm.scheduleDate && (
                   <div style={{fontSize:12,color:'#61707D'}}>Scheduled: {annForm.scheduleDate} at {annForm.scheduleTime || '—'}</div>
                 )}
-                {annForm.ackRequired && <div style={{fontSize:12,color:'#61707D'}}>Acknowledgement required</div>}
               </div>
 
               <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12,fontSize:13,marginBottom:20,background:'#fff',border:'1px solid #E6EAE9',borderRadius:6,padding:16}}>
-                <div><span style={{color:'#61707D'}}>Audience:</span> <strong>{annForm.audience}</strong></div>
+                <div><span style={{color:'#61707D'}}>Audience:</span> <strong>{audienceLabel(annForm.audience)}</strong></div>
                 <div><span style={{color:'#61707D'}}>Priority:</span> <strong>{annForm.priority}</strong></div>
                 <div><span style={{color:'#61707D'}}>Publish:</span> <strong>{annForm.publishMode==='now'?'Immediately':annForm.publishMode==='schedule'?'Scheduled':'Draft'}</strong></div>
-                <div><span style={{color:'#61707D'}}>Acknowledgement:</span> <strong>{annForm.ackRequired ? 'Required' : 'Not required'}</strong></div>
+                <div><span style={{color:'#61707D'}}>Attachment:</span> <strong>{annForm.attachment ? annForm.attachment.name : 'None'}</strong></div>
               </div>
 
               {/* Data persistence notice */}
