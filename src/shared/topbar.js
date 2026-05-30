@@ -461,9 +461,12 @@ const TopBar = ({ onCreateClick, onMenuToggle, onLogout, onNavigate }) => {
                 </div>
               </div>
               <div style={{padding:'4px 12px 12px',borderTop:'1px solid #f0f0f0'}}>
-                <div onClick={()=>{setShowPmProfile(false);onLogout();}} style={{display:'flex',alignItems:'center',gap:10,padding:'10px 4px',cursor:'pointer',fontSize:13,color:'#8b4a42',fontWeight:500}}>
-                  <div style={{width:30,height:30,borderRadius:'50%',background:'#fff5f5',display:'flex',alignItems:'center',justifyContent:'center'}}>
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#c62828" strokeWidth="1.5"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+                <div onClick={()=>{setShowPmProfile(false);onLogout();}} style={{display:'flex',alignItems:'center',gap:10,padding:'10px 4px',cursor:'pointer',fontSize:13,color:'#131F23'}}>
+                  {/* Logout icon matched to the My Profile chip — same neutral
+                      container, same #61707D stroke as the user icon. No red
+                      "danger" tint; logout isn't destructive enough for it. */}
+                  <div style={{width:30,height:30,borderRadius:'50%',background:'#E6EAE9',display:'flex',alignItems:'center',justifyContent:'center'}}>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#61707D" strokeWidth="1.5"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
                   </div>
                   {t('pm.logout')}
                 </div>
