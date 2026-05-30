@@ -341,9 +341,6 @@ const LoginPage = ({ onLogin, syncStatus }) => {
             <span style={{fontSize:13,fontWeight:500,color:'var(--text-dark)',letterSpacing:'-0.005em'}}>
               Create a free demo account
             </span>
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--text-secondary)" strokeWidth="2" style={{flexShrink:0}}>
-              <polyline points="9 18 15 12 9 6"/>
-            </svg>
           </div>
         )}
 
