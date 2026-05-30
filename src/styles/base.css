@@ -380,7 +380,10 @@ html[dir="rtl"] div[style*="position:absolute"][style*="left:0"] { left:auto !im
   .type-btn{padding:12px}
   .sidebar-bottom{display:none}
   .mobile-bottom-nav{display:block}
-  .topbar-right .topbar-icon,.topbar-right .avatar{display:none}
+  /* Hide secondary topbar icons on mobile but KEEP the avatar so
+     sign-out is always one tap away from any screen. The sidebar's
+     Sign out row is also available via the hamburger as a backup. */
+  .topbar-right .topbar-icon{display:none}
   .guard-carousel{overflow-x:auto;-webkit-overflow-scrolling:touch}
   .announcement-card .stats{flex-wrap:wrap;gap:12px}
   .toast{bottom:72px;left:16px;right:16px;text-align:center}

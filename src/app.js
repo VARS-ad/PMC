@@ -282,13 +282,10 @@ const App = () => {
     </AppContext.Provider>
   );
 
-  // Sync status indicator — small dot in corner of all views
-  const SyncDot = () => (
-    <div onClick={() => showToast(syncStatus === 'online' ? 'Cloud sync active — data saves across devices' : syncStatus === 'offline' ? 'Cloud offline — data saved locally only' : 'Connecting to cloud...')} style={{position:'fixed',bottom:8,right:8,zIndex:9999,cursor:'pointer',display:'flex',alignItems:'center',gap:4,background:'rgba(255,255,255,0.9)',padding:'3px 8px',borderRadius:12,boxShadow:'0 1px 3px rgba(0,0,0,0.1)',fontSize:10,color:'#a89a92'}}>
-      <div style={{width:6,height:6,borderRadius:'50%',background: syncStatus === 'online' ? '#4caf50' : syncStatus === 'offline' ? '#f44336' : '#ff9800'}}></div>
-      {syncStatus === 'online' ? 'Synced' : syncStatus === 'offline' ? 'Local only' : 'Connecting...'}
-    </div>
-  );
+  // Sync status indicator removed — sat at bottom-right and obstructed
+  // mobile UX (overlapped the bottom nav, looked like a stuck toast).
+  // Sync state is still tracked in syncStatus; we just don't render it.
+  const SyncDot = () => null;
 
   // If logged in as resident, show resident app
   if (role === 'resident') {

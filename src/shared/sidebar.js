@@ -59,6 +59,21 @@ const Sidebar = ({ page, setPage, isOpen, onClose, onLogout }) => {
             ))}
           </div>
         ))}
+        {/* Sign-out row pinned at the foot of the sidebar so it's always
+            available, especially on mobile where the topbar avatar is
+            hidden by the breakpoint CSS. */}
+        {onLogout && (
+          <div style={{marginTop:24,borderTop:'1px solid var(--border-light)',paddingTop:12}}>
+            <div className="sidebar-item" onClick={() => { if (onClose) onClose(); onLogout(); }}>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/>
+                <polyline points="16 17 21 12 16 7"/>
+                <line x1="21" y1="12" x2="9" y2="12"/>
+              </svg>
+              <span>Sign out</span>
+            </div>
+          </div>
+        )}
       </nav>
     </div>
   );
