@@ -177,14 +177,6 @@ const PMCVisitorsPage = () => {
       </div>
 
       <div className="card">
-        <div style={{fontSize:11,color:'var(--text-secondary)',marginBottom:14,padding:'8px 12px',background:'var(--bg-page)',borderRadius:6,border:'1px solid var(--border-light)'}}>
-          {selectedProperties.length === 0
-            ? 'Showing visitors across all buildings. Use the property selector in the top bar to scope to specific buildings.'
-            : selectedProperties.length === 1
-              ? 'Scoped to 1 building (from the top-bar property selector).'
-              : 'Scoped to ' + selectedProperties.length + ' buildings (from the top-bar property selector).'
-          }
-        </div>
         <div style={{display:'flex',gap:14,flexWrap:'wrap',alignItems:'flex-end'}}>
           <div style={{flex:'1 1 160px'}}>
             <label style={{fontSize:10,letterSpacing:'0.06em',textTransform:'uppercase',color:'var(--text-secondary)',marginBottom:6,display:'block',fontWeight:500}}>Status</label>

@@ -1,4 +1,17 @@
 // ==================== ANNOUNCEMENTS PAGE ====================
+// Render-side helper: announcement.audience can be either a legacy string
+// ("All Residents", "Tower B") or — once the new audience picker lands —
+// a structured object. Until the picker is wired in, this just passes
+// through whatever the value is so cards keep rendering correctly.
+const audienceLabel = (aud) => {
+  if (!aud) return '—';
+  if (typeof aud === 'string') return aud;
+  if (aud.scope === 'all') return 'All Residents';
+  const parts = [];
+  if (Array.isArray(aud.building_names) && aud.building_names.length) parts.push(aud.building_names.join(', '));
+  if (Array.isArray(aud.property_types) && aud.property_types.length) parts.push('(' + aud.property_types.join(', ') + ')');
+  return parts.length ? parts.join(' ') : '—';
+};
 const AnnouncementsPage = () => {
   const { data, setData, showToast, t } = useApp();
   const [filter, setFilter] = useState('All');
@@ -153,36 +166,20 @@ const AnnouncementsPage = () => {
             <div style={{flex:1}}>
               <div className="tags">
                 <StatusBadge status={a.status}/>
-                {a.priority==='High' && <span style={{fontSize:11,color:'#61707D',border:'1px solid #D0D6D5',borderRadius:3,padding:'1px 8px'}}>△ High priority</span>}
-                {a.ackRequired && <span style={{fontSize:11,color:'#61707D',border:'1px solid #D0D6D5',borderRadius:3,padding:'1px 8px'}}>Acknowledgement required</span>}
               </div>
               <h3 style={{fontSize:16,fontWeight:600,marginBottom:6}}>{a.title}</h3>
               {a.body && <p style={{fontSize:13,color:'#7a6f66',margin:'4px 0 8px',lineHeight:1.5}}>{a.body}</p>}
-              <div className="meta">{t('pm.announceAudience')} <strong>{a.audience}</strong> &nbsp; {t('pm.announceBy')} {a.author} &nbsp; {t('pm.announceCreated')} {a.created}</div>
+              <div className="meta">{t('pm.announceAudience')} <strong>{audienceLabel(a.audience)}</strong> &nbsp; {t('pm.announceBy')} {a.author} &nbsp; {t('pm.announceCreated')} {a.created}</div>
             </div>
             <div style={{display:'flex',gap:6,flexShrink:0,marginLeft:16}}>
-              {a.status !== 'Sent' && a.status !== 'Live' && (
-                <button className="btn btn-sm" onClick={()=>handleEdit(a)} style={{width:32,height:32,display:'flex',alignItems:'center',justifyContent:'center',padding:0}}>
-                  <Icon name="edit" size={14}/>
-                </button>
-              )}
+              <button className="btn btn-sm" onClick={()=>handleEdit(a)} style={{width:32,height:32,display:'flex',alignItems:'center',justifyContent:'center',padding:0}}>
+                <Icon name="edit" size={14}/>
+              </button>
               <button className="btn btn-sm" onClick={()=>setShowDelete(a)} style={{width:32,height:32,display:'flex',alignItems:'center',justifyContent:'center',padding:0}}>
                 <Icon name="trash" size={14}/>
               </button>
             </div>
           </div>
-          {(a.delivered > 0 || a.read > 0) && (
-            <div style={{display:'flex',gap:24,alignItems:'center',flexWrap:'wrap',marginTop:16,paddingTop:16,borderTop:'1px solid #f0f0f0'}}>
-              <div><div style={{fontSize:10,color:'#61707D',letterSpacing:'0.04em'}}>{t('pm.deliveredCol')}</div><div style={{fontWeight:600,fontSize:14}}>{a.delivered.toLocaleString()}</div></div>
-              <div><div style={{fontSize:10,color:'#61707D',letterSpacing:'0.04em'}}>{t('pm.readCol')}</div><div style={{fontWeight:600,fontSize:14}}>{a.read.toLocaleString()}</div></div>
-              {a.acknowledged > 0 && <div><div style={{fontSize:10,color:'#61707D',letterSpacing:'0.04em'}}>{t('pm.acknowledgedCol')}</div><div style={{fontWeight:600,fontSize:14}}>{a.acknowledged.toLocaleString()}</div></div>}
-              {a.read > 0 && a.delivered > 0 && <div style={{flex:1,display:'flex',alignItems:'center',gap:8,minWidth:120}}>
-                <div className="progress-bar"><div className="fill" style={{width:`${Math.round(a.read/a.delivered*100)}%`}}/></div>
-                <span style={{fontSize:11,color:'#61707D'}}>{Math.round(a.read/a.delivered*100)}% {t('pm.readRateLabel')}</span>
-              </div>}
-              <span style={{fontSize:11,color:'#61707D'}}>{t('pm.announceAudit')}: {a.author} · {a.created}</span>
-            </div>
-          )}
         </div>
       ))}
 
