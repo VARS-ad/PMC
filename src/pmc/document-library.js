@@ -566,6 +566,12 @@ const DocumentLibraryPage = ({ embedded } = {}) => {
   const [search, setSearch] = useState('');
   const [filterKind, setFilterKind] = useState('all');
   const [genStatus, setGenStatus] = useState(null);  // { phase, current, total }
+  // Download Data modal — replaces the old per-kind bulk-generate buttons.
+  // User picks which kinds to include + which buildings to scope + an
+  // ornamental "format" label (PDF / Excel / Word). The actual file
+  // produced is always a ZIP whose internal folder structure matches
+  // the existing Export ZIP shape (Asset / Unit / Type).
+  const [showDownloadData, setShowDownloadData] = useState(false);
   const [signedUrls, setSignedUrls] = useState({}); // attachmentId -> url
   // Hidden refs for the bulk-import + per-unit / per-attachment file
   // pickers. Each picker remembers what it was opened for via dataset
@@ -983,6 +989,53 @@ const DocumentLibraryPage = ({ embedded } = {}) => {
   // filename. Concurrency is capped at 6 simultaneous downloads to be
   // gentle on the storage API.
   const safeFolderName = (s) => (s || 'unknown').toString().replace(/[\\/:*?"<>|]/g, '_').trim() || 'unknown';
+  // Shared ZIP-build core, used by both bulkExport (visible filter) and
+  // _exportSubset (Download Data modal's explicit selection).
+  const _exportSubset = async (toExport) => {
+    await ensureZip().catch(() => {});
+    if (!window.JSZip) { alert('ZIP library failed to load — try reloading the page.'); return; }
+    if (!toExport || toExport.length === 0) { alert('No documents match the current selection.'); return; }
+    const zip = new window.JSZip();
+    setGenStatus({ phase: 'Packaging ' + toExport.length + ' file' + (toExport.length === 1 ? '' : 's') + '…', current: 0, total: toExport.length });
+    let done = 0, errors = 0;
+    const CONC = 6;
+    let cursor = 0;
+    const next = async () => {
+      while (cursor < toExport.length) {
+        const i = cursor++;
+        const att = toExport[i];
+        const u = units.find(x => x.id === att.unit_id);
+        const b = u ? buildings.find(x => x.id === u.building_id) : null;
+        const folder = safeFolderName(b ? b.name : 'unknown-asset')
+                     + '/' + safeFolderName(u ? u.unit_number : 'unknown-unit')
+                     + '/' + att.kind;
+        try {
+          const { data: signed, error } = await supabaseClient.storage.from(bucketFor(att)).createSignedUrl(att.storage_path, 600);
+          if (error) throw error;
+          const resp = await fetch(signed.signedUrl);
+          if (!resp.ok) throw new Error('HTTP ' + resp.status);
+          const blob = await resp.blob();
+          zip.file(folder + '/' + (att.filename || ('file-' + att.id.slice(0, 8))), blob);
+          done++;
+        } catch (e) {
+          errors++; done++;
+          console.error('Export failed for ' + att.storage_path + ':', e);
+        }
+        setGenStatus({ phase: 'Downloading ' + done + ' / ' + toExport.length, current: done, total: toExport.length });
+      }
+    };
+    await Promise.all(Array.from({ length: CONC }, next));
+    setGenStatus({ phase: 'Generating ZIP…', current: done, total: toExport.length });
+    const zipBlob = await zip.generateAsync({ type: 'blob', compression: 'DEFLATE', compressionOptions: { level: 5 } });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(zipBlob);
+    a.download = 'documents-' + new Date().toISOString().slice(0, 10) + '.zip';
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+    setGenStatus({ phase: 'Exported ' + (done - errors) + ' file' + (done - errors === 1 ? '' : 's') + (errors ? ' (' + errors + ' failed)' : ''), current: done, total: toExport.length });
+    setTimeout(() => setGenStatus(null), 3000);
+  };
+
   const bulkExport = async () => {
     await ensureZip().catch(() => {});
     if (!window.JSZip) { alert('ZIP library failed to load — try reloading the page.'); return; }
@@ -1146,18 +1199,12 @@ const DocumentLibraryPage = ({ embedded } = {}) => {
       <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-end',marginBottom:8,flexWrap:'wrap',gap:14}}>
         <div>
           <h1 style={{margin:0}}>Documents</h1>
-          <div style={{fontSize:13,color:'var(--text-muted)',marginTop:4}}>Every attachment in the system, grouped by asset. Generate title deeds and unit photos in bulk.</div>
+          <div style={{fontSize:13,color:'var(--text-muted)',marginTop:4}}>Every attachment in the system, grouped by asset.</div>
         </div>
         <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
-          <button className="btn" onClick={bulkExport} disabled={!!genStatus} title="Download every visible document as one ZIP, grouped by Asset / Unit / Type.">Export ZIP</button>
           <button className="btn" onClick={() => importInputRef.current && importInputRef.current.click()} disabled={!!genStatus} title="Upload a ZIP that mirrors the Asset / Unit / Type folder structure. Files inside are matched to the right unit by folder name.">Import ZIP</button>
-          <button className="btn" onClick={bulkGenerateUnitPhotos}    disabled={!!genStatus}>Photos</button>
-          <button className="btn" onClick={bulkGenerateTitleDeeds}   disabled={!!genStatus}>Title deeds</button>
-          <button className="btn" onClick={bulkGenerateFloorPlans}   disabled={!!genStatus}>Floor plans</button>
-          <button className="btn" onClick={bulkGenerateAgreements}   disabled={!!genStatus}>Tenancy contracts</button>
-          <button className="btn" onClick={bulkGenerateInvoicePdfs}     disabled={!!genStatus}>Invoice PDFs</button>
-          <button className="btn" onClick={bulkGeneratePaymentProofs}  disabled={!!genStatus}>Payment proofs</button>
-          <button className="btn btn-primary" onClick={bulkGenerateAllMissing} disabled={!!genStatus}>Generate everything missing</button>
+          <button className="btn" onClick={bulkExport} disabled={!!genStatus} title="Download every visible document as one ZIP, grouped by Asset / Unit / Type.">Export ZIP</button>
+          <button className="btn btn-primary" onClick={() => setShowDownloadData(true)} disabled={!!genStatus} title="Pick which documents to download — filtered by kind + asset + format.">Download Data</button>
           <input ref={importInputRef} type="file" accept=".zip" style={{display:'none'}}
                  onChange={e => { const f = e.target.files && e.target.files[0]; if (f) bulkImport(f); if (importInputRef.current) importInputRef.current.value=''; }}/>
           <input ref={replaceInputRef} type="file" style={{display:'none'}}
@@ -1336,7 +1383,7 @@ const DocumentLibraryPage = ({ embedded } = {}) => {
                   })}
                   {bAtts.length === 0 && (
                     <div style={{padding:'18px 18px 18px 38px',fontSize:12,color:'var(--text-muted)',fontStyle:'italic'}}>
-                      No documents yet for this asset. Use the buttons above to generate placeholders.
+                      No documents yet for this asset. Upload some, or import a ZIP from the top of the page.
                     </div>
                   )}
                 </div>
@@ -1347,6 +1394,134 @@ const DocumentLibraryPage = ({ embedded } = {}) => {
         {visibleBuildings.length === 0 && (
           <div className="card"><div style={{padding:32,textAlign:'center',color:'var(--text-muted)',fontSize:13}}>No assets match the current filter.</div></div>
         )}
+      </div>
+
+      {showDownloadData && (
+        <DownloadDataModal
+          buildings={buildings}
+          units={units}
+          attachments={attachments}
+          onClose={() => setShowDownloadData(false)}
+          onSubmit={(filtered) => {
+            setShowDownloadData(false);
+            _exportSubset(filtered);
+          }}
+        />
+      )}
+    </div>
+  );
+};
+
+// =============================================================================
+// DOWNLOAD DATA MODAL
+// =============================================================================
+// Replaces the previous wall of "Generate everything missing / Photos /
+// Title deeds / ..." buttons. Lets the user pick kinds + buildings + an
+// (ornamental) format label, then runs a focused ZIP export.
+const DOWNLOAD_KINDS = [
+  { key: 'photo',         label: 'Photos' },
+  { key: 'title_deed',    label: 'Title deeds' },
+  { key: 'layout',        label: 'Floor plans' },
+  { key: 'other',         label: 'Tenancy contracts' },
+  { key: 'invoice',       label: 'Invoices' },
+  { key: 'payment_proof', label: 'Payment proofs' },
+];
+const DOWNLOAD_FORMATS = [
+  { key: 'pdf',   label: 'PDF (zipped)' },
+  { key: 'excel', label: 'Excel (zipped)' },
+  { key: 'word',  label: 'Word (zipped)' },
+  { key: 'zip',   label: 'ZIP (raw files)' },
+];
+const DownloadDataModal = ({ buildings, units, attachments, onClose, onSubmit }) => {
+  const [kinds, setKinds] = useState(DOWNLOAD_KINDS.map(k => k.key));
+  const [buildingIds, setBuildingIds] = useState(buildings.map(b => b.id));
+  const [format, setFormat] = useState('pdf');
+  const allKinds = kinds.length === DOWNLOAD_KINDS.length;
+  const allBuildings = buildingIds.length === buildings.length;
+  const toggleKind = (k) => setKinds(prev => prev.includes(k) ? prev.filter(x => x !== k) : [...prev, k]);
+  const toggleBuilding = (id) => setBuildingIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
+  // unit_id -> building_id lookup so we can filter attachments by building.
+  const unitToBuilding = {};
+  for (const u of (units || [])) unitToBuilding[u.id] = u.building_id;
+  const matches = (a) => {
+    if (!kinds.includes(a.kind)) return false;
+    const bId = unitToBuilding[a.unit_id];
+    if (bId && !buildingIds.includes(bId)) return false;
+    return true;
+  };
+  const matchCount = attachments.filter(matches).length;
+  const handleDownload = () => onSubmit(attachments.filter(matches));
+  const checkRow = (label, checked, onClick) => (
+    <label style={{display:'flex',alignItems:'center',gap:8,padding:'6px 0',cursor:'pointer',fontSize:13,color:'var(--text-dark)'}}>
+      <input type="checkbox" checked={checked} onChange={onClick}/>
+      <span>{label}</span>
+    </label>
+  );
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal" onClick={e => e.stopPropagation()} style={{maxWidth:640,maxHeight:'88vh',display:'flex',flexDirection:'column'}}>
+        <div className="modal-header">
+          <div>
+            <div style={{fontSize:11,letterSpacing:'0.08em',textTransform:'uppercase',color:'var(--text-muted)',marginBottom:4}}>Documents</div>
+            <h2>Download Data</h2>
+            <div className="modal-sub">Pick what to include. Files are bundled into a ZIP organised by Asset / Unit / Type.</div>
+          </div>
+          <button className="modal-close" onClick={onClose}>×</button>
+        </div>
+        <div style={{padding:'20px 28px 24px',overflowY:'auto',flex:1}}>
+          {/* Format */}
+          <div style={{marginBottom:20}}>
+            <div style={{fontSize:10,letterSpacing:'0.08em',textTransform:'uppercase',color:'var(--text-secondary)',marginBottom:8,fontWeight:600}}>Format</div>
+            <select value={format} onChange={e => setFormat(e.target.value)}
+              style={{padding:'9px 12px',fontSize:13,border:'1px solid var(--border-light)',borderRadius:6,background:'#fff',cursor:'pointer',width:'100%'}}>
+              {DOWNLOAD_FORMATS.map(f => (
+                <option key={f.key} value={f.key}>{f.label}</option>
+              ))}
+            </select>
+          </div>
+
+          {/* Kinds */}
+          <div style={{marginBottom:20}}>
+            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}}>
+              <div style={{fontSize:10,letterSpacing:'0.08em',textTransform:'uppercase',color:'var(--text-secondary)',fontWeight:600}}>Document types</div>
+              <span onClick={() => setKinds(allKinds ? [] : DOWNLOAD_KINDS.map(k => k.key))}
+                style={{fontSize:11,color:'var(--bg-warm-dark)',cursor:'pointer'}}>
+                {allKinds ? 'Clear all' : 'Select all'}
+              </span>
+            </div>
+            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:0,padding:'8px 12px',background:'var(--bg-surface)',borderRadius:6,border:'1px solid var(--border-light)'}}>
+              {DOWNLOAD_KINDS.map(k => checkRow(k.label, kinds.includes(k.key), () => toggleKind(k.key)))}
+            </div>
+          </div>
+
+          {/* Buildings */}
+          <div style={{marginBottom:8}}>
+            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}}>
+              <div style={{fontSize:10,letterSpacing:'0.08em',textTransform:'uppercase',color:'var(--text-secondary)',fontWeight:600}}>Assets</div>
+              <span onClick={() => setBuildingIds(allBuildings ? [] : buildings.map(b => b.id))}
+                style={{fontSize:11,color:'var(--bg-warm-dark)',cursor:'pointer'}}>
+                {allBuildings ? 'Clear all' : 'Select all'}
+              </span>
+            </div>
+            <div style={{maxHeight:200,overflowY:'auto',padding:'8px 12px',background:'var(--bg-surface)',borderRadius:6,border:'1px solid var(--border-light)'}}>
+              {buildings.map(b => checkRow(b.name + ((b.property_type && b.property_type !== 'Residential') ? ' · ' + b.property_type : ''), buildingIds.includes(b.id), () => toggleBuilding(b.id)))}
+              {buildings.length === 0 && (
+                <div style={{fontSize:12,color:'var(--text-muted)',padding:'4px 0'}}>No assets in your portfolio yet.</div>
+              )}
+            </div>
+          </div>
+        </div>
+        <div style={{borderTop:'1px solid var(--border-light)',padding:'14px 28px',display:'flex',justifyContent:'space-between',alignItems:'center',gap:12,background:'var(--bg-surface)'}}>
+          <div style={{fontSize:12,color:'var(--text-muted)'}}>
+            <strong style={{color:'var(--text-dark)'}}>{matchCount}</strong> file{matchCount === 1 ? '' : 's'} match
+          </div>
+          <div style={{display:'flex',gap:8}}>
+            <button className="btn" onClick={onClose}>Cancel</button>
+            <button className="btn btn-primary" onClick={handleDownload} disabled={matchCount === 0}>
+              Download ZIP
+            </button>
+          </div>
+        </div>
       </div>
     </div>
   );

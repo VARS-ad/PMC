@@ -627,7 +627,11 @@ BEGIN
   END;
 
   -- =========================================================================
-  -- 9. Service requests (20)
+  -- 9. Service requests
+  --   - 20 spread across residential units (v_unit_pool)
+  --   - 12 targeted at villa units (M-23, V-14, V-01) so the villa cards
+  --     have a real backlog
+  --   - 4 targeted at commercial-land units (CL-AQ14-A/B)
   -- =========================================================================
   DECLARE
     sr_cat  text[] := ARRAY['Plumbing','Electrical','HVAC','General','Plumbing','Electrical','HVAC','General','Plumbing','Electrical','HVAC','General','Plumbing','Electrical','HVAC','General','Plumbing','Electrical','HVAC','General'];
@@ -642,14 +646,106 @@ BEGIN
     sr_prio text[] := ARRAY['Normal','Normal','High','Low','Normal','High','Normal','Low','Normal','Normal','Normal','Low','Normal','Normal','High','Low','Normal','Normal','Low','Normal'];
     pool_size int;
     i int;
+    villa_unit_pool uuid[];
+    land_unit_pool uuid[];
+    rec record;
   BEGIN
     pool_size := array_length(v_unit_pool, 1);
     IF pool_size IS NULL OR pool_size = 0 THEN pool_size := 1; END IF;
+
+    -- Residential rotation
     FOR i IN 1..20 LOOP
       INSERT INTO public.service_requests (category, description, status, priority, unit_id, owner_id)
         VALUES (sr_cat[i], sr_desc[i], sr_stat[i], sr_prio[i],
                 v_unit_pool[1 + ((i * 11) % pool_size)], p_uid);
     END LOOP;
+
+    -- Build villa + land pools by joining buildings -> units.
+    villa_unit_pool := ARRAY[]::uuid[];
+    FOR rec IN
+      SELECT u.id FROM public.units u
+      JOIN public.buildings b ON b.id = u.building_id
+      WHERE u.owner_id = p_uid AND b.property_type = 'Villa'
+      ORDER BY u.unit_number
+    LOOP
+      villa_unit_pool := array_append(villa_unit_pool, rec.id);
+    END LOOP;
+
+    land_unit_pool := ARRAY[]::uuid[];
+    FOR rec IN
+      SELECT u.id FROM public.units u
+      JOIN public.buildings b ON b.id = u.building_id
+      WHERE u.owner_id = p_uid AND b.property_type = 'Commercial Land'
+      ORDER BY u.unit_number
+    LOOP
+      land_unit_pool := array_append(land_unit_pool, rec.id);
+    END LOOP;
+
+    -- 12 villa SRs — split across the 3 villa units. Realistic for a
+    -- signature villa: pool, garden, AC, alarm, gate, etc.
+    DECLARE
+      villa_descs text[] := ARRAY[
+        'Pool filter making loud noise - needs servicing.',
+        'Garden sprinkler head broken - leaks overnight.',
+        'Master bedroom AC not cooling.',
+        'Main gate intercom not connecting.',
+        'Driveway flood light not turning on.',
+        'Pool deck tile cracked - safety concern.',
+        'Kitchen extractor fan rattling.',
+        'Maid room shower drainage slow.',
+        'Garden lighting timer not working.',
+        'Front door smart lock unresponsive.',
+        'Outdoor jacuzzi pump weak pressure.',
+        'CCTV camera at side gate offline.'
+      ];
+      villa_cats text[] := ARRAY[
+        'Maintenance','Garden','HVAC','Electrical','Electrical','General',
+        'General','Plumbing','Electrical','General','Plumbing','Security'
+      ];
+      villa_prios text[] := ARRAY[
+        'High','Normal','High','Normal','Low','High',
+        'Low','Normal','Low','Normal','Normal','High'
+      ];
+      villa_states text[] := ARRAY[
+        'New','In Progress','New','Acknowledged','Done','New',
+        'In Progress','Done','Acknowledged','New','In Progress','New'
+      ];
+      v_count int;
+      vu uuid;
+    BEGIN
+      v_count := array_length(villa_unit_pool, 1);
+      IF v_count IS NOT NULL AND v_count > 0 THEN
+        FOR i IN 1..12 LOOP
+          vu := villa_unit_pool[1 + ((i - 1) % v_count)];
+          INSERT INTO public.service_requests (category, description, status, priority, unit_id, owner_id)
+            VALUES (villa_cats[i], villa_descs[i], villa_states[i], villa_prios[i], vu, p_uid);
+        END LOOP;
+      END IF;
+    END;
+
+    -- 4 SRs for the commercial-land plot units (Aramex / DHL yards).
+    DECLARE
+      land_descs text[] := ARRAY[
+        'Perimeter fence panel damaged - needs replacement.',
+        'Yard floodlight not working after storm.',
+        'Drainage clogged at south entrance.',
+        'Access gate motor noisy - schedule service.'
+      ];
+      land_cats text[] := ARRAY['Security','Electrical','Plumbing','General'];
+      land_prios text[] := ARRAY['High','Normal','High','Normal'];
+      land_states text[] := ARRAY['New','In Progress','New','Acknowledged'];
+      l_count int;
+      lu uuid;
+    BEGIN
+      l_count := array_length(land_unit_pool, 1);
+      IF l_count IS NOT NULL AND l_count > 0 THEN
+        FOR i IN 1..4 LOOP
+          lu := land_unit_pool[1 + ((i - 1) % l_count)];
+          INSERT INTO public.service_requests (category, description, status, priority, unit_id, owner_id)
+            VALUES (land_cats[i], land_descs[i], land_states[i], land_prios[i], lu, p_uid);
+        END LOOP;
+      END IF;
+    END;
   END;
 
   -- =========================================================================
