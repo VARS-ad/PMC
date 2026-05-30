@@ -168,12 +168,29 @@ const PMCVisitorsPage = () => {
         ]}
       />
 
+      <div style={{fontSize:11,color:'var(--text-muted)',fontStyle:'italic',margin:'0 0 8px 2px'}}>Tip: click a number to filter the list below.</div>
       <div className="kpi-row" style={{gridTemplateColumns:'repeat(5, minmax(0, 1fr))'}}>
-        <div className="kpi-card"><div className="label">Total</div><div className="value">{counts.total}</div></div>
-        <div className="kpi-card"><div className="label">Today</div><div className="value">{counts.today}</div></div>
-        <div className="kpi-card"><div className="label">On-Premise</div><div className="value" style={{color:'#3E4C59'}}>{counts.onPremise}</div></div>
-        <div className="kpi-card"><div className="label">Upcoming</div><div className="value">{counts.upcoming}</div></div>
-        <div className="kpi-card"><div className="label">Checked-Out</div><div className="value" style={{color:'#61707D'}}>{counts.checkedOut}</div></div>
+        {(() => {
+          const tomorrow = (() => { const d = new Date(); d.setDate(d.getDate() + 1); return d.toISOString().slice(0, 10); })();
+          const kpiHover = (e, on) => { e.currentTarget.style.background = on ? 'var(--bg-surface)' : ''; };
+          const cards = [
+            { label: 'Total',       value: counts.total,      color: null,        onClick: () => { setStatusFilter('all'); setDateFromFilter(''); setDateToFilter(''); } },
+            { label: 'Today',       value: counts.today,      color: null,        onClick: () => { setStatusFilter('all'); setDateFromFilter(today); setDateToFilter(today); } },
+            { label: 'On-Premise',  value: counts.onPremise,  color: '#3E4C59',   onClick: () => { setStatusFilter('On-Premise'); setDateFromFilter(''); setDateToFilter(''); } },
+            { label: 'Upcoming',    value: counts.upcoming,   color: null,        onClick: () => { setStatusFilter('Pre-Approved'); setDateFromFilter(tomorrow); setDateToFilter(''); } },
+            { label: 'Checked-Out', value: counts.checkedOut, color: '#61707D',   onClick: () => { setStatusFilter('Checked-Out'); setDateFromFilter(''); setDateToFilter(''); } },
+          ];
+          return cards.map(c => (
+            <div key={c.label} className="kpi-card"
+              onClick={c.onClick}
+              onMouseEnter={e => kpiHover(e, true)}
+              onMouseLeave={e => kpiHover(e, false)}
+              style={{cursor:'pointer',transition:'background 0.12s'}}>
+              <div className="label">{c.label}</div>
+              <div className="value" style={c.color ? {color: c.color} : null}>{c.value}</div>
+            </div>
+          ));
+        })()}
       </div>
 
       <div className="card">

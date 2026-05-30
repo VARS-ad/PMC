@@ -220,6 +220,7 @@ const PMCGuardsPage = () => {
                         </span>
                         {onDuty ? 'On duty' : 'Off duty'}
                       </span>
+                      <div style={{fontSize:10,color:'var(--text-muted)',marginTop:2}}>Updated live · Dubai time</div>
                     </td>
                     <td style={{fontSize:12,color:'var(--text-secondary)',fontVariantNumeric:'tabular-nums'}}>{g.created_at ? new Date(g.created_at).toLocaleDateString() : '—'}</td>
                     <td style={{textAlign:'right',whiteSpace:'nowrap'}}>

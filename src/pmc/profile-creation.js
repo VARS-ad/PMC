@@ -227,8 +227,9 @@ const PC_TEMPLATES = {
     label: 'Security',
     headers: ['Full name','Email','Phone','Building name','Shift','Temporary password','Date of birth','Passport number'],
     examples: [
-      ['Ivan Petrov','ivan.petrov@example.ae','+971 50 111 2233','Aljil Tower','Day','Welcome2026!','1985-07-14','AB1234567'],
+      ['Rajesh Kumar','rajesh.kumar@example.ae','+971 50 111 2233','Aljil Tower','Day','Welcome2026!','1985-07-14','AB1234567'],
       ['Hassan Al Marri','hassan.almarri@example.ae','+971 55 778 4412','Al Qurm View','Night','Welcome2026!','1990-02-03','CD7654321'],
+      ['Mohamed Idris','mohamed.idris@example.ae','+971 56 332 9087','Boulevard Plaza Offices','24h','Welcome2026!','1988-11-22','EF9988776'],
     ],
     filename: 'security-template',
     rules: [
@@ -248,7 +249,9 @@ const PC_TEMPLATES = {
     ],
     examples: [
       ['AquaFix Plumbing LLC','Plumbing','Hassan Al Awadi','+971 50 111 2233','hassan@aquafix.ae','Sheikh Zayed Rd, Dubai','2026-01-01','2026-12-31',30000,'1234567','123456789012345','Aljil Tower, Al Qurm View','Active','Quarterly inspections + emergency callout'],
+      ['CoolBreeze HVAC Services','HVAC','Omar Al Falasi','+971 50 667 8899','dispatch@coolbreeze.ae','Al Quoz Industrial 2, Dubai','2026-02-01','2027-01-31',62000,'2345678','234567890123456','Aljil Tower, Boulevard Plaza Offices','Active','Bi-monthly AHU service + chiller annual overhaul'],
       ['Spark Electric Services','Electrical','Maryam Al Suwaidi','+971 55 444 5566','info@sparkelectric.ae','Al Reem Island, Abu Dhabi','2025-06-15','2026-06-14',18500,'7890123','987654321098765','Aljil Tower','Expiring Soon','Annual maintenance contract'],
+      ['Shield Security Services LLC','Security','Yousef Al Marri','+971 56 220 1144','ops@shieldsecurity.ae','Mussafah, Abu Dhabi','2026-01-01','2027-12-31',180000,'3456789','345678901234567','Aljil Tower, Al Qurm View, Boulevard Plaza Offices','Active','24/7 guarding, 6 guards across 3 sites'],
       ['CrystalClean Co.','Cleaning','Aisha Al Marzouqi','+971 50 909 1212','ops@crystalclean.ae','Al Quoz, Dubai','2025-09-01','2026-08-31',24000,'5566778','455667788990011','Al Qurm View','Active','Daily cleaning of common areas'],
     ],
     filename: 'maintenance-companies-template',

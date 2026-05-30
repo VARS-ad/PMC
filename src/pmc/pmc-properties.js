@@ -727,7 +727,39 @@ const PMCPropertiesPage = ({ setPage }) => {
       {buildings === null ? (
         <div className="card"><div style={{padding:24,color:'var(--text-muted)',fontSize:13}}>Loading…</div></div>
       ) : buildings.length === 0 ? (
-        <div className="card"><div style={{padding:32,color:'var(--text-muted)',fontSize:13,textAlign:'center'}}>No buildings in your portfolio yet. Add some via <strong>Profile Creation → Buildings</strong>.</div></div>
+        // Empty-state: landlord has zero buildings. CTA deep-links into the
+        // Database (Profile Creation) page with the Buildings section
+        // pre-selected via the same window global the consumer reads on mount.
+        <div style={{display:'flex',justifyContent:'center',padding:'24px 0'}}>
+          <div style={{maxWidth:480,width:'100%',padding:32,border:'1px solid var(--border-light)',background:'#fff',borderRadius:10,textAlign:'center'}}>
+            <div style={{display:'flex',justifyContent:'center',marginBottom:16}}>
+              <div style={{width:56,height:56,borderRadius:28,background:'#f4f1ea',display:'flex',alignItems:'center',justifyContent:'center'}}>
+                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#5a6b4f" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M3 21h18"/>
+                  <path d="M5 21V7l7-4 7 4v14"/>
+                  <path d="M9 9h2"/>
+                  <path d="M13 9h2"/>
+                  <path d="M9 13h2"/>
+                  <path d="M13 13h2"/>
+                  <path d="M9 17h2"/>
+                  <path d="M13 17h2"/>
+                  <circle cx="19" cy="6" r="3.4" fill="#fff" stroke="#a07d3c"/>
+                  <path d="M19 4.4v3.2M17.4 6h3.2" stroke="#a07d3c"/>
+                </svg>
+              </div>
+            </div>
+            <div style={{fontSize:11,letterSpacing:'0.08em',textTransform:'uppercase',color:'var(--text-muted)',fontWeight:600,marginBottom:8}}>Get Started</div>
+            <div style={{fontSize:20,fontWeight:600,color:'var(--text-dark)',letterSpacing:'-0.01em',marginBottom:10}}>Add your first building</div>
+            <div style={{fontSize:13,color:'var(--text-secondary)',lineHeight:1.55,marginBottom:22}}>Bulk-upload a CSV with your buildings, units, and residents — VARS sorts the rest.</div>
+            <button
+              className="btn btn-primary"
+              onClick={() => {
+                try { window._profileCreationInitialSection = 'buildings'; } catch (_) {}
+                if (setPage) setPage('profileCreation');
+              }}
+            >Add buildings</button>
+          </div>
+        </div>
       ) : (() => {
           // Shared eyebrow header style (mirrors pmc-overview.js groupEyebrow)
           // Section heading sits between page-title and card-titles in the

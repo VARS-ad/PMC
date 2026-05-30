@@ -987,21 +987,44 @@ const PMCOverviewPage = ({ setPage }) => {
               {sub && <div style={{fontSize:11,color:'var(--text-muted)',marginTop:6}}>{sub}</div>}
             </div>
           );
+          // First-time hint: "Tip: click any tile to see details" auto-
+          // dismisses after the user clicks any KPI tile. sessionStorage
+          // gate so the hint doesn't reappear later in the same session
+          // after a single use.
+          let showKpiHint = true;
+          try { showKpiHint = sessionStorage.getItem('vars:hint_overview_kpi_dismissed') !== '1'; } catch (_) {}
+          const dismissKpiHint = () => {
+            try { sessionStorage.setItem('vars:hint_overview_kpi_dismissed', '1'); } catch (_) {}
+          };
+          const onTileClick = () => { dismissKpiHint(); navToSummary(); };
           return (
             <div className="card" style={{padding:'22px 26px',marginBottom:16,background:'linear-gradient(135deg, #fff 0%, #faf7f0 100%)'}}>
-              <div style={{fontSize:11,letterSpacing:'0.08em',textTransform:'uppercase',color:'var(--text-secondary)',fontWeight:600,marginBottom:14}}>
-                {rangeLabel}
+              <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',marginBottom:14,gap:12,flexWrap:'wrap'}}>
+                <div style={{fontSize:11,letterSpacing:'0.08em',textTransform:'uppercase',color:'var(--text-secondary)',fontWeight:600}}>
+                  {rangeLabel}
+                </div>
+                {showKpiHint && (
+                  <div style={{fontSize:11,color:'var(--text-muted)',fontStyle:'italic'}}>
+                    Tip: click any tile to see details
+                  </div>
+                )}
               </div>
               <div style={{display:'flex',gap:24,flexWrap:'wrap'}}>
-                <Stat label="Collected"           value={fmt(stats.headlineCollected)} color="#5a6b4f"
+                <Stat label={<span>Collected <span title="Rent + service charges paid in the period. e.g. AED 1,850,000 received from 48 paid invoices." style={{display:'inline-flex',alignItems:'center',justifyContent:'center',width:14,height:14,borderRadius:'50%',border:'1px solid var(--text-muted)',color:'var(--text-muted)',fontSize:9,fontWeight:600,fontStyle:'normal',letterSpacing:0,cursor:'help',marginLeft:6,verticalAlign:'middle'}}>i</span></span>}
+                      value={fmt(stats.headlineCollected)} color="#5a6b4f"
                       sub={'For the selected period · last month ' + fmt(stats.headlineLastMonth)}
-                      onClick={navToSummary}/>
-                <Stat label="Overdue"             value={fmt(stats.headlineOverdue)}  color="#8b4a42"
+                      onClick={onTileClick}/>
+                <Stat label={<span>Overdue <span title="Invoices past their due date and still unpaid. e.g. AED 50,000 owed by 3 accounts, 20+ days late." style={{display:'inline-flex',alignItems:'center',justifyContent:'center',width:14,height:14,borderRadius:'50%',border:'1px solid var(--text-muted)',color:'var(--text-muted)',fontSize:9,fontWeight:600,fontStyle:'normal',letterSpacing:0,cursor:'help',marginLeft:6,verticalAlign:'middle'}}>i</span></span>}
+                      value={fmt(stats.headlineOverdue)}  color="#8b4a42"
                       sub="Past due, in the selected period"
-                      onClick={navToSummary}/>
-                <Stat label="Upcoming · 30 days"  value={fmt(stats.headlineUpcoming)} color="#a07d3c"
+                      onClick={onTileClick}/>
+                <Stat label={<span>Upcoming · 30 days <span title="Invoices due in the next 30 days, not yet paid. e.g. AED 350,000 expected from 25 tenants by end of month." style={{display:'inline-flex',alignItems:'center',justifyContent:'center',width:14,height:14,borderRadius:'50%',border:'1px solid var(--text-muted)',color:'var(--text-muted)',fontSize:9,fontWeight:600,fontStyle:'normal',letterSpacing:0,cursor:'help',marginLeft:6,verticalAlign:'middle'}}>i</span></span>}
+                      value={fmt(stats.headlineUpcoming)} color="#a07d3c"
                       sub="Due within 30 days, in the selected period"
-                      onClick={navToSummary}/>
+                      onClick={onTileClick}/>
+              </div>
+              <div style={{marginTop:14,fontSize:11,color:'var(--text-muted)',fontStyle:'italic'}}>
+                Past due = Overdue. Upcoming = due in the next 30 days. Future = due more than 30 days out.
               </div>
             </div>
           );

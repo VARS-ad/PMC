@@ -115,7 +115,14 @@ const AnnouncementsPage = () => {
   const scheduledCount = data.announcements.filter(a => inBucket(a, 'Scheduled')).length;
   const draftCount = data.announcements.filter(a => inBucket(a, 'Draft')).length;
   const sentCount = data.announcements.filter(a => inBucket(a, 'Sent')).length;
-  const filters = [{label:'All',count:data.announcements.length},{label:'Live',count:liveCount},{label:'Scheduled',count:scheduledCount},{label:'Draft',count:draftCount},{label:'Sent',count:sentCount}];
+  const filters = [{key:'All',label:'All',count:data.announcements.length},{key:'Live',label:'Live',count:liveCount},{key:'Scheduled',label:'Scheduled',count:scheduledCount},{key:'Draft',label:'Expired',count:draftCount},{key:'Sent',label:'Sent',count:sentCount}];
+  const emptyStateByKey = {
+    All: 'No announcements yet.',
+    Live: 'No announcements live right now. Use the composer to publish your first.',
+    Scheduled: 'No announcements scheduled.',
+    Draft: 'No expired announcements (anything published more than 30 days ago lands here).',
+    Sent: 'No announcements sent yet.',
+  };
   const filtered = data.announcements.filter(a => inBucket(a, filter));
 
   const handlePublish = () => {
@@ -207,9 +214,9 @@ const AnnouncementsPage = () => {
         <button className="btn btn-primary" onClick={()=>{resetForm();setEditingAnn(null);setShowComposer(true);setComposerStep(1)}}>{t('pm.newAnnouncementBtn')}</button>
       </div>
       <div className="filter-row">
-        {filters.map(f => <span key={f.label} className={`chip ${filter===f.label?'active':''}`} onClick={()=>setFilter(f.label)}>{f.label} {f.count}</span>)}
+        {filters.map(f => <span key={f.key} className={`chip ${filter===f.key?'active':''}`} onClick={()=>setFilter(f.key)}>{f.label} {f.count}</span>)}
       </div>
-      {filtered.length === 0 && <div style={{textAlign:'center',color:'#61707D',padding:40,fontSize:13}}>{t('pm.noAnnouncementsCat')}</div>}
+      {filtered.length === 0 && <div style={{textAlign:'center',color:'var(--text-muted)',padding:32,fontSize:13}}>{emptyStateByKey[filter] || t('pm.noAnnouncementsCat')}</div>}
       {filtered.map(a => (
         <div key={a.id} className="announcement-card">
           <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start'}}>
