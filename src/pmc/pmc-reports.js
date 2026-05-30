@@ -14,6 +14,77 @@
 // included intentionally — the PDF cover page carries a
 // "CONFIDENTIAL · For authorised personnel only" header.
 
+// ----- Custom Chart.js plugins (inline so they live with their config) -----
+// 1) Bar data labels — paints the value on top of each bar so the user can
+//    read the exact AED amount without hovering. Replaces the noisy K/M
+//    y-axis (the user explicitly asked for it gone).
+function _barDataLabelsPlugin(formatter) {
+  return {
+    id: 'varsBarDataLabels',
+    afterDatasetsDraw(chart) {
+      const ctx = chart.ctx;
+      ctx.save();
+      ctx.font = '600 11px "Manrope", -apple-system, BlinkMacSystemFont, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'bottom';
+      chart.data.datasets.forEach((dataset, di) => {
+        const meta = chart.getDatasetMeta(di);
+        if (!meta || meta.hidden) return;
+        // Use the dataset's bar colour for the label so multi-series bars
+        // (Billed/Collected) stay distinguishable.
+        ctx.fillStyle = (typeof dataset.backgroundColor === 'string') ? dataset.backgroundColor : '#3E4C59';
+        // Lighten the data label if the bar fill is too light (e.g. the
+        // grey "Billed" bars) — otherwise the label disappears on white.
+        if (typeof dataset.backgroundColor === 'string' && /^#e/i.test(dataset.backgroundColor)) {
+          ctx.fillStyle = '#61707D';
+        }
+        meta.data.forEach((bar, idx) => {
+          const v = dataset.data[idx];
+          if (v == null || v === 0) return;
+          const txt = formatter(v);
+          if (!txt) return;
+          ctx.fillText(txt, bar.x, bar.y - 6);
+        });
+      });
+      ctx.restore();
+    }
+  };
+}
+
+// 2) Doughnut center text — paints a big stacked label (e.g. "248 / Visits")
+//    in the empty middle of a doughnut chart.
+function _doughnutCenterPlugin(top, bottom) {
+  return {
+    id: 'varsDoughnutCenter',
+    afterDraw(chart) {
+      const { ctx, chartArea } = chart;
+      if (!chartArea) return;
+      const cx = (chartArea.left + chartArea.right) / 2;
+      const cy = (chartArea.top + chartArea.bottom) / 2;
+      ctx.save();
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillStyle = '#131F23';
+      ctx.font = '700 26px "Manrope", -apple-system, sans-serif';
+      ctx.fillText(top, cx, cy - 8);
+      ctx.fillStyle = '#61707D';
+      ctx.font = '500 11px "Manrope", -apple-system, sans-serif';
+      ctx.fillText(bottom, cx, cy + 14);
+      ctx.restore();
+    }
+  };
+}
+
+// Compact bar-label formatter — keeps strings short so they fit on top of
+// narrow bars. Strips the "AED " prefix since the card header already shows
+// the full total with the prefix.
+const _fmtBarAed = (n) => {
+  const r = Math.round(n);
+  if (r === 0) return '';
+  if (r >= 1_000_000) return (r/1_000_000).toFixed(2).replace(/\.?0+$/, '') + 'M';
+  return r.toLocaleString();
+};
+
 const PMCReportsPage = () => {
   const { selectedProperties = [], timeRange, customStart, customEnd } = useApp();
   const [loading, setLoading] = useState(true);
@@ -721,27 +792,42 @@ const FinancialReports = ({ stats, fmt, fmtShort }) => (
     </div>
 
     <div className="card">
-      <div style={{fontSize:14,fontWeight:700,letterSpacing:'-0.01em',color:'var(--text-dark)',marginBottom:18,paddingBottom:12,borderBottom:'1px solid var(--border-light)'}}>Revenue by Asset Type</div>
+      <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-end',marginBottom:18,paddingBottom:12,borderBottom:'1px solid var(--border-light)',flexWrap:'wrap',gap:10}}>
+        <div style={{fontSize:14,fontWeight:700,letterSpacing:'-0.01em',color:'var(--text-dark)'}}>Revenue by Asset Type</div>
+        <div style={{fontSize:13,color:'var(--text-secondary)'}}>
+          Total <strong style={{color:'var(--text-dark)',fontSize:15}}>{fmt(Object.values(stats.revByType).reduce((s, v) => s + (Number(v) || 0), 0))}</strong>
+        </div>
+      </div>
       {Object.keys(stats.revByType).length === 0 ? (
         <div style={{color:'var(--text-muted)',fontSize:13,padding:20}}>No billed revenue in this period.</div>
       ) : (
         <ChartCanvas height={260} config={{
           type: 'bar',
           data: { labels: Object.keys(stats.revByType), datasets: [{ label: 'Revenue AED', data: Object.values(stats.revByType), backgroundColor: '#3E4C59' }] },
-          options: { responsive:true, maintainAspectRatio:false, plugins:{ legend:{ display:false } }, scales:{ x:{grid:{display:false}}, y:{ ticks:{ callback:(v)=>fmtShort(v) }, beginAtZero:true } } },
+          // The custom datalabels plugin paints the full AED amount on top
+          // of each bar — replaces the per-tick K/M Y-axis the user found
+          // noisy. Keep the X-axis ticks (asset type names) intact.
+          options: { responsive:true, maintainAspectRatio:false, layout:{padding:{top:24}}, plugins:{ legend:{ display:false }, tooltip:{ callbacks:{ label:(c)=>fmt(c.parsed.y) } } }, scales:{ x:{grid:{display:false}}, y:{display:false,beginAtZero:true} } },
+          plugins: [_barDataLabelsPlugin(_fmtBarAed)],
         }}/>
       )}
     </div>
 
     <div className="card">
-      <div style={{fontSize:14,fontWeight:700,letterSpacing:'-0.01em',color:'var(--text-dark)',marginBottom:18,paddingBottom:12,borderBottom:'1px solid var(--border-light)'}}>Collection Trend — Last 12 Months</div>
+      <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-end',marginBottom:18,paddingBottom:12,borderBottom:'1px solid var(--border-light)',flexWrap:'wrap',gap:10}}>
+        <div style={{fontSize:14,fontWeight:700,letterSpacing:'-0.01em',color:'var(--text-dark)'}}>Collection Trend — Last 12 Months</div>
+        <div style={{display:'flex',gap:18,fontSize:12,color:'var(--text-secondary)'}}>
+          <div>Billed <strong style={{color:'var(--text-dark)',fontSize:14}}>{fmt((stats.billedTrend || []).reduce((s, v) => s + (Number(v) || 0), 0))}</strong></div>
+          <div>Collected <strong style={{color:'#5a6b4f',fontSize:14}}>{fmt((stats.collectedTrend || []).reduce((s, v) => s + (Number(v) || 0), 0))}</strong></div>
+        </div>
+      </div>
       <ChartCanvas height={280} config={{
         type: 'bar',
         data: { labels: stats.trendLabels, datasets: [
           { label: 'Billed', data: stats.billedTrend, backgroundColor: '#E6EAE9' },
           { label: 'Collected', data: stats.collectedTrend, backgroundColor: '#3E4C59' },
         ] },
-        options: { responsive:true, maintainAspectRatio:false, plugins:{ legend:{ position:'bottom', labels:{boxWidth:12,font:{size:11}} } }, scales:{ x:{grid:{display:false}}, y:{ ticks:{ callback:(v)=>fmtShort(v) }, beginAtZero:true } } },
+        options: { responsive:true, maintainAspectRatio:false, plugins:{ legend:{ position:'bottom', labels:{boxWidth:12,font:{size:11}} }, tooltip:{ callbacks:{ label:(c)=>c.dataset.label + ': ' + fmt(c.parsed.y) } } }, scales:{ x:{grid:{display:false}}, y:{display:false,beginAtZero:true} } },
       }}/>
     </div>
 
@@ -796,11 +882,17 @@ const FinancialReports = ({ stats, fmt, fmtShort }) => (
     </div>
 
     <div className="card">
-      <div style={{fontSize:14,fontWeight:700,letterSpacing:'-0.01em',color:'var(--text-dark)',marginBottom:18,paddingBottom:12,borderBottom:'1px solid var(--border-light)'}}>Future Revenue Projection (12 mo)</div>
+      <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-end',marginBottom:18,paddingBottom:12,borderBottom:'1px solid var(--border-light)',flexWrap:'wrap',gap:10}}>
+        <div style={{fontSize:14,fontWeight:700,letterSpacing:'-0.01em',color:'var(--text-dark)'}}>Future Revenue Projection (12 mo)</div>
+        <div style={{fontSize:13,color:'var(--text-secondary)'}}>
+          Projected <strong style={{color:'#a07d3c',fontSize:15}}>{fmt((stats.futureRevenue || []).reduce((s, v) => s + (Number(v) || 0), 0))}</strong>
+        </div>
+      </div>
       <ChartCanvas height={240} config={{
         type: 'bar',
         data: { labels: stats.futureLabels, datasets: [{ label: 'Projected AED', data: stats.futureRevenue, backgroundColor: '#a07d3c' }] },
-        options: { responsive:true, maintainAspectRatio:false, plugins:{ legend:{display:false} }, scales:{ x:{grid:{display:false}}, y:{ ticks:{ callback:(v)=>fmtShort(v) }, beginAtZero:true } } },
+        options: { responsive:true, maintainAspectRatio:false, layout:{padding:{top:24}}, plugins:{ legend:{display:false}, tooltip:{ callbacks:{ label:(c)=>fmt(c.parsed.y) } } }, scales:{ x:{grid:{display:false}}, y:{display:false,beginAtZero:true} } },
+        plugins: [_barDataLabelsPlugin(_fmtBarAed)],
       }}/>
       <div style={{fontSize:11,color:'var(--text-muted)',marginTop:8}}>Based on active leases' monthly rent · stops counting once lease_end has passed.</div>
     </div>
@@ -1106,14 +1198,20 @@ const VisitorsGuardsReports = ({ stats }) => (
     </div>
 
     <div className="card">
-      <div style={{fontSize:14,fontWeight:700,letterSpacing:'-0.01em',color:'var(--text-dark)',marginBottom:18,paddingBottom:12,borderBottom:'1px solid var(--border-light)'}}>Visitor Flow — Daily</div>
+      <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-end',marginBottom:18,paddingBottom:12,borderBottom:'1px solid var(--border-light)',flexWrap:'wrap',gap:10}}>
+        <div style={{fontSize:14,fontWeight:700,letterSpacing:'-0.01em',color:'var(--text-dark)'}}>Visitor Flow — Daily</div>
+        <div style={{display:'flex',gap:18,fontSize:12,color:'var(--text-secondary)'}}>
+          <div>Total <strong style={{color:'var(--text-dark)',fontSize:14}}>{(stats.visitDailyCounts || []).reduce((s, v) => s + (Number(v) || 0), 0).toLocaleString()}</strong></div>
+          <div>Peak day <strong style={{color:'var(--text-dark)',fontSize:14}}>{(stats.visitDailyCounts || []).reduce((m, v) => Math.max(m, Number(v) || 0), 0).toLocaleString()}</strong></div>
+        </div>
+      </div>
       {stats.visitDailyLabels.length === 0 ? (
         <div style={{color:'var(--text-muted)',fontSize:13,padding:20}}>No visits in the selected period.</div>
       ) : (
         <ChartCanvas height={260} config={{
           type: 'line',
-          data: { labels: stats.visitDailyLabels, datasets: [{ label: 'Visits', data: stats.visitDailyCounts, borderColor:'#3E4C59', backgroundColor:'rgba(62,76,89,0.15)', tension:0.3, fill:true, pointRadius:3 }] },
-          options: { responsive:true, maintainAspectRatio:false, plugins:{ legend:{display:false} }, scales:{ x:{grid:{display:false}}, y:{beginAtZero:true,ticks:{precision:0}} } },
+          data: { labels: stats.visitDailyLabels, datasets: [{ label: 'Visits', data: stats.visitDailyCounts, borderColor:'#3E4C59', backgroundColor:'rgba(62,76,89,0.15)', tension:0.35, fill:true, pointRadius:2, pointHoverRadius:5, pointBackgroundColor:'#3E4C59' }] },
+          options: { responsive:true, maintainAspectRatio:false, plugins:{ legend:{display:false} }, scales:{ x:{grid:{display:false}}, y:{beginAtZero:true,ticks:{precision:0,color:'#9aa5a3'},grid:{color:'rgba(0,0,0,0.04)',drawBorder:false}} } },
         }}/>
       )}
     </div>
@@ -1122,13 +1220,38 @@ const VisitorsGuardsReports = ({ stats }) => (
       <div style={{fontSize:14,fontWeight:700,letterSpacing:'-0.01em',color:'var(--text-dark)',marginBottom:18,paddingBottom:12,borderBottom:'1px solid var(--border-light)'}}>Visitors by Type</div>
       {Object.keys(stats.visitsByType).length === 0 ? (
         <div style={{color:'var(--text-muted)',fontSize:13,padding:20}}>No visits yet.</div>
-      ) : (
-        <ChartCanvas height={240} config={{
-          type: 'doughnut',
-          data: { labels: Object.keys(stats.visitsByType), datasets: [{ data: Object.values(stats.visitsByType), backgroundColor: ['#3E4C59','#a07d3c','#5a6b4f','#61707D','#8b4a42','#E6EAE9'], borderWidth: 0 }] },
-          options: { responsive:true, maintainAspectRatio:false, cutout:'60%', plugins:{ legend:{ position:'bottom', labels:{boxWidth:12,font:{size:11}} } } },
-        }}/>
-      )}
+      ) : (() => {
+        // Donut redesign — large total in the centre, and the legend
+        // becomes a side panel of "type · count · share %" rows so the
+        // user never has to hover to read the breakdown.
+        const entries = Object.entries(stats.visitsByType).sort((a, b) => b[1] - a[1]);
+        const total   = entries.reduce((s, [, v]) => s + (Number(v) || 0), 0);
+        const palette = ['#3E4C59','#a07d3c','#5a6b4f','#61707D','#8b4a42','#c8a87a','#7a8f88'];
+        const colourFor = (i) => palette[i % palette.length];
+        return (
+          <div style={{display:'grid',gridTemplateColumns:'minmax(220px, 280px) 1fr',gap:24,alignItems:'center'}}>
+            <ChartCanvas height={240} config={{
+              type: 'doughnut',
+              data: { labels: entries.map(([k]) => k), datasets: [{ data: entries.map(([, v]) => v), backgroundColor: entries.map((_, i) => colourFor(i)), borderColor: '#fff', borderWidth: 3, hoverOffset: 8 }] },
+              options: { responsive:true, maintainAspectRatio:false, cutout:'70%', plugins:{ legend:{ display:false }, tooltip:{ callbacks:{ label:(c)=>c.label + ': ' + c.parsed + ' (' + Math.round(c.parsed / total * 100) + '%)' } } } },
+              plugins: [_doughnutCenterPlugin(total.toLocaleString(), 'Visits')],
+            }}/>
+            <div style={{display:'flex',flexDirection:'column',gap:10}}>
+              {entries.map(([label, val], i) => {
+                const pct = Math.round((val / total) * 100);
+                return (
+                  <div key={label} style={{display:'flex',alignItems:'center',gap:12,padding:'10px 12px',background:'var(--bg-surface)',borderRadius:8,border:'1px solid var(--border-light)'}}>
+                    <span style={{width:10,height:10,borderRadius:3,background:colourFor(i),flexShrink:0}}/>
+                    <div style={{flex:1,minWidth:0,fontSize:13,color:'var(--text-dark)',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{label}</div>
+                    <div style={{fontSize:13,fontWeight:600,color:'var(--text-dark)',fontVariantNumeric:'tabular-nums'}}>{val}</div>
+                    <div style={{fontSize:11,color:'var(--text-muted)',width:36,textAlign:'right',fontVariantNumeric:'tabular-nums'}}>{pct}%</div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        );
+      })()}
     </div>
 
     <div className="card">
