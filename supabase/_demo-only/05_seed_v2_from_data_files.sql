@@ -550,8 +550,11 @@ BEGIN
     VALUES ('main', '{}'::jsonb, p_uid)
     ON CONFLICT (id, owner_id) DO NOTHING;
 
-EXCEPTION WHEN OTHERS THEN
-  RAISE WARNING 'seed_demo_portfolio_for(%) failed: %', p_uid, SQLERRM;
+-- TEMP DEBUG: re-raise the error instead of swallowing it. Once the
+-- function runs clean once, we'll put the EXCEPTION block back in to
+-- protect new signups from a partial-failure 500.
+-- EXCEPTION WHEN OTHERS THEN
+--   RAISE WARNING 'seed_demo_portfolio_for(%) failed: %', p_uid, SQLERRM;
 END;
 $$;
 
