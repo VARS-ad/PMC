@@ -436,9 +436,20 @@ const LoginPage = ({ onLogin, syncStatus }) => {
           )}
         </form>
 
-        {/* Sync indicator + datetime footer removed — they read like dev
-            scaffolding next to the polished form. Only useful for debugging,
-            which I can do from the browser console. */}
+        {/* Footer — kept on the working build. The demo build drops it
+            because the login surface is already clean and the sync state
+            is uninteresting to prospects. */}
+        {!IS_DEMO && (
+          <>
+            <div style={{display:'flex',alignItems:'center',justifyContent:'center',gap:6,marginTop:20,fontSize:11,color: syncStatus === 'online' ? '#6b8e6b' : '#b05050'}}>
+              <div style={{width:6,height:6,borderRadius:'50%',background: syncStatus === 'online' ? '#4caf50' : '#f44336'}}></div>
+              {syncStatus === 'online' ? t('login.syncActive') : t('login.syncInactive')}
+            </div>
+            <div style={{marginTop:12,textAlign:'center'}}>
+              <p style={{fontSize:10,color:'#D0D6D5',letterSpacing:'0.04em'}}>{formatDateTime(new Date())}</p>
+            </div>
+          </>
+        )}
       </div>
     </div>
   );
