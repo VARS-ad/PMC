@@ -1153,10 +1153,26 @@ const BuildingDetailModal = ({ building, onClose }) => {
     return () => { mounted = false; };
   }, [building.id]);
 
+  // Group units by floor. Villas + Commercial Land carry floor=NULL (one
+  // standalone plot, no levels); bucket those under a sentinel key so the
+  // sort/render doesn't see NaN. The render below shows '—' as the label
+  // for that bucket so the user sees "—" instead of "Floor null".
+  const NO_FLOOR_KEY = '__no_floor__';
+  const floorKey = (u) => (u.floor == null ? NO_FLOOR_KEY : String(u.floor));
   const byFloor = {};
-  (building.units || []).forEach(u => { (byFloor[u.floor] = byFloor[u.floor] || []).push(u); });
+  (building.units || []).forEach(u => {
+    const k = floorKey(u);
+    (byFloor[k] = byFloor[k] || []).push(u);
+  });
   Object.keys(byFloor).forEach(f => byFloor[f].sort((a,b) => String(a.unit_number).localeCompare(String(b.unit_number))));
-  const floors = Object.keys(byFloor).map(Number).sort((a,b) => a-b);
+  // Numeric floors first (ascending), then the no-floor bucket last.
+  const floors = Object.keys(byFloor)
+    .filter(k => k !== NO_FLOOR_KEY)
+    .map(Number)
+    .filter(n => !Number.isNaN(n))
+    .sort((a,b) => a-b)
+    .map(String);
+  if (byFloor[NO_FLOOR_KEY]) floors.push(NO_FLOOR_KEY);
   // A unit counts as occupied if either:
   //  - residential: there's a resident_assignments row (loaded into residentByUnit above), OR
   //  - commercial / villa / land: the unit row itself carries a non-empty tenant_name.
@@ -1193,7 +1209,7 @@ const BuildingDetailModal = ({ building, onClose }) => {
           {floors.map(f => (
             <div key={f} style={{marginBottom:18,paddingBottom:14,borderBottom:'1px solid var(--border-light)'}}>
               <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:10}}>
-                <div style={{fontSize:13,fontWeight:600,color:'var(--text-dark)'}}>Floor {f}</div>
+                <div style={{fontSize:13,fontWeight:600,color:'var(--text-dark)'}}>{f === NO_FLOOR_KEY ? 'Units' : 'Floor ' + f}</div>
                 <div style={{fontSize:11,color:'var(--text-muted)'}}>{byFloor[f].length} unit{byFloor[f].length===1?'':'s'}</div>
               </div>
               <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill, minmax(110px, 1fr))',gap:6}}>

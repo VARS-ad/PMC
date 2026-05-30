@@ -558,17 +558,22 @@ BEGIN
   END;
 
   -- =========================================================================
-  -- 8. Visits — ~180 spread across last 30 days + next 14 days
-  --    Each gets a time of day so Visitor Flow charts have texture across
-  --    morning / afternoon / evening, not just one bar per day.
+  -- 8. Visits — variable volume per day across last 30 days + next 14 days
+  --    so the Visitor Flow chart actually has shape (peaks on weekends,
+  --    busy weekdays, occasional quiet days) instead of a flat-4-per-day
+  --    line.
   -- =========================================================================
   DECLARE
     pool_size int;
-    i int;
+    day_offset int;
+    visits_today int;
+    j int;
+    seq int := 0;
     vd date;
     vs text;
     vt time;
     hr int;
+    dow int;
     purpose_pool text[] := ARRAY[
       'Friends over for dinner','Family visit','Maintenance call-out','Package delivery',
       'Grocery delivery','Cleaning service','AC servicing','Plumbing repair',
@@ -579,27 +584,45 @@ BEGIN
   BEGIN
     pool_size := array_length(v_unit_pool, 1);
     IF pool_size IS NULL OR pool_size = 0 THEN pool_size := 1; END IF;
-    FOR i IN 1..180 LOOP
-      vd := current_date - 30 + (i % 45);   -- -30 .. +14
-      hr := 8 + ((i * 3) % 13);              -- 8..20
-      vt := make_time(hr, ((i * 7) % 6) * 10, 0);
-      IF vd > current_date THEN
-        vs := 'Pre-Approved';
-      ELSIF vd = current_date THEN
-        vs := CASE i % 4 WHEN 0 THEN 'On-Premise' WHEN 1 THEN 'Pre-Approved' WHEN 2 THEN 'Checked-Out' ELSE 'On-Premise' END;
-      ELSIF vd >= current_date - 1 THEN
-        vs := 'Checked-Out';
-      ELSE
-        vs := CASE i % 10 WHEN 0 THEN 'No-Show' WHEN 1 THEN 'Cancelled' ELSE 'Checked-Out' END;
+    -- Iterate by DAY (not by visit), then pick a per-day visitor count
+    -- with weekday baseline + weekend boost + jitter. Day-of-week:
+    -- Fri/Sat (UAE weekend) and Sun get extra residents-receiving-guests.
+    FOR day_offset IN -30..14 LOOP
+      vd := current_date + day_offset;
+      dow := EXTRACT(dow FROM vd)::int;   -- 0=Sun .. 6=Sat
+      -- Base 3-5 visitors, weekend +4-6, occasional quiet days.
+      visits_today := 3 + ((day_offset * 17 + dow * 11) % 4);
+      IF dow IN (5, 6, 0) THEN
+        visits_today := visits_today + 4 + ((day_offset * 7) % 4);
       END IF;
-      INSERT INTO public.visits (visitor_name, visitor_phone, type, status, visit_date, visit_time, purpose, unit_id, owner_id) VALUES
-        (visit_names[1 + (i % array_length(visit_names,1))],
-         '+971 5' || ((i * 13) % 9 + 1) || ' ' || lpad(((i * 211) % 1000)::text, 3, '0') || ' ' || lpad(((i * 9007) % 10000)::text, 4, '0'),
-         visit_types[1 + (i % array_length(visit_types,1))],
-         vs, vd, vt,
-         purpose_pool[1 + (i % array_length(purpose_pool,1))],
-         v_unit_pool[1 + ((i * 7) % pool_size)],
-         p_uid);
+      IF (day_offset * 13) % 11 = 0 THEN
+        visits_today := 1;   -- a couple of quiet days for contrast
+      END IF;
+      IF day_offset > 7 THEN
+        visits_today := GREATEST(1, visits_today - 2);   -- future thins out
+      END IF;
+      FOR j IN 1..visits_today LOOP
+        seq := seq + 1;
+        hr := 8 + ((seq * 3) % 13);
+        vt := make_time(hr, ((seq * 7) % 6) * 10, 0);
+        IF vd > current_date THEN
+          vs := 'Pre-Approved';
+        ELSIF vd = current_date THEN
+          vs := CASE seq % 4 WHEN 0 THEN 'On-Premise' WHEN 1 THEN 'Pre-Approved' WHEN 2 THEN 'Checked-Out' ELSE 'On-Premise' END;
+        ELSIF vd >= current_date - 1 THEN
+          vs := 'Checked-Out';
+        ELSE
+          vs := CASE seq % 10 WHEN 0 THEN 'No-Show' WHEN 1 THEN 'Cancelled' ELSE 'Checked-Out' END;
+        END IF;
+        INSERT INTO public.visits (visitor_name, visitor_phone, type, status, visit_date, visit_time, purpose, unit_id, owner_id) VALUES
+          (visit_names[1 + (seq % array_length(visit_names,1))],
+           '+971 5' || ((seq * 13) % 9 + 1) || ' ' || lpad(((seq * 211) % 1000)::text, 3, '0') || ' ' || lpad(((seq * 9007) % 10000)::text, 4, '0'),
+           visit_types[1 + (seq % array_length(visit_types,1))],
+           vs, vd, vt,
+           purpose_pool[1 + (seq % array_length(purpose_pool,1))],
+           v_unit_pool[1 + ((seq * 7) % pool_size)],
+           p_uid);
+      END LOOP;
     END LOOP;
   END;
 
