@@ -81,7 +81,6 @@ const ServiceRequestDetailModal = ({ sr, building, onClose }) => {
   // Display tenant info — residential resident if linked, else unit.tenant_*
   const tenantName = resident?.full_name || unit?.tenant_name || (sr.resident_name && sr.resident_name !== '—' ? sr.resident_name : null);
   const tenantPhone = resident?.phone || unit?.tenant_phone || null;
-  const waLink = tenantPhone ? 'https://wa.me/' + tenantPhone.replace(/[^0-9]/g, '') : null;
   const unitDisplay = unit ? (unit.unit_number + (unit.floor != null ? ' · Floor ' + unit.floor : '')) : (sr.unit_number || '—');
 
   const Section = ({ label, children, right }) => (
@@ -142,11 +141,7 @@ const ServiceRequestDetailModal = ({ sr, building, onClose }) => {
             ) : (
               <>
                 <Field label="Name">{tenantName || '—'}</Field>
-                <Field label="Phone">
-                  {tenantPhone ? (
-                    waLink ? <a href={waLink} target="_blank" rel="noopener" style={{color:'#5a6b4f',textDecoration:'none'}}>{tenantPhone}</a> : tenantPhone
-                  ) : '—'}
-                </Field>
+                <Field label="Phone">{tenantPhone || '—'}</Field>
                 <Field label="Unit">{unitDisplay}</Field>
               </>
             )}

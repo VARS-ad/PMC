@@ -172,10 +172,6 @@ const UnitDetailPage = ({ unit, building, onClose }) => {
     : (unit.tenant_name
         ? { name: unit.tenant_name, phone: unit.tenant_phone, monthly: unit.tenant_monthly_payment_aed, lease_end: unit.tenant_lease_end, tenure: unit.tenant_tenure, contract: unit.tenant_contract_number, cheques: null }
         : null);
-  const waLink = tenant && tenant.phone
-    ? 'https://wa.me/' + tenant.phone.replace(/[^0-9]/g, '')
-    : null;
-
   // ---- Invoice status pill colour ------------------------------------
   const invoiceStatusPill = (eff) => {
     const map = {
@@ -244,13 +240,7 @@ const UnitDetailPage = ({ unit, building, onClose }) => {
                 </div>
                 <div>
                   <div style={{fontSize:10,letterSpacing:'0.06em',textTransform:'uppercase',color:'var(--text-secondary)',fontWeight:600,marginBottom:4}}>Phone</div>
-                  <div style={{fontSize:14,fontWeight:500}}>
-                    {tenant.phone ? (
-                      waLink ? (
-                        <a href={waLink} target="_blank" rel="noopener" style={{color:'#5a6b4f',textDecoration:'none'}}>{tenant.phone}</a>
-                      ) : tenant.phone
-                    ) : '—'}
-                  </div>
+                  <div style={{fontSize:14,fontWeight:500}}>{tenant.phone || '—'}</div>
                 </div>
                 <div>
                   <div style={{fontSize:10,letterSpacing:'0.06em',textTransform:'uppercase',color:'var(--text-secondary)',fontWeight:600,marginBottom:4}}>Tenure</div>
