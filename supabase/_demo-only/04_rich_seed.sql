@@ -123,7 +123,7 @@ BEGIN
         (b_qurm,    5, 4, 'Q',  20),
         (b_marina,  4, 3, '',   12),
         (b_boulev,  4, 3, '',   12)
-      ) AS x(bid uuid, floors int, ups int, prefix text, total int)
+      ) AS x(bid, floors, ups, prefix, total)
     LOOP
       FOR i IN 1..cfg.floors LOOP
         FOR j IN 1..cfg.ups LOOP
@@ -279,7 +279,7 @@ BEGIN
         ('Handy Pros General',        'General Handyman',   'Faruq Hamdan',      '+971 50 220 9970', 'jobs@handypros.ae',       12000, 'Expired'),
         ('Shield Security Services',  'Security',           'Ahmed Al Marri',    '+971 50 998 1101', 'ops@shieldsec.ae',        58000, 'Active'),
         ('UrbanFix Multi-Service',    'Other',              'Marwan Saber',      '+971 50 443 7720', 'desk@urbanfix.ae',        16000, 'Active')
-      ) AS v(nm text, cat text, contact text, phone text, email text, val numeric, status text)
+      ) AS v(nm, cat, contact, phone, email, val, status)
     LOOP
       i := i + 1;
       vendor_id := gen_random_uuid();
