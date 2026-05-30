@@ -15,8 +15,10 @@ const LoginPage = ({ onLogin, syncStatus }) => {
   // splash + fade in login card) → 'ready' (login card only).
   const [splashStage, setSplashStage] = useState('splash');
   useEffect(() => {
-    const t1 = setTimeout(() => setSplashStage('transition'), 1600);
-    const t2 = setTimeout(() => setSplashStage('ready'),      2300);
+    // ~3.0s of full-visibility static + 0.7s fade = ~3.7s total so the
+    // welcome tagline has time to be read on first arrival.
+    const t1 = setTimeout(() => setSplashStage('transition'), 3000);
+    const t2 = setTimeout(() => setSplashStage('ready'),      3700);
     return () => { clearTimeout(t1); clearTimeout(t2); };
   }, []);
   const skipSplash = () => { setSplashStage(s => s === 'splash' ? 'transition' : s); setTimeout(() => setSplashStage('ready'), 500); };
