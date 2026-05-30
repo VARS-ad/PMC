@@ -312,6 +312,7 @@ const App = () => {
       // Escalations page removed — page no longer routed.
       case 'reports': return <PMCReportsPage/>;
       case 'reminders': return <PMCRemindersPage setPage={setPage}/>;
+      case 'profile': return <MyProfilePage setPage={setPage}/>;
       default: return <PMCOverviewPage setPage={setPage}/>;
     }
   };
