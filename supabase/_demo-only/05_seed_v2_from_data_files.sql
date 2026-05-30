@@ -437,11 +437,12 @@ BEGIN
       i := i + 1;
       n_per := 2 + (i % 3);   -- 2-4 attachments per unit
       FOR k_idx IN 1..n_per LOOP
-        INSERT INTO public.unit_attachments (unit_id, kind, storage_path, file_name, mime_type, size_bytes, owner_id)
-          VALUES (rec.unit_id, kinds[1 + ((i + k_idx) % array_length(kinds, 1))],
-                  rec.unit_id::text || '/' || kinds[1 + ((i + k_idx) % array_length(kinds, 1))] || '-' || k_idx || '.jpg',
+        INSERT INTO public.unit_attachments (unit_id, kind, filename, storage_path, owner_id)
+          VALUES (rec.unit_id,
+                  kinds[1 + ((i + k_idx) % array_length(kinds, 1))],
                   'unit-' || rec.unit_number || '-' || kinds[1 + ((i + k_idx) % array_length(kinds, 1))] || '-' || k_idx || '.jpg',
-                  'image/jpeg', 250000 + ((i*13 + k_idx*7) % 800000), p_uid);
+                  rec.unit_id::text || '/' || kinds[1 + ((i + k_idx) % array_length(kinds, 1))] || '-' || k_idx || '.jpg',
+                  p_uid);
       END LOOP;
     END LOOP;
   END;
@@ -550,11 +551,8 @@ BEGIN
     VALUES ('main', '{}'::jsonb, p_uid)
     ON CONFLICT (id, owner_id) DO NOTHING;
 
--- TEMP DEBUG: re-raise the error instead of swallowing it. Once the
--- function runs clean once, we'll put the EXCEPTION block back in to
--- protect new signups from a partial-failure 500.
--- EXCEPTION WHEN OTHERS THEN
---   RAISE WARNING 'seed_demo_portfolio_for(%) failed: %', p_uid, SQLERRM;
+EXCEPTION WHEN OTHERS THEN
+  RAISE WARNING 'seed_demo_portfolio_for(%) failed: %', p_uid, SQLERRM;
 END;
 $$;
 
