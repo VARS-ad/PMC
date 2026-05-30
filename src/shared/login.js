@@ -515,12 +515,9 @@ const LoginPage = ({ onLogin, syncStatus }) => {
             below by the mode !== 'reset' guards. */}
         {mode === 'reset' && (
           <form onSubmit={handleResetSubmit}>
-            <div style={{fontSize:14,fontWeight:600,letterSpacing:'-0.005em',color:'var(--text-dark)',marginBottom:6}}>
+            <div style={{fontSize:14,fontWeight:600,letterSpacing:'-0.005em',color:'var(--text-dark)',marginBottom:18}}>
               Set a new password
             </div>
-            <p style={{fontSize:12,color:'var(--text-muted)',margin:'0 0 18px 0',lineHeight:1.5}}>
-              Choose a new password for your account. You'll be signed in once it's saved.
-            </p>
             <div className="form-group">
               <label style={{fontSize:10,letterSpacing:'0.08em',textTransform:'uppercase',color:'var(--text-secondary)',fontWeight:500}}>New password</label>
               <input className="form-input" type="password" value={password} onChange={e=>setPassword(e.target.value)} placeholder="Min 6 characters" autoFocus style={{borderColor:'var(--border-light)',fontSize:13,borderRadius:8}}/>
