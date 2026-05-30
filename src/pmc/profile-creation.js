@@ -317,6 +317,79 @@ function rowsToObjects(parsedRows, headers) {
   });
 }
 
+// ===== bulk-onboard wrapper =====
+// On working: POST records to the bulk-onboard Edge Function which creates
+// real auth.users + profile rows with the resident's password so they can
+// sign in immediately.
+// On demo: skip the auth.users creation (demo doesn't need fake login
+// accounts for every seeded resident); insert profile + assignment rows
+// directly via supabase-js. owner_id is auto-stamped by the column DEFAULT.
+// Both code paths return the same { results: [{ email, ok, error? }, ...] }
+// shape so the calling UI doesn't need to branch.
+async function bulkOnboardCall(records) {
+  const IS_DEMO = (typeof VARS_TARGET !== 'undefined' && VARS_TARGET === 'demo');
+  if (!IS_DEMO) {
+    const { data: { session } } = await supabaseClient.auth.getSession();
+    const headers = { 'Content-Type': 'application/json' };
+    if (session && session.access_token) headers['Authorization'] = 'Bearer ' + session.access_token;
+    const resp = await fetch(SUPABASE_URL + '/functions/v1/bulk-onboard', {
+      method: 'POST', headers, body: JSON.stringify({ records }),
+    });
+    return resp.json();
+  }
+  // ---- Demo path ----
+  const results = [];
+  for (const rec of records) {
+    try {
+      let bId = null, uId = null;
+      if (rec.building_name) {
+        const { data: bs } = await supabaseClient
+          .from('buildings').select('id').eq('name', rec.building_name).limit(1);
+        bId = (bs && bs[0]) ? bs[0].id : null;
+        if (!bId) { results.push({ email: rec.email, ok: false, error: 'Building not found: ' + rec.building_name }); continue; }
+      }
+      if (rec.role === 'resident' && rec.unit_number && bId) {
+        const { data: us } = await supabaseClient
+          .from('units').select('id').eq('building_id', bId).eq('unit_number', rec.unit_number).limit(1);
+        uId = (us && us[0]) ? us[0].id : null;
+        if (!uId) { results.push({ email: rec.email, ok: false, error: 'Unit not found: ' + rec.unit_number }); continue; }
+      }
+      const pId = (typeof crypto !== 'undefined' && crypto.randomUUID)
+        ? crypto.randomUUID()
+        : 'd' + Math.random().toString(36).slice(2) + Date.now().toString(36);
+      const { error: pe } = await supabaseClient.from('profiles').insert({
+        id: pId,
+        full_name: rec.full_name,
+        phone: rec.phone || null,
+        role: rec.role,
+        date_of_birth: rec.date_of_birth || null,
+        passport_number: rec.passport_number || null,
+      });
+      if (pe) { results.push({ email: rec.email, ok: false, error: pe.message }); continue; }
+      if (rec.role === 'resident' && uId) {
+        const { error: ae } = await supabaseClient.from('resident_assignments').insert({
+          profile_id: pId, unit_id: uId,
+          tenure: rec.tenure || null,
+          lease_start: rec.lease_start || null,
+          lease_end: rec.lease_end || null,
+          monthly_payment_aed: rec.monthly_payment_aed || null,
+        });
+        if (ae) { results.push({ email: rec.email, ok: false, error: ae.message }); continue; }
+      }
+      if (rec.role === 'security' && bId) {
+        const { error: ae } = await supabaseClient.from('security_assignments').insert({
+          profile_id: pId, building_id: bId, shift: rec.shift,
+        });
+        if (ae) { results.push({ email: rec.email, ok: false, error: ae.message }); continue; }
+      }
+      results.push({ email: rec.email, ok: true });
+    } catch (e) {
+      results.push({ email: rec.email, ok: false, error: String(e.message || e) });
+    }
+  }
+  return { results };
+}
+
 const ProfileCreationPage = () => {
   // Allow other pages (e.g. the Vendors page's "Bulk Upload" button) to land
   // the user directly on a specific section by setting this global hint
@@ -1258,13 +1331,7 @@ const PCBulkUpload = ({ section }) => {
             passport_number: r['Passport number'] || null,
           };
         });
-        const { data: { session } } = await supabaseClient.auth.getSession();
-        const headers = { 'Content-Type': 'application/json' };
-        if (session && session.access_token) headers['Authorization'] = 'Bearer ' + session.access_token;
-        const resp = await fetch(SUPABASE_URL + '/functions/v1/bulk-onboard', {
-          method: 'POST', headers, body: JSON.stringify({ records, mode: conflictMode }),
-        });
-        const out = await resp.json();
+        const out = await bulkOnboardCall(records);
         setResults(out);
       }
     } catch (e) {
@@ -1980,14 +2047,7 @@ async function uploadBuildingsBulk(parsedRows, conflictMode = 'skip', onProgress
     report('Onboarding ' + residentRecords.length + ' resident' + (residentRecords.length === 1 ? '' : 's') + '…', step, totalSteps);
     await yieldToUi();
     try {
-      const { data: { session } } = await supabaseClient.auth.getSession();
-      const headers = { 'Content-Type': 'application/json' };
-      if (session && session.access_token) headers['Authorization'] = 'Bearer ' + session.access_token;
-      const resp = await fetch(SUPABASE_URL + '/functions/v1/bulk-onboard', {
-        method: 'POST', headers,
-        body: JSON.stringify({ records: residentRecords, mode: conflictMode }),
-      });
-      const out = await resp.json();
+      const out = await bulkOnboardCall(residentRecords);
       residentResults = (out && out.results) || [];
     } catch (e) {
       residentResults = [{ ok: false, error: 'Resident onboarding failed: ' + (e.message || e) }];
@@ -2508,29 +2568,22 @@ const ResidentManualForm = () => {
       const building = buildings.find(b => b.id === form.buildingId);
       const unit = units.find(u => u.id === form.unitId);
       if (!building || !unit) { setResult({ ok: false, error: 'Pick a building and unit' }); setBusy(false); return; }
-      const { data: { session } } = await supabaseClient.auth.getSession();
-      const headers = { 'Content-Type': 'application/json' };
-      if (session && session.access_token) headers['Authorization'] = 'Bearer ' + session.access_token;
-      const resp = await fetch(SUPABASE_URL + '/functions/v1/bulk-onboard', {
-        method: 'POST', headers,
-        body: JSON.stringify({ records: [{
-          email: form.email.trim(), password: form.password, full_name: form.fullName.trim(), phone: form.phone.trim() || null,
-          role: 'resident', building_name: building.name, unit_number: unit.unit_number,
-          date_of_birth:           form.dob || null,
-          passport_number:         form.passport.trim() || null,
-          emirates_id:             form.emiratesId.trim() || null,
-          employer:                form.employer.trim() || null,
-          occupation:              form.occupation.trim() || null,
-          tenure:                  form.tenure || null,
-          lease_start:             form.leaseStart || null,
-          lease_end:               form.leaseEnd   || null,
-          monthly_payment_aed:     form.monthlyPayment === '' ? null : Number(form.monthlyPayment),
-          ownership_start:         form.ownershipStart || null,
-          contract_number:         form.contractNumber.trim() || null,
-          cheques_per_year:        form.chequesPerYear === '' ? null : Number(form.chequesPerYear),
-        }]}),
-      });
-      const out = await resp.json();
+      const out = await bulkOnboardCall([{
+        email: form.email.trim(), password: form.password, full_name: form.fullName.trim(), phone: form.phone.trim() || null,
+        role: 'resident', building_name: building.name, unit_number: unit.unit_number,
+        date_of_birth:           form.dob || null,
+        passport_number:         form.passport.trim() || null,
+        emirates_id:             form.emiratesId.trim() || null,
+        employer:                form.employer.trim() || null,
+        occupation:              form.occupation.trim() || null,
+        tenure:                  form.tenure || null,
+        lease_start:             form.leaseStart || null,
+        lease_end:               form.leaseEnd   || null,
+        monthly_payment_aed:     form.monthlyPayment === '' ? null : Number(form.monthlyPayment),
+        ownership_start:         form.ownershipStart || null,
+        contract_number:         form.contractNumber.trim() || null,
+        cheques_per_year:        form.chequesPerYear === '' ? null : Number(form.chequesPerYear),
+      }]);
       const r = out.results && out.results[0];
       if (r && r.ok) {
         setResult({ ok: true, msg: 'Created resident ' + form.email + ' (sign in with the temp password to test)' });
@@ -2623,19 +2676,12 @@ const SecurityManualForm = () => {
     try {
       const building = buildings.find(b => b.id === form.buildingId);
       if (!building) { setResult({ ok: false, error: 'Pick a building' }); setBusy(false); return; }
-      const { data: { session } } = await supabaseClient.auth.getSession();
-      const headers = { 'Content-Type': 'application/json' };
-      if (session && session.access_token) headers['Authorization'] = 'Bearer ' + session.access_token;
-      const resp = await fetch(SUPABASE_URL + '/functions/v1/bulk-onboard', {
-        method: 'POST', headers,
-        body: JSON.stringify({ records: [{
-          email: form.email.trim(), password: form.password, full_name: form.fullName.trim(), phone: form.phone.trim() || null,
-          role: 'security', building_name: building.name, shift: form.shift,
-          date_of_birth:   form.dob || null,
-          passport_number: form.passport.trim() || null,
-        }]}),
-      });
-      const out = await resp.json();
+      const out = await bulkOnboardCall([{
+        email: form.email.trim(), password: form.password, full_name: form.fullName.trim(), phone: form.phone.trim() || null,
+        role: 'security', building_name: building.name, shift: form.shift,
+        date_of_birth:   form.dob || null,
+        passport_number: form.passport.trim() || null,
+      }]);
       const r = out.results && out.results[0];
       if (r && r.ok) {
         setResult({ ok: true, msg: 'Created guard ' + form.email + ' assigned to ' + building.name + ' (' + form.shift + ' shift)' });
