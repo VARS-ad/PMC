@@ -212,26 +212,26 @@ const UnitDetailModal = ({ unit, building, assignment: passedAssignment, profile
     </div>
   );
   const Field = ({ label, children }) => (
-    <div style={{display:'flex',gap:12,padding:'4px 0',fontSize:13}}>
-      <div style={{width:140,color:'#61707D'}}>{label}</div>
-      <div style={{flex:1,color:'#131F23',fontWeight:500}}>{children == null || children === '' ? '—' : children}</div>
+    <div className="udm-field" style={{display:'flex',gap:12,padding:'4px 0',fontSize:13}}>
+      <div className="udm-field-label" style={{width:140,color:'#61707D'}}>{label}</div>
+      <div className="udm-field-value" style={{flex:1,color:'#131F23',fontWeight:500,minWidth:0,wordBreak:'break-word'}}>{children == null || children === '' ? '—' : children}</div>
     </div>
   );
 
   return (
     <>
     <div className="modal-overlay" onClick={onClose}>
-      <div className="modal" onClick={e => e.stopPropagation()} style={{maxWidth:1000,maxHeight:'90vh',padding:0,display:'flex',flexDirection:'column',overflow:'hidden'}}>
-        <div className="modal-header" style={{position:'sticky',top:0,background:'#fff',padding:'24px 28px 18px 32px',margin:0,borderBottom:'1px solid var(--border-light)',zIndex:2}}>
-          <div>
+      <div className="modal unit-detail-modal" onClick={e => e.stopPropagation()} style={{maxWidth:1000,maxHeight:'90vh',padding:0,display:'flex',flexDirection:'column',overflow:'hidden'}}>
+        <div className="modal-header modal-header-stacked" style={{position:'sticky',top:0,background:'#fff',padding:'24px 28px 18px 32px',margin:0,borderBottom:'1px solid var(--border-light)',zIndex:2}}>
+          <div style={{minWidth:0,flex:1}}>
             <div style={{fontSize:11,letterSpacing:'0.08em',textTransform:'uppercase',color:'var(--text-muted)',marginBottom:4}}>Unit</div>
-            <h2>{unit.unit_number}</h2>
-            <div className="modal-sub">Floor {unit.floor} · {building.name}{building.address ? ' · ' + building.address : ''}</div>
+            <h2 style={{wordBreak:'break-word'}}>{unit.unit_number}</h2>
+            <div className="modal-sub" style={{wordBreak:'break-word'}}>Floor {unit.floor} · {building.name}{building.address ? ' · ' + building.address : ''}</div>
           </div>
           <button className="modal-close" onClick={onClose}>×</button>
         </div>
 
-        <div style={{padding:'20px 32px 32px',overflowY:'auto',flex:1}}>
+        <div className="unit-detail-body" style={{padding:'20px 32px 32px',overflowY:'auto',flex:1}}>
         {invoices === null ? (
           <div style={{padding:18,fontSize:13,color:'var(--text-muted)'}}>Loading…</div>
         ) : (
@@ -418,9 +418,9 @@ const UnitDetailModal = ({ unit, building, assignment: passedAssignment, profile
                       <Field label="Lease end">{leaseEnd}</Field>
                       <Field label="Monthly payment">{monthly ? fmt(monthly) : '—'}</Field>
 
-                      <div style={{display:'flex',gap:12,padding:'10px 0 4px',fontSize:13,alignItems:'center',borderTop:'1px solid #E6EAE9',marginTop:10}}>
-                        <div style={{width:140,color:'#61707D'}}>Contract document</div>
-                        <div style={{flex:1,color:'#131F23',fontWeight:500,display:'flex',alignItems:'center',gap:10,flexWrap:'wrap'}}>
+                      <div className="udm-field" style={{display:'flex',gap:12,padding:'10px 0 4px',fontSize:13,alignItems:'center',borderTop:'1px solid #E6EAE9',marginTop:10}}>
+                        <div className="udm-field-label" style={{width:140,color:'#61707D'}}>Contract document</div>
+                        <div className="udm-field-value" style={{flex:1,color:'#131F23',fontWeight:500,display:'flex',alignItems:'center',gap:10,flexWrap:'wrap',minWidth:0}}>
                           {leaseContract ? (
                             <>
                               {leaseContractUrl ? (
@@ -561,12 +561,14 @@ const UnitDetailModal = ({ unit, building, assignment: passedAssignment, profile
                       <div style={{fontSize:13,color:'#61707D',padding:'6px 0'}}>No outstanding invoices for this unit ✓</div>
                     ) : (
                       <>
-                        <table className="data-table" style={{fontSize:12}}>
-                          <InvoiceTableHeader/>
-                          <tbody>
-                            {outstandingInvoices.map(i => <InvoiceRow key={i.id} i={i} accentColor="#8b4a42"/>)}
-                          </tbody>
-                        </table>
+                        <div className="data-table-scroll">
+                          <table className="data-table" style={{fontSize:12,minWidth:720}}>
+                            <InvoiceTableHeader/>
+                            <tbody>
+                              {outstandingInvoices.map(i => <InvoiceRow key={i.id} i={i} accentColor="#8b4a42"/>)}
+                            </tbody>
+                          </table>
+                        </div>
                         <div style={{marginTop:10,paddingTop:10,borderTop:'1px solid #E6EAE9',display:'flex',justifyContent:'flex-end',fontSize:13}}>
                           Total outstanding:&nbsp;<strong style={{color:'#8b4a42'}}>{fmt(totalOutstanding)}</strong>
                         </div>
@@ -579,12 +581,14 @@ const UnitDetailModal = ({ unit, building, assignment: passedAssignment, profile
                       <div style={{fontSize:11,color:'#61707D',marginBottom:8}}>
                         Scheduled cheques due more than 30 days out — not yet outstanding.
                       </div>
-                      <table className="data-table" style={{fontSize:12}}>
-                        <InvoiceTableHeader/>
-                        <tbody>
-                          {upcomingInvoices.map(i => <InvoiceRow key={i.id} i={i} accentColor="#131F23"/>)}
-                        </tbody>
-                      </table>
+                      <div className="data-table-scroll">
+                        <table className="data-table" style={{fontSize:12,minWidth:720}}>
+                          <InvoiceTableHeader/>
+                          <tbody>
+                            {upcomingInvoices.map(i => <InvoiceRow key={i.id} i={i} accentColor="#131F23"/>)}
+                          </tbody>
+                        </table>
+                      </div>
                       <div style={{marginTop:10,paddingTop:10,borderTop:'1px solid #E6EAE9',display:'flex',justifyContent:'flex-end',fontSize:13}}>
                         Upcoming total:&nbsp;<strong style={{color:'#131F23'}}>{fmt(totalUpcoming)}</strong>
                       </div>
@@ -714,7 +718,7 @@ const UnitOwnerEditModal = ({ unit, owner, residentProfile, onClose, onSaved }) 
           </div>
         )}
 
-        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12,marginBottom:14}}>
+        <div className="owner-edit-grid" style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12,marginBottom:14}}>
           <div>
             <label style={labelStyle}>Owner name</label>
             <input style={inputStyle} value={form.owner_name} onChange={set('owner_name')}/>

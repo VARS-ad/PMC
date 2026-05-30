@@ -250,7 +250,7 @@ const AnnouncementsPage = () => {
             </div>
 
             {/* Wizard Steps — pill style matching Figma */}
-            <div style={{display:'flex',alignItems:'center',gap:6,marginBottom:24,fontSize:12}}>
+            <div className="announcement-wizard-steps" style={{display:'flex',alignItems:'center',gap:6,marginBottom:24,fontSize:12}}>
               {[t('pm.composeStep'), t('pm.audienceStep'), t('pm.scheduleStep'), t('pm.previewStep')].map((s,i) => {
                 const stepNum = i + 1;
                 const isActive = composerStep === stepNum;
@@ -477,7 +477,7 @@ const AnnouncementsPage = () => {
             {/* Step 3: Schedule */}
             {composerStep===3 && (<div>
               <p style={{color:'#61707D',marginBottom:16,fontSize:13}}>{t('pm.choosePubTime')}</p>
-              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:8,marginBottom:16}}>
+              <div className="composer-publish-modes" style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:8,marginBottom:16}}>
                 {[
                   {key:'now',label:t('pm.publishNow'),sub:t('pm.sendImmediately')},
                   {key:'schedule',label:t('pm.schedule'),sub:t('pm.setFutureTime')},
@@ -495,7 +495,7 @@ const AnnouncementsPage = () => {
 
               {/* Schedule Date/Time picker — only shown when Schedule is selected */}
               {annForm.publishMode === 'schedule' && (
-                <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12,marginBottom:16,padding:16,background:'#E6EAE9',borderRadius:6,border:'1px solid #E6EAE9'}}>
+                <div className="composer-schedule-pickers" style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12,marginBottom:16,padding:16,background:'#E6EAE9',borderRadius:6,border:'1px solid #E6EAE9'}}>
                   <div>
                     <label style={{fontSize:11,color:'#61707D',letterSpacing:'0.04em',textTransform:'uppercase',display:'block',marginBottom:6}}>{t('pm.scheduleDateLabel')}</label>
                     <input type="date" value={annForm.scheduleDate} onChange={e => setAnnForm(p => ({...p, scheduleDate: e.target.value}))}
@@ -530,7 +530,7 @@ const AnnouncementsPage = () => {
                 )}
               </div>
 
-              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12,fontSize:13,marginBottom:20,background:'#fff',border:'1px solid #E6EAE9',borderRadius:6,padding:16}}>
+              <div className="composer-recap-grid" style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12,fontSize:13,marginBottom:20,background:'#fff',border:'1px solid #E6EAE9',borderRadius:6,padding:16}}>
                 <div><span style={{color:'#61707D'}}>Audience:</span> <strong>{audienceLabel(annForm.audience)}</strong></div>
                 <div><span style={{color:'#61707D'}}>Priority:</span> <strong>{annForm.priority}</strong></div>
                 <div><span style={{color:'#61707D'}}>Publish:</span> <strong>{annForm.publishMode==='now'?'Immediately':annForm.publishMode==='schedule'?'Scheduled':'Draft'}</strong></div>

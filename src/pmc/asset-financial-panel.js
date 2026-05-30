@@ -425,15 +425,15 @@ const AssetFinancialPanel = ({ building, onClose }) => {
   return (
     <>
     <div className="modal-overlay" onClick={onClose}>
-      <div className="modal" onClick={e => e.stopPropagation()} style={{maxWidth:1180,maxHeight:'92vh',padding:0,display:'flex',flexDirection:'column',overflow:'hidden'}}>
+      <div className="modal asset-financial-modal" onClick={e => e.stopPropagation()} style={{maxWidth:1180,maxHeight:'92vh',padding:0,display:'flex',flexDirection:'column',overflow:'hidden'}}>
         {/* Header */}
-        <div className="modal-header" style={{position:'sticky',top:0,background:'#fff',padding:'24px 28px 18px 32px',margin:0,borderBottom:'1px solid var(--border-light)',zIndex:2}}>
-          <div>
+        <div className="modal-header modal-header-stacked" style={{position:'sticky',top:0,background:'#fff',padding:'24px 28px 18px 32px',margin:0,borderBottom:'1px solid var(--border-light)',zIndex:2}}>
+          <div style={{minWidth:0,flex:1}}>
             <div style={{fontSize:11,letterSpacing:'0.08em',textTransform:'uppercase',color:'var(--text-muted)',marginBottom:4}}>Asset · Financial summary</div>
-            <h2>{building.name}</h2>
-            <div className="modal-sub">{building.address || '—'}{building.property_type ? ' · ' + building.property_type : ''}</div>
+            <h2 style={{wordBreak:'break-word'}}>{building.name}</h2>
+            <div className="modal-sub" style={{wordBreak:'break-word'}}>{building.address || '—'}{building.property_type ? ' · ' + building.property_type : ''}</div>
           </div>
-          <div style={{display:'flex',gap:8,alignItems:'center'}}>
+          <div className="afp-header-actions" style={{display:'flex',gap:8,alignItems:'center'}}>
             <button className="btn btn-sm" type="button" onClick={() => setShowDownload(true)} title="Export as PDF, Excel or CSV — with a date-range picker.">
               Download data
             </button>
@@ -441,7 +441,7 @@ const AssetFinancialPanel = ({ building, onClose }) => {
           </div>
         </div>
 
-        <div style={{padding:'20px 32px 32px',overflowY:'auto',flex:1}}>
+        <div className="afp-body" style={{padding:'20px 32px 32px',overflowY:'auto',flex:1}}>
           {/* Period — same shape as the global TimeRangePicker. */}
           {(() => {
             const onPreset = (key) => {
@@ -477,7 +477,7 @@ const AssetFinancialPanel = ({ building, onClose }) => {
           ) : (<>
             {/* Financial Summary — 5 KPI tiles in a single row */}
             <Section label="Financial Summary">
-              <div style={{display:'grid',gridTemplateColumns:'repeat(5, minmax(0, 1fr))',gap:12}}>
+              <div className="afp-kpi-grid" style={{display:'grid',gridTemplateColumns:'repeat(5, minmax(0, 1fr))',gap:12}}>
                 <KpiTile label="Total Billed" value={fmt(totalBilled)}/>
                 <KpiTile label="Collected"    value={fmt(totalCollected)} color="#5a6b4f"/>
                 <KpiTile label="Outstanding"  value={fmt(totalOverdue)}   color={totalOverdue > 0 ? '#8b4a42' : null}/>
@@ -502,8 +502,8 @@ const AssetFinancialPanel = ({ building, onClose }) => {
                 {perUnitRows.length === 0 ? (
                   <div style={{padding:24,color:'var(--text-muted)',fontSize:13,textAlign:'center'}}>No units yet for this asset.</div>
                 ) : (
-                  <div style={{maxHeight:380,overflowY:'auto'}}>
-                    <table className="data-table" style={{fontSize:12,width:'100%'}}>
+                  <div style={{maxHeight:380,overflowY:'auto',overflowX:'auto',WebkitOverflowScrolling:'touch'}}>
+                    <table className="data-table" style={{fontSize:12,width:'100%',minWidth:620}}>
                       <thead>
                         <tr>
                           <th style={{textAlign:'left',padding:'10px 14px',fontSize:10,letterSpacing:'0.06em',textTransform:'uppercase',color:'#61707D',fontWeight:600}}>Unit</th>
@@ -558,8 +558,8 @@ const AssetFinancialPanel = ({ building, onClose }) => {
                 {sortedInvoices.length === 0 ? (
                   <div style={{padding:24,color:'var(--text-muted)',fontSize:13,textAlign:'center'}}>No invoices in the selected period.</div>
                 ) : (
-                  <div style={{maxHeight:480,overflowY:'auto'}}>
-                    <table className="data-table" style={{fontSize:12,width:'100%',tableLayout:'fixed'}}>
+                  <div style={{maxHeight:480,overflowY:'auto',overflowX:'auto',WebkitOverflowScrolling:'touch'}}>
+                    <table className="data-table" style={{fontSize:12,width:'100%',tableLayout:'fixed',minWidth:780}}>
                       <colgroup>
                         <col style={{width:'10%'}}/>
                         <col style={{width:'14%'}}/>

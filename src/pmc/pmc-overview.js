@@ -978,12 +978,13 @@ const PMCOverviewPage = ({ setPage }) => {
           };
           const Stat = ({ label, value, color, sub, onClick }) => (
             <div onClick={onClick}
+              className="pmc-overview-hero-stat"
               title={onClick ? 'View the portfolio breakdown in Assets → Summary' : ''}
               style={{flex:'1 1 200px', minWidth:180, padding:'2px 4px', borderRadius:8, cursor: onClick ? 'pointer' : 'default', transition:'background 0.15s, transform 0.15s'}}
               onMouseEnter={e => { if (onClick) { e.currentTarget.style.background = 'rgba(122,90,31,0.06)'; } }}
               onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}>
               <div style={{fontSize:11,letterSpacing:'0.06em',textTransform:'uppercase',color:'var(--text-secondary)',fontWeight:600,marginBottom:6}}>{label}</div>
-              <div style={{fontSize:30,fontWeight:600,letterSpacing:'-0.02em',color:color || 'var(--text-dark)',lineHeight:1}}>{value}</div>
+              <div className="pmc-overview-hero-value" style={{fontSize:30,fontWeight:600,letterSpacing:'-0.02em',color:color || 'var(--text-dark)',lineHeight:1}}>{value}</div>
               {sub && <div style={{fontSize:11,color:'var(--text-muted)',marginTop:6}}>{sub}</div>}
             </div>
           );
@@ -998,7 +999,7 @@ const PMCOverviewPage = ({ setPage }) => {
           };
           const onTileClick = () => { dismissKpiHint(); navToSummary(); };
           return (
-            <div className="card" style={{padding:'22px 26px',marginBottom:16,background:'linear-gradient(135deg, #fff 0%, #faf7f0 100%)'}}>
+            <div className="card pmc-overview-hero" style={{padding:'22px 26px',marginBottom:16,background:'linear-gradient(135deg, #fff 0%, #faf7f0 100%)'}}>
               <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',marginBottom:14,gap:12,flexWrap:'wrap'}}>
                 <div style={{fontSize:11,letterSpacing:'0.08em',textTransform:'uppercase',color:'var(--text-secondary)',fontWeight:600}}>
                   {rangeLabel}
@@ -1009,7 +1010,7 @@ const PMCOverviewPage = ({ setPage }) => {
                   </div>
                 )}
               </div>
-              <div style={{display:'flex',gap:24,flexWrap:'wrap'}}>
+              <div className="pmc-overview-hero-row" style={{display:'flex',gap:24,flexWrap:'wrap'}}>
                 <Stat label={<span>Collected <span title="Rent + service charges paid in the period. e.g. AED 1,850,000 received from 48 paid invoices." style={{display:'inline-flex',alignItems:'center',justifyContent:'center',width:14,height:14,borderRadius:'50%',border:'1px solid var(--text-muted)',color:'var(--text-muted)',fontSize:9,fontWeight:600,fontStyle:'normal',letterSpacing:0,cursor:'help',marginLeft:6,verticalAlign:'middle'}}>i</span></span>}
                       value={fmt(stats.headlineCollected)} color="#5a6b4f"
                       sub={'For the selected period · last month ' + fmt(stats.headlineLastMonth)}
@@ -1088,17 +1089,18 @@ const PMCOverviewPage = ({ setPage }) => {
                     return (
                       <div key={idx}
                         onClick={openRow}
+                        className="pmc-overview-attn-row"
                         title={it.kind === 'srs' ? 'Open Service Requests filtered to high-priority' : 'Drill into the underlying records'}
                         style={{display:'flex',alignItems:'center',gap:14,padding:'14px 20px',cursor:'pointer',background:'#fff',borderBottom: idx === items.length - 1 ? 'none' : '1px solid var(--border-light)',transition:'background 0.12s'}}
                         onMouseEnter={e => { e.currentTarget.style.background = t.bg; }}
                         onMouseLeave={e => { e.currentTarget.style.background = '#fff'; }}>
                         <span style={{width:10,height:10,borderRadius:'50%',background:t.dot,flexShrink:0}}/>
                         <div style={{flex:1,minWidth:0}}>
-                          <div style={{fontSize:14,fontWeight:600,color:'var(--text-dark)',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{it.title}</div>
-                          <div style={{fontSize:12,color:'var(--text-muted)',marginTop:3}}>{it.detail}</div>
+                          <div className="pmc-overview-attn-title" style={{fontSize:14,fontWeight:600,color:'var(--text-dark)',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{it.title}</div>
+                          <div className="pmc-overview-attn-detail" style={{fontSize:12,color:'var(--text-muted)',marginTop:3}}>{it.detail}</div>
                         </div>
                         <span style={{fontSize:10,letterSpacing:'0.05em',textTransform:'uppercase',color:t.dot,fontWeight:700,whiteSpace:'nowrap'}}>{t.label}</span>
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#8a98a2" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#8a98a2" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{flexShrink:0}}><polyline points="9 18 15 12 9 6"/></svg>
                       </div>
                     );
                   })}
@@ -1158,7 +1160,7 @@ const PMCOverviewPage = ({ setPage }) => {
                         get a curated cover, walking the pool from their
                         deterministic pick to the first one not already used in
                         this row — so two side-by-side cards never repeat. */}
-                    <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill, minmax(280px, 1fr))',gap:14}}>
+                    <div className="pmc-overview-asset-grid" style={{display:'grid',gridTemplateColumns:'repeat(auto-fill, minmax(280px, 1fr))',gap:14}}>
                       {(() => {
                         const usedStock = new Set();
                         const stockFor = {};

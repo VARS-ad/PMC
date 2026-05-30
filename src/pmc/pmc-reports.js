@@ -698,7 +698,7 @@ const PMCReportsPage = () => {
           <h1>Reports</h1>
           <div className="subtitle">Portfolio, financial &amp; operational insights for the selected period</div>
         </div>
-        <div style={{display:'flex',gap:10,alignItems:'center',flexWrap:'wrap'}}>
+        <div className="reports-header-actions" style={{display:'flex',gap:10,alignItems:'center',flexWrap:'wrap'}}>
           <TimeRangePicker/>
           {/* Single Download Data button — the modal lets the user pick
               between the branded full report and per-section spreadsheets. */}
@@ -712,9 +712,9 @@ const PMCReportsPage = () => {
         dataTypes={reportDatasets}
       />
 
-      <div style={{display:'flex',gap:8,marginBottom:24,borderBottom:'1px solid var(--border-light)',flexWrap:'wrap'}}>
+      <div className="reports-tabs" style={{display:'flex',gap:8,marginBottom:24,borderBottom:'1px solid var(--border-light)',flexWrap:'wrap'}}>
         {sections.map(s => (
-          <div key={s.id} onClick={() => setSection(s.id)} style={{padding:'10px 18px',cursor:'pointer',fontSize:13,fontWeight:section===s.id?500:400,color:section===s.id?'var(--text-dark)':'var(--text-secondary)',borderBottom: section===s.id ? '2px solid var(--bg-warm-dark)' : '2px solid transparent',marginBottom:-1,letterSpacing:'-0.01em'}}>
+          <div key={s.id} className="reports-tab" onClick={() => setSection(s.id)} style={{padding:'10px 18px',cursor:'pointer',fontSize:13,fontWeight:section===s.id?500:400,color:section===s.id?'var(--text-dark)':'var(--text-secondary)',borderBottom: section===s.id ? '2px solid var(--bg-warm-dark)' : '2px solid transparent',marginBottom:-1,letterSpacing:'-0.01em',whiteSpace:'nowrap'}}>
             {s.label}
           </div>
         ))}
@@ -783,7 +783,7 @@ const PortfolioReports = ({ stats, fmt, fmtShort }) => (
 
     <div className="card">
       <div style={{fontSize:14,fontWeight:700,letterSpacing:'-0.01em',color:'var(--text-dark)',marginBottom:18,paddingBottom:12,borderBottom:'1px solid var(--border-light)'}}>Occupancy Mix</div>
-      <div style={{display:'grid',gridTemplateColumns:'1fr 2fr',gap:18,alignItems:'center'}}>
+      <div className="reports-split" style={{display:'grid',gridTemplateColumns:'1fr 2fr',gap:18,alignItems:'center'}}>
         <ChartCanvas height={220} config={{
           type: 'doughnut',
           data: { labels: ['Occupied','Vacant'], datasets: [{ data: [stats.occupiedUnits, stats.vacant], backgroundColor: ['#3E4C59','#E6EAE9'], borderWidth: 0 }] },
@@ -803,7 +803,7 @@ const PortfolioReports = ({ stats, fmt, fmtShort }) => (
       {stats.vacancyList.length === 0 ? (
         <div style={{color:'var(--text-muted)',fontSize:13,padding:20}}>Fully occupied — no vacant units.</div>
       ) : (
-        <table style={{width:'100%',borderCollapse:'collapse',fontSize:12,tableLayout:'fixed'}}>
+        <table className="reports-table" style={{width:'100%',borderCollapse:'collapse',fontSize:12,tableLayout:'fixed'}}>
           <thead><tr style={{textAlign:'left',color:'var(--text-secondary)',fontSize:11}}>
             <th style={{padding:'8px 4px',width:'60%'}}>Building</th>
             <th style={{padding:'8px 4px',width:'20%'}}>Floor</th>
@@ -880,7 +880,7 @@ const FinancialReports = ({ stats, fmt, fmtShort }) => (
       {stats.topContributors.length === 0 ? (
         <div style={{color:'var(--text-muted)',fontSize:13,padding:20}}>No collected revenue yet.</div>
       ) : (
-        <table style={{width:'100%',borderCollapse:'collapse',fontSize:12,tableLayout:'fixed'}}>
+        <table className="reports-table" style={{width:'100%',borderCollapse:'collapse',fontSize:12,tableLayout:'fixed'}}>
           <thead><tr style={{textAlign:'left',color:'var(--text-secondary)',fontSize:11}}>
             <th style={{padding:'8px 4px',width:'60%'}}>Building</th>
             <th style={{padding:'8px 4px',width:'15%'}}>Unit</th>
@@ -902,7 +902,7 @@ const FinancialReports = ({ stats, fmt, fmtShort }) => (
       {stats.outstandingInvoices.length === 0 ? (
         <div style={{color:'var(--text-muted)',fontSize:13,padding:20}}>No outstanding invoices.</div>
       ) : (
-        <table style={{width:'100%',borderCollapse:'collapse',fontSize:12,tableLayout:'fixed'}}>
+        <table className="reports-table" style={{width:'100%',borderCollapse:'collapse',fontSize:12,tableLayout:'fixed'}}>
           <thead><tr style={{textAlign:'left',color:'var(--text-secondary)',fontSize:11}}>
             <th style={{padding:'8px 4px',width:'15%'}}>Invoice</th>
             <th style={{padding:'8px 4px',width:'25%'}}>Building / Unit</th>
@@ -963,7 +963,7 @@ const ResidentsReports = ({ stats, fmt }) => (
         <div style={{color:'var(--text-muted)',fontSize:13,padding:20}}>No active assignments.</div>
       ) : (
         <div style={{maxHeight:480,overflow:'auto'}}>
-          <table style={{width:'100%',borderCollapse:'collapse',fontSize:12,tableLayout:'fixed'}}>
+          <table className="reports-table" style={{width:'100%',borderCollapse:'collapse',fontSize:12,tableLayout:'fixed'}}>
             <thead><tr style={{textAlign:'left',color:'var(--text-secondary)',fontSize:11,position:'sticky',top:0,background:'var(--bg-elevated, white)'}}>
               <th style={{padding:'8px 4px',width:'20%'}}>Name</th>
               <th style={{padding:'8px 4px',width:'14%'}}>Phone</th>
@@ -996,7 +996,7 @@ const ResidentsReports = ({ stats, fmt }) => (
       {stats.leasesExpiring60.length === 0 ? (
         <div style={{color:'var(--text-muted)',fontSize:13,padding:20}}>No leases expiring in the next 60 days.</div>
       ) : (
-        <table style={{width:'100%',borderCollapse:'collapse',fontSize:12,tableLayout:'fixed'}}>
+        <table className="reports-table" style={{width:'100%',borderCollapse:'collapse',fontSize:12,tableLayout:'fixed'}}>
           <thead><tr style={{textAlign:'left',color:'var(--text-secondary)',fontSize:11}}>
             <th style={{padding:'8px 4px',width:'28%'}}>Tenant</th>
             <th style={{padding:'8px 4px',width:'18%'}}>Phone</th>
@@ -1022,7 +1022,7 @@ const ResidentsReports = ({ stats, fmt }) => (
       {stats.topArrears.length === 0 ? (
         <div style={{color:'var(--text-muted)',fontSize:13,padding:20}}>No outstanding balances.</div>
       ) : (
-        <table style={{width:'100%',borderCollapse:'collapse',fontSize:12,tableLayout:'fixed'}}>
+        <table className="reports-table" style={{width:'100%',borderCollapse:'collapse',fontSize:12,tableLayout:'fixed'}}>
           <thead><tr style={{textAlign:'left',color:'var(--text-secondary)',fontSize:11}}>
             <th style={{padding:'8px 4px',width:'28%'}}>Tenant</th>
             <th style={{padding:'8px 4px',width:'18%'}}>Phone</th>
@@ -1115,7 +1115,7 @@ const ServiceOpsReports = ({ stats }) => {
         {stats.urgentOpen.length === 0 ? (
           <div style={{color:'var(--text-muted)',fontSize:13,padding:20}}>No urgent open tickets.</div>
         ) : (
-          <table style={{width:'100%',borderCollapse:'collapse',fontSize:12,tableLayout:'fixed'}}>
+          <table className="reports-table" style={{width:'100%',borderCollapse:'collapse',fontSize:12,tableLayout:'fixed'}}>
             <thead><tr style={{textAlign:'left',color:'var(--text-secondary)',fontSize:11}}>
               <th style={{padding:'8px 4px',width:'13%'}}>Created</th>
               <th style={{padding:'8px 4px',width:'10%'}}>Priority</th>
@@ -1159,7 +1159,7 @@ const MaintenanceCoReports = ({ stats, fmt }) => (
       {stats.activeContracts.length === 0 ? (
         <div style={{color:'var(--text-muted)',fontSize:13,padding:20}}>No active contracts.</div>
       ) : (
-        <table style={{width:'100%',borderCollapse:'collapse',fontSize:12,tableLayout:'fixed'}}>
+        <table className="reports-table" style={{width:'100%',borderCollapse:'collapse',fontSize:12,tableLayout:'fixed'}}>
           <thead><tr style={{textAlign:'left',color:'var(--text-secondary)',fontSize:11}}>
             <th style={{padding:'8px 4px',width:'24%'}}>Vendor</th>
             <th style={{padding:'8px 4px',width:'14%'}}>Category</th>
@@ -1185,7 +1185,7 @@ const MaintenanceCoReports = ({ stats, fmt }) => (
     {stats.contractsExp90.length > 0 && (
       <div className="card">
         <div style={{fontSize:14,fontWeight:700,letterSpacing:'-0.01em',color:'var(--text-dark)',marginBottom:18,paddingBottom:12,borderBottom:'1px solid var(--border-light)'}}>Contracts Expiring in 90 Days</div>
-        <table style={{width:'100%',borderCollapse:'collapse',fontSize:12,tableLayout:'fixed'}}>
+        <table className="reports-table" style={{width:'100%',borderCollapse:'collapse',fontSize:12,tableLayout:'fixed'}}>
           <thead><tr style={{textAlign:'left',color:'var(--text-secondary)',fontSize:11}}>
             <th style={{padding:'8px 4px',width:'30%'}}>Vendor</th>
             <th style={{padding:'8px 4px',width:'20%'}}>Category</th>
@@ -1209,7 +1209,7 @@ const MaintenanceCoReports = ({ stats, fmt }) => (
       {stats.topVendorSpend.length === 0 ? (
         <div style={{color:'var(--text-muted)',fontSize:13,padding:20}}>No vendor payments yet.</div>
       ) : (
-        <table style={{width:'100%',borderCollapse:'collapse',fontSize:12,tableLayout:'fixed'}}>
+        <table className="reports-table" style={{width:'100%',borderCollapse:'collapse',fontSize:12,tableLayout:'fixed'}}>
           <thead><tr style={{textAlign:'left',color:'var(--text-secondary)',fontSize:11}}>
             <th style={{padding:'8px 4px',width:'50%'}}>Vendor</th>
             <th style={{padding:'8px 4px',width:'25%'}}>Category</th>
@@ -1273,7 +1273,7 @@ const VisitorsGuardsReports = ({ stats }) => (
         const palette = ['#3E4C59','#a07d3c','#5a6b4f','#61707D','#8b4a42','#c8a87a','#7a8f88'];
         const colourFor = (i) => palette[i % palette.length];
         return (
-          <div style={{display:'grid',gridTemplateColumns:'minmax(220px, 280px) 1fr',gap:24,alignItems:'center'}}>
+          <div className="reports-split" style={{display:'grid',gridTemplateColumns:'minmax(220px, 280px) 1fr',gap:24,alignItems:'center'}}>
             <ChartCanvas height={240} config={{
               type: 'doughnut',
               data: { labels: entries.map(([k]) => k), datasets: [{ data: entries.map(([, v]) => v), backgroundColor: entries.map((_, i) => colourFor(i)), borderColor: '#fff', borderWidth: 3, hoverOffset: 8 }] },
@@ -1303,7 +1303,7 @@ const VisitorsGuardsReports = ({ stats }) => (
       {Object.keys(stats.guardsByBuilding).length === 0 ? (
         <div style={{color:'var(--text-muted)',fontSize:13,padding:20}}>No guards assigned in scope.</div>
       ) : (
-        <table style={{width:'100%',borderCollapse:'collapse',fontSize:12,tableLayout:'fixed'}}>
+        <table className="reports-table" style={{width:'100%',borderCollapse:'collapse',fontSize:12,tableLayout:'fixed'}}>
           <thead><tr style={{textAlign:'left',color:'var(--text-secondary)',fontSize:11}}>
             <th style={{padding:'8px 4px',width:'40%'}}>Building</th>
             <th style={{padding:'8px 4px',width:'15%'}}>Day</th>
@@ -1346,7 +1346,7 @@ const ComplianceReports = ({ stats }) => (
           TODO — no certificate attachments (<code>kind = cert_*</code>) found on units. Upload certificates via the unit detail modal to populate this section.
         </div>
       ) : (
-        <table style={{width:'100%',borderCollapse:'collapse',fontSize:12,tableLayout:'fixed'}}>
+        <table className="reports-table" style={{width:'100%',borderCollapse:'collapse',fontSize:12,tableLayout:'fixed'}}>
           <thead><tr style={{textAlign:'left',color:'var(--text-secondary)',fontSize:11}}>
             <th style={{padding:'8px 4px',width:'40%'}}>Kind</th>
             <th style={{padding:'8px 4px',width:'40%'}}>Filename</th>
