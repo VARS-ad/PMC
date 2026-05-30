@@ -1202,11 +1202,7 @@ const DocumentLibraryPage = ({ embedded } = {}) => {
           <div style={{fontSize:13,color:'var(--text-muted)',marginTop:4}}>Every attachment in the system, grouped by asset.</div>
         </div>
         <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
-          <button className="btn" onClick={() => importInputRef.current && importInputRef.current.click()} disabled={!!genStatus} title="Upload a ZIP that mirrors the Asset / Unit / Type folder structure. Files inside are matched to the right unit by folder name.">Import ZIP</button>
-          <button className="btn" onClick={bulkExport} disabled={!!genStatus} title="Download every visible document as one ZIP, grouped by Asset / Unit / Type.">Export ZIP</button>
           <button className="btn btn-primary" onClick={() => setShowDownloadData(true)} disabled={!!genStatus} title="Pick which documents to download — filtered by kind + asset + format.">Download Data</button>
-          <input ref={importInputRef} type="file" accept=".zip" style={{display:'none'}}
-                 onChange={e => { const f = e.target.files && e.target.files[0]; if (f) bulkImport(f); if (importInputRef.current) importInputRef.current.value=''; }}/>
           <input ref={replaceInputRef} type="file" style={{display:'none'}}
                  onChange={e => {
                    const f = e.target.files && e.target.files[0];
