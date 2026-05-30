@@ -271,7 +271,9 @@ const App = () => {
     setRole(null);
   };
 
-  // If not logged in, show login page (with scan notice if QR was scanned)
+  // If not logged in, show login page (with scan notice if QR was scanned).
+  // GlobalOverlays (WhatsApp help button) is intentionally NOT mounted here
+  // — support chat lives inside the app, not on the public splash.
   if (!role) return (
     <AppContext.Provider value={{ data, setData, showToast, language, setLanguage, t, selectedProperties, setSelectedProperties, timeRange, setTimeRange, customStart, setCustomStart, customEnd, setCustomEnd }}>
       <LoginPage onLogin={(selectedRole) => {
@@ -279,7 +281,6 @@ const App = () => {
         setRole(selectedRole);
         setShowWelcome(true);
       }} syncStatus={syncStatus}/>
-      <GlobalOverlays showToast={showToast}/>
     </AppContext.Provider>
   );
 
