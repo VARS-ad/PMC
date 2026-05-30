@@ -551,8 +551,11 @@ BEGIN
     VALUES ('main', '{}'::jsonb, p_uid)
     ON CONFLICT (id, owner_id) DO NOTHING;
 
-EXCEPTION WHEN OTHERS THEN
-  RAISE WARNING 'seed_demo_portfolio_for(%) failed: %', p_uid, SQLERRM;
+-- TEMP DEBUG: keep the EXCEPTION handler off until both demo users seed
+-- clean. Once info@vars.live also gets the rich portfolio, switch this
+-- back on so a partial signup failure doesn't 500 the demo.
+-- EXCEPTION WHEN OTHERS THEN
+--   RAISE WARNING 'seed_demo_portfolio_for(%) failed: %', p_uid, SQLERRM;
 END;
 $$;
 
