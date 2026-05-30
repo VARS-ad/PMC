@@ -737,7 +737,15 @@ const PMCVendorsPage = ({ setPage }) => {
   const [vendorBuildings, setVendorBuildings] = useState({});
   const [paymentTotalsByVendor, setPaymentTotalsByVendor] = useState({});
   const [error, setError] = useState(null);
+  // Two-tier search state: `searchInput` reflects what the user is typing
+  // (re-renders the input on every keystroke, cheap), `search` is the
+  // debounced value that actually drives the (expensive) vendor filter.
+  const [searchInput, setSearchInput] = useState('');
   const [search, setSearch] = useState('');
+  useEffect(() => {
+    const id = setTimeout(() => setSearch(searchInput), 200);
+    return () => clearTimeout(id);
+  }, [searchInput]);
   const [categoryFilter, setCategoryFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState('all');
   const [outstandingOnly, setOutstandingOnly] = useState(false);
@@ -779,27 +787,36 @@ const PMCVendorsPage = ({ setPage }) => {
   };
   useEffect(() => { load(); }, []);
 
-  const outstandingOf = (v) => paymentTotalsByVendor[v.id]?.outstanding || 0;
+  const outstandingOf = useCallback(
+    (v) => paymentTotalsByVendor[v.id]?.outstanding || 0,
+    [paymentTotalsByVendor],
+  );
 
-  const filtered = (vendors || []).filter(v => {
-    if (categoryFilter !== 'all' && v.service_category !== categoryFilter) return false;
-    if (statusFilter   !== 'all' && v._effectiveStatus  !== statusFilter)   return false;
-    if (outstandingOnly && outstandingOf(v) <= 0) return false;
-    if (search) {
-      const q = search.toLowerCase();
-      const hay = (v.name + ' ' + (v.contact_person || '') + ' ' + (v.contact_phone || '') + ' ' + (v.contact_email || '') + ' ' + v.service_category).toLowerCase();
-      if (!hay.includes(q)) return false;
+  // Single pass: filter + count accumulation. The four count properties used
+  // to be four separate .filter().length walks over `filtered`; now they're
+  // tallied inline as we scan vendors once.
+  const { filtered, counts } = React.useMemo(() => {
+    const out = [];
+    const tally = { total: 0, active: 0, expiring: 0, expired: 0, withOutstanding: 0 };
+    const q = search ? search.toLowerCase() : '';
+    for (const v of (vendors || [])) {
+      if (categoryFilter !== 'all' && v.service_category !== categoryFilter) continue;
+      if (statusFilter   !== 'all' && v._effectiveStatus  !== statusFilter)   continue;
+      const outstanding = paymentTotalsByVendor[v.id]?.outstanding || 0;
+      if (outstandingOnly && outstanding <= 0) continue;
+      if (q) {
+        const hay = (v.name + ' ' + (v.contact_person || '') + ' ' + (v.contact_phone || '') + ' ' + (v.contact_email || '') + ' ' + v.service_category).toLowerCase();
+        if (!hay.includes(q)) continue;
+      }
+      out.push(v);
+      tally.total++;
+      if (v._effectiveStatus === 'Active')        tally.active++;
+      if (v._effectiveStatus === 'Expiring Soon') tally.expiring++;
+      if (v._effectiveStatus === 'Expired')       tally.expired++;
+      if (outstanding > 0)                         tally.withOutstanding++;
     }
-    return true;
-  });
-
-  const counts = {
-    total:           filtered.length,
-    active:          filtered.filter(v => v._effectiveStatus === 'Active').length,
-    expiring:        filtered.filter(v => v._effectiveStatus === 'Expiring Soon').length,
-    expired:         filtered.filter(v => v._effectiveStatus === 'Expired').length,
-    withOutstanding: filtered.filter(v => outstandingOf(v) > 0).length,
-  };
+    return { filtered: out, counts: tally };
+  }, [vendors, categoryFilter, statusFilter, outstandingOnly, search, paymentTotalsByVendor]);
 
   const exportRows = filtered.map(v => ({
     ...v,
@@ -972,7 +989,7 @@ const PMCVendorsPage = ({ setPage }) => {
         <div style={{display:'flex', gap: 12, flexWrap: 'wrap', alignItems:'flex-end', marginBottom: 14}}>
           <div style={{flex: '1 1 180px'}}>
             <label style={{fontSize: 10, letterSpacing:'0.06em', textTransform:'uppercase', color:'var(--text-secondary)', marginBottom: 6, display:'block', fontWeight: 500}}>{t('vendors.filter.search')}</label>
-            <input className="form-input" placeholder={t('vendors.filter.searchPlaceholder')} value={search} onChange={e => setSearch(e.target.value)}/>
+            <input className="form-input" placeholder={t('vendors.filter.searchPlaceholder')} value={searchInput} onChange={e => setSearchInput(e.target.value)}/>
           </div>
           <div style={{flex: '0 0 180px'}}>
             <label style={{fontSize: 10, letterSpacing:'0.06em', textTransform:'uppercase', color:'var(--text-secondary)', marginBottom: 6, display:'block', fontWeight: 500}}>{t('vendors.filter.category')}</label>

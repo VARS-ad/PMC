@@ -7,7 +7,11 @@
 // which added noise to dense building cards. It now lives on the
 // title attribute (browser tooltip on hover) so the tile reads as a
 // clean label + value pair.
-const PMCStat = ({ label, value, color, onClick, hint }) => (
+// React.memo'd so re-renders of the parent (data poll merges, modal opens,
+// hover state on neighbour cards) don't ripple through every KPI tile.
+// Props here are primitives plus an `onClick` from a stable closure on the
+// parent, so shallow-equal bails the render correctly.
+const PMCStat = React.memo(({ label, value, color, onClick, hint }) => (
   <div
     onClick={(e) => { if (onClick) { e.stopPropagation(); onClick(); } }}
     title={hint || ''}
@@ -25,7 +29,7 @@ const PMCStat = ({ label, value, color, onClick, hint }) => (
     <div style={{fontSize:11,letterSpacing:'0.08em',textTransform:'uppercase',color:'var(--text-secondary)',marginBottom:6,fontWeight:500}}>{label}</div>
     <div style={{fontSize:16,fontWeight:600,color:color||'var(--text-dark)',letterSpacing:'-0.015em'}}>{value}</div>
   </div>
-);
+));
 
 // Stock building photos per property type. Picked deterministically from
 // the building id so each asset always lands the same photo, but
@@ -69,7 +73,7 @@ const pickStockPhoto = (assetId, propertyType) => {
 // renders; when the asset has no uploaded photo we fall back to a
 // curated Unsplash stock photo chosen by property type (see
 // STOCK_BUILDING_PHOTOS above) so every card looks like a real photo.
-const AssetCardPhoto = ({ storagePath, assetId, typeChipColor, propertyType, name, stockUrl, height = 120 }) => {
+const AssetCardPhoto = React.memo(({ storagePath, assetId, typeChipColor, propertyType, name, stockUrl, height = 120 }) => {
   const [url, setUrl] = useState(null);
   useEffect(() => {
     let mounted = true;
@@ -136,7 +140,7 @@ const AssetCardPhoto = ({ storagePath, assetId, typeChipColor, propertyType, nam
       <span style={{position:'absolute',bottom:10,left:10,fontSize:9,letterSpacing:'0.05em',textTransform:'uppercase',color:'#fff',background:typeChipColor,padding:'3px 8px',borderRadius:3,fontWeight:600,whiteSpace:'nowrap'}}>{propertyType}</span>
     </div>
   );
-};
+});
 
 // ===== AttentionDrillModal =====
 // Small inline modal that lists the underlying records behind one
