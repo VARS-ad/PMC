@@ -225,6 +225,7 @@ const PMCGuardsPage = () => {
                     <td style={{fontSize:12,color:'var(--text-secondary)',fontVariantNumeric:'tabular-nums'}}>{g.created_at ? new Date(g.created_at).toLocaleDateString() : '—'}</td>
                     <td style={{textAlign:'right',whiteSpace:'nowrap'}}>
                       <button
+                        className="guard-action-chat"
                         onClick={e => { e.stopPropagation(); setOpenedGuard({ guard: g, focusChat: true }); }}
                         style={{padding:'6px 14px',fontSize:11,background:'#fff',border:'1px solid var(--border-medium)',borderRadius:4,color:'var(--text-dark)',cursor:'pointer',fontWeight:500}}>Chat</button>
                     </td>
@@ -334,7 +335,7 @@ const GuardDetailModal = ({ guard, focusChat, buildings, onClose, onSaved }) => 
             <div>
               {error && <div style={{padding:10,background:'#fdf2f1',color:'#8b4a42',borderRadius:6,fontSize:12,marginBottom:12}}>{error}</div>}
               {!editing ? (
-                <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'14px 24px'}}>
+                <div className="guard-detail-grid" style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'14px 24px'}}>
                   <Field label="Full name"  value={guard.full_name || '—'}/>
                   <Field label="Phone"      value={guard.phone || '—'}/>
                   <Field label="Building"   value={guard.building_name || '—'}/>
@@ -343,7 +344,7 @@ const GuardDetailModal = ({ guard, focusChat, buildings, onClose, onSaved }) => 
                   <Field label="Profile ID" value={guard.id}/>
                 </div>
               ) : (
-                <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'14px 16px'}}>
+                <div className="guard-detail-grid" style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'14px 16px'}}>
                   <EditField label="Full name" value={form.full_name} onChange={v => setForm(f => ({...f, full_name: v}))}/>
                   <EditField label="Phone"     value={form.phone}     onChange={v => setForm(f => ({...f, phone: v}))}/>
                   <div>

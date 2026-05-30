@@ -462,11 +462,11 @@ const ProfileCreationPage = () => {
         </div>
       </div>
 
-      <div style={{display:'flex',gap:4,marginBottom:22,borderBottom:'1px solid var(--border-light)',overflowX:'auto'}}>
+      <div className="pc-section-tabs" style={{display:'flex',gap:4,marginBottom:22,borderBottom:'1px solid var(--border-light)',overflowX:'auto',WebkitOverflowScrolling:'touch'}}>
         {Object.entries(PC_TEMPLATES).map(([id, cfg]) => (
           <div key={id}
             onClick={() => { setSection(id); setInner('summary'); }}
-            style={{padding:'12px 20px',cursor:'pointer',fontSize:14,fontWeight:section===id?500:400,color:section===id?'var(--text-dark)':'var(--text-secondary)',borderBottom: section===id ? '2px solid var(--bg-warm-dark)' : '2px solid transparent',marginBottom:-1,letterSpacing:'-0.01em',whiteSpace:'nowrap',transition:'color 0.15s'}}
+            style={{padding:'12px 20px',cursor:'pointer',fontSize:14,fontWeight:section===id?500:400,color:section===id?'var(--text-dark)':'var(--text-secondary)',borderBottom: section===id ? '2px solid var(--bg-warm-dark)' : '2px solid transparent',marginBottom:-1,letterSpacing:'-0.01em',whiteSpace:'nowrap',transition:'color 0.15s',flexShrink:0}}
             onMouseEnter={e => { if (section !== id) e.currentTarget.style.color = 'var(--text-dark)'; }}
             onMouseLeave={e => { if (section !== id) e.currentTarget.style.color = 'var(--text-secondary)'; }}
           >
@@ -476,11 +476,11 @@ const ProfileCreationPage = () => {
       </div>
 
       {!isReadOnly && !isSinglePane && innerTabs.length > 1 && (
-        <div style={{display:'flex',gap:8,marginBottom:24}}>
+        <div className="pc-inner-tabs" style={{display:'flex',gap:8,marginBottom:24,flexWrap:'wrap'}}>
           {innerTabs.map(id => (
             <div key={id}
               onClick={() => setInner(id)}
-              style={{padding:'8px 16px',cursor:'pointer',fontSize:13,fontWeight:inner===id?500:400,color:inner===id?'var(--text-dark)':'var(--text-secondary)',border: inner===id ? '1.5px solid var(--bg-warm-dark)' : '1px solid var(--border-light)',borderRadius:8,background:inner===id?'var(--bg-surface)':'#fff',letterSpacing:'-0.01em',transition:'color 0.15s,border-color 0.15s'}}>
+              style={{padding:'8px 16px',cursor:'pointer',fontSize:13,fontWeight:inner===id?500:400,color:inner===id?'var(--text-dark)':'var(--text-secondary)',border: inner===id ? '1.5px solid var(--bg-warm-dark)' : '1px solid var(--border-light)',borderRadius:8,background:inner===id?'var(--bg-surface)':'#fff',letterSpacing:'-0.01em',transition:'color 0.15s,border-color 0.15s',whiteSpace:'nowrap'}}>
               {id === 'bulk' ? 'Bulk upload' : id === 'manual' ? 'Manual upload' : 'Summary'}
             </div>
           ))}
@@ -1216,24 +1216,24 @@ const BuildingDetailModal = ({ building, onClose }) => {
   return (
     <>
     <div className="modal-overlay" onClick={onClose}>
-      <div className="modal" onClick={e => e.stopPropagation()} style={{maxWidth:1040,maxHeight:'90vh',padding:0,display:'flex',flexDirection:'column',overflow:'hidden'}}>
-        <div className="modal-header" style={{position:'sticky',top:0,background:'#fff',padding:'24px 28px 18px 32px',margin:0,borderBottom:'1px solid var(--border-light)',zIndex:2}}>
-          <div>
+      <div className="modal building-detail-modal" onClick={e => e.stopPropagation()} style={{maxWidth:1040,maxHeight:'90vh',padding:0,display:'flex',flexDirection:'column',overflow:'hidden'}}>
+        <div className="modal-header modal-header-stacked" style={{position:'sticky',top:0,background:'#fff',padding:'24px 28px 18px 32px',margin:0,borderBottom:'1px solid var(--border-light)',zIndex:2}}>
+          <div style={{minWidth:0,flex:1}}>
             <div style={{fontSize:11,letterSpacing:'0.08em',textTransform:'uppercase',color:'var(--text-muted)',marginBottom:4}}>Building</div>
-            <h2>{building.name}</h2>
-            <div className="modal-sub">{building.address || ''}</div>
+            <h2 style={{wordBreak:'break-word'}}>{building.name}</h2>
+            <div className="modal-sub" style={{wordBreak:'break-word'}}>{building.address || ''}</div>
             <div style={{fontSize:12,color:'var(--text-secondary)',marginTop:6}}>{floors.length} floor{floors.length===1?'':'s'} · {allUnits.length} units · <span style={{color:'#5a6b4f'}}>{occupiedCount} occupied</span> · <span style={{color:'#a07d3c'}}>{vacantCount} vacant</span></div>
           </div>
           <button className="modal-close" onClick={onClose}>×</button>
         </div>
-        <div style={{padding:'20px 32px 28px',overflowY:'auto',flex:1}}>
+        <div className="building-detail-body" style={{padding:'20px 32px 28px',overflowY:'auto',flex:1}}>
           {floors.map(f => (
             <div key={f} style={{marginBottom:18,paddingBottom:14,borderBottom:'1px solid var(--border-light)'}}>
               <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:10}}>
                 <div style={{fontSize:13,fontWeight:600,color:'var(--text-dark)'}}>{f === NO_FLOOR_KEY ? 'Units' : 'Floor ' + f}</div>
                 <div style={{fontSize:11,color:'var(--text-muted)'}}>{byFloor[f].length} unit{byFloor[f].length===1?'':'s'}</div>
               </div>
-              <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill, minmax(110px, 1fr))',gap:6}}>
+              <div className="unit-chip-grid" style={{display:'grid',gridTemplateColumns:'repeat(auto-fill, minmax(110px, 1fr))',gap:6}}>
                 {byFloor[f].map(u => {
                   const occ = isOccupied(u);
                   // Light tinted backgrounds so occupancy reads at-a-glance:

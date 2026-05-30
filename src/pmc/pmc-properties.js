@@ -752,7 +752,7 @@ const PMCPropertiesPage = ({ setPage }) => {
             <div style={{fontSize:20,fontWeight:600,color:'var(--text-dark)',letterSpacing:'-0.01em',marginBottom:10}}>Add your first building</div>
             <div style={{fontSize:13,color:'var(--text-secondary)',lineHeight:1.55,marginBottom:22}}>Bulk-upload a CSV with your buildings, units, and residents — VARS sorts the rest.</div>
             <button
-              className="btn btn-primary"
+              className="btn btn-primary pmc-cta-fullwidth-mobile"
               onClick={() => {
                 try { window._profileCreationInitialSection = 'buildings'; } catch (_) {}
                 if (setPage) setPage('profileCreation');
@@ -802,7 +802,7 @@ const PMCPropertiesPage = ({ setPage }) => {
                 <div onClick={open} style={{cursor:'pointer'}}>
                   <AssetCardPhoto storagePath={b.photo_path} assetId={b.id} typeChipColor={typeChip} propertyType={b.property_type} name={b.name} stockUrl={stockUrl} height={160}/>
                 </div>
-                <div style={{padding:'18px 20px'}}>
+                <div className="pmc-asset-card-body" style={{padding:'18px 20px'}}>
                 <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:14}}>
                   <div style={{flex:1,minWidth:0,cursor:'pointer'}} onClick={open}>
                     <div style={{fontSize:20,fontWeight:500,color:'var(--text-dark)',letterSpacing:'-0.02em',lineHeight:1.15}}>{b.name}</div>
@@ -815,13 +815,12 @@ const PMCPropertiesPage = ({ setPage }) => {
                     {attentionItems.map((it, idx) => (
                       <div key={idx}
                         onClick={(e) => { e.stopPropagation(); if (it.onAction) it.onAction(); }}
-                        style={{display:'flex', alignItems:'center', gap:8, fontSize:12, color:'var(--text-dark)', padding:'5px 0', cursor: it.onAction ? 'pointer' : 'default', borderRadius:4, transition:'background 0.12s'}}
+                        style={{display:'flex', alignItems:'center', gap:8, fontSize:12, color: it.color, padding:'5px 0', cursor: it.onAction ? 'pointer' : 'default', borderRadius:4, transition:'background 0.12s', fontWeight:500}}
                         onMouseEnter={e => { if (it.onAction) e.currentTarget.style.background = 'rgba(122,90,31,0.08)'; }}
                         onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}>
-                        <span style={{width:6, height:6, borderRadius:3, background:it.color, flexShrink:0}}/>
                         <span style={{flex:1}}>{it.text}</span>
                         {it.onAction && (
-                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#8a98a2" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={it.color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
                         )}
                       </div>
                     ))}
@@ -835,7 +834,7 @@ const PMCPropertiesPage = ({ setPage }) => {
                   // AssetFinancialPanel — restored on user request so
                   // each card carries the at-a-glance financial state.
                   return (
-                    <div style={{display:'grid',gridTemplateColumns:'repeat(3, minmax(0, 1fr))',gap:8,marginTop:14}}>
+                    <div className="pmc-card-kpis" style={{display:'grid',gridTemplateColumns:'repeat(3, minmax(0, 1fr))',gap:8,marginTop:14}}>
                       {/* Units tile (custom render — matches PMCStat shape) */}
                       <div
                         onClick={(e) => { e.stopPropagation(); open(); }}
@@ -1021,7 +1020,7 @@ const PMCPropertiesPage = ({ setPage }) => {
                     Labels intentionally mirror the Overview hero strip
                     (Collected · Overdue · Upcoming · 30 days) so the
                     same number reads the same name everywhere. */}
-                <div style={{display:'grid',gridTemplateColumns:'repeat(4, minmax(0, 1fr))',gap:12,marginBottom:24}}>
+                <div className="pmc-summary-kpis" style={{display:'grid',gridTemplateColumns:'repeat(4, minmax(0, 1fr))',gap:12,marginBottom:24}}>
                   <PMCStat label="Total Revenue Billed" value={fmtMoney(billed)}
                     onClick={() => setPortfolioDrill({ view: 'billed', allInvoices })}
                     hint="Every billed invoice across the portfolio in the selected period."/>
@@ -1045,7 +1044,7 @@ const PMCPropertiesPage = ({ setPage }) => {
                     if (t.list.length === 0) return null;
                     const sharePct = Math.round(t.share * 100);
                     return (
-                      <div key={t.key}
+                      <div key={t.key} className="pmc-revenue-type-row"
                         onClick={() => setActiveAssetType(t.key)}
                         style={{display:'grid', gridTemplateColumns:'160px 1fr 130px 90px', gap:14, alignItems:'center', padding:'10px 6px', cursor:'pointer', borderRadius:6, transition:'background 0.12s'}}
                         onMouseEnter={e => { e.currentTarget.style.background = 'rgba(160,125,60,0.06)'; }}
@@ -1069,7 +1068,7 @@ const PMCPropertiesPage = ({ setPage }) => {
                 </div>
 
                 {/* Two-up: Top contributors / Outstanding invoices */}
-                <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:18}}>
+                <div className="pmc-summary-two-up" style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:18}}>
                   {/* Top revenue contributors */}
                   <div className="card" style={{padding:'18px 22px'}}>
                     <div style={sectionEyebrowSmall}>Top revenue contributors</div>
@@ -1105,7 +1104,7 @@ const PMCPropertiesPage = ({ setPage }) => {
                     ) : outstandingInvoices.map(i => {
                       const c = statusStyles[i.effective_status] || { bg:'#E6EAE9', fg:'#61707D' };
                       return (
-                        <div key={i.id}
+                        <div key={i.id} className="pmc-outstanding-row"
                           onClick={() => setFinancialAsset(i.building_ref)}
                           style={{display:'grid', gridTemplateColumns:'1fr 80px 110px', gap:10, alignItems:'center', padding:'9px 6px', cursor:'pointer', borderRadius:6, transition:'background 0.12s'}}
                           onMouseEnter={e => { e.currentTarget.style.background = 'rgba(160,125,60,0.06)'; }}
@@ -1214,7 +1213,11 @@ const PMCPropertiesPage = ({ setPage }) => {
 
           return (
             <>
-              <div style={{display:'flex', gap:4, marginBottom:24, borderBottom:'1px solid var(--border-light)'}}>
+              {/* Desktop: tab row. Mobile: native <select> — the scrolling
+                  tab row was hard to discover and felt unfinished on a
+                  phone. Hide via .pmc-asset-tabs-row / .pmc-asset-tabs-mob
+                  classes wired up in base.css's @media block. */}
+              <div className="pmc-asset-tabs pmc-asset-tabs-row" style={{display:'flex', gap:4, marginBottom:24, borderBottom:'1px solid var(--border-light)'}}>
                 {tabs.map(t => {
                   const active = activeAssetType === t.key;
                   return (
@@ -1227,11 +1230,20 @@ const PMCPropertiesPage = ({ setPage }) => {
                         fontSize:13, fontWeight: active ? 600 : 400,
                         color: active ? 'var(--text-dark)' : 'var(--text-secondary)',
                         letterSpacing:'-0.005em',
+                        whiteSpace:'nowrap', flexShrink:0,
                       }}>
                       {t.label} <span style={{fontSize:11, color:'var(--text-muted)', marginLeft:6, fontWeight:400}}>· {t.count}</span>
                     </button>
                   );
                 })}
+              </div>
+              <div className="pmc-asset-tabs-mob" style={{display:'none', marginBottom:20}}>
+                <select value={activeAssetType} onChange={e => setActiveAssetType(e.target.value)}
+                  style={{width:'100%', padding:'12px 14px', fontSize:14, fontWeight:600, color:'var(--text-dark)', background:'#fff', border:'1px solid var(--border-light)', borderRadius:8, appearance:'none', WebkitAppearance:'none', backgroundImage:"url(\"data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2361707D' stroke-width='2'><polyline points='6 9 12 15 18 9'/></svg>\")", backgroundRepeat:'no-repeat', backgroundPosition:'right 14px center', paddingRight:36}}>
+                  {tabs.map(t => (
+                    <option key={t.key} value={t.key}>{t.label} · {t.count}</option>
+                  ))}
+                </select>
               </div>
               {activeAssetType === 'Summary'         && renderSummary()}
               {activeAssetType === 'Residential'     && renderSection('Residential',     'Residential',     residential)}

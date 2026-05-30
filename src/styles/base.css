@@ -29,6 +29,12 @@
   --radius-lg:16px;
 }
 *{margin:0;padding:0;box-sizing:border-box}
+/* Belt-and-suspenders against horizontal scrollbars on mobile: individual
+   pages still get the proper fix (.data-table-scroll wrapper, flex-wrap on
+   action rows, percent-width grids), but inline-styled grids on the new
+   pages occasionally leak a few px. Clipping the body avoids the whole
+   viewport sliding sideways on iPhone SE (375px). */
+html,body{max-width:100%;overflow-x:hidden}
 body{font-family:'Anek Odia','Google Sans Flex','Inter','Helvetica Neue',-apple-system,system-ui,sans-serif;background:var(--bg-page);color:var(--text-dark);font-size:15px;font-weight:400;line-height:1.5;-webkit-font-smoothing:antialiased;letter-spacing:-0.003em}
 .page-header h1,.modal-header h2{font-family:'Google Sans Flex','Inter','Helvetica Neue',system-ui,-apple-system,sans-serif;font-weight:500;letter-spacing:-0.02em}
 ::-webkit-scrollbar{width:6px;height:6px}
@@ -330,8 +336,11 @@ html[dir="rtl"] div[style*="position:absolute"][style*="left:0"] { left:auto !im
 @keyframes slideUp{from{transform:translateY(20px);opacity:0}to{transform:translateY(0);opacity:1}}
 @keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}
 
-/* Mobile bottom nav */
-.mobile-bottom-nav{display:none;position:fixed;bottom:0;left:0;right:0;background:#fff;border-top:1px solid #d0d0d0;z-index:100;padding:4px 0 env(safe-area-inset-bottom,4px) 0}
+/* Mobile bottom nav — floor the safe-area inset at 6px so devices that
+   report 0 (older Androids, desktop Chrome devtools) still get breathing
+   room between the nav row and the screen edge. iPhones with a home
+   indicator report ~34px and the max() picks that up automatically. */
+.mobile-bottom-nav{display:none;position:fixed;bottom:0;left:0;right:0;background:#fff;border-top:1px solid #d0d0d0;z-index:100;padding:4px 0 max(env(safe-area-inset-bottom,6px),6px) 0}
 .mobile-bottom-nav .nav-items{display:flex;justify-content:space-around}
 .mobile-bottom-nav .nav-item{display:flex;flex-direction:column;align-items:center;gap:2px;padding:6px 4px;font-size:9px;color:#8a8a8a;cursor:pointer;min-width:0;flex:1}
 .mobile-bottom-nav .nav-item.active{color:var(--accent-warm-dark)}
@@ -349,14 +358,41 @@ html[dir="rtl"] div[style*="position:absolute"][style*="left:0"] { left:auto !im
   .sidebar{width:240px;transform:translateX(-100%);transition:transform .25s ease;z-index:200}
   .sidebar.open{transform:translateX(0)}
   .sidebar-overlay.show{display:block;z-index:150}
-  .main-content{margin-left:0;margin-top:56px;padding:20px;padding-bottom:72px}
-  .topbar{left:0;padding:0 12px;gap:8px}
-  .topbar .property-select span:nth-child(2){max-width:100px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  /* The bottom nav (z:100) sits underneath the sidebar (z:200) but still
+     overlaps the bottom of the slide-in. Pad the scrollable nav so the
+     pinned Sign out row clears it. */
+  .sidebar .sidebar-nav{padding-bottom:80px}
+  .main-content{margin-left:0;margin-top:56px;padding:20px;padding-bottom:calc(72px + env(safe-area-inset-bottom,0px));max-width:100vw;overflow-x:hidden}
+  .topbar{left:0;padding:0 10px;gap:6px}
+  /* Reclaim space in the topbar at 375px: the pill no longer needs to be
+     200px wide (that pushed the bell + avatar off-screen). Let it shrink
+     to fit the truncated label and keep min-width modest so the right
+     cluster (bell, avatar) is always reachable. */
+  .topbar .property-select{min-width:0;flex:0 1 auto;padding:8px 12px;gap:6px}
+  .topbar .property-select span:nth-child(2){max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .topbar-right{gap:6px}
   .topbar .search-bar{display:none}
+  /* Notification + profile dropdowns are absolutely-positioned with
+     hard widths (360 / 280) and right offsets that nudge them PAST the
+     viewport edge on a 375px screen. Clamp them so they always fit and
+     align flush to the right. */
+  .topbar-right > div > div[style*="width:360"],
+  .topbar-right > div > div[style*="width: 360"]{
+    width:calc(100vw - 20px)!important;max-width:360px!important;right:0!important;
+  }
+  .topbar-right > div > div[style*="width:280"],
+  .topbar-right > div > div[style*="width: 280"]{
+    width:calc(100vw - 20px)!important;max-width:280px!important;right:0!important;
+  }
   .hamburger{display:block}
   .page-with-panel{grid-template-columns:1fr}
-  .page-header{flex-direction:column;gap:12px}
+  .page-header{flex-direction:column;gap:12px;align-items:stretch}
+  .page-header h1{font-size:22px}
   .page-header .btn-group{flex-wrap:wrap}
+  /* Generic action-row pattern: any sibling div of an h1 that holds a
+     row of buttons (filter bars, top-of-page CTAs) should wrap rather
+     than blow out the viewport. */
+  .page-header > div{flex-wrap:wrap}
   .kpi-row{grid-template-columns:repeat(2,1fr)!important;gap:8px}
   .grid-2{grid-template-columns:1fr}
   .grid-3{grid-template-columns:1fr}
@@ -364,11 +400,101 @@ html[dir="rtl"] div[style*="position:absolute"][style*="left:0"] { left:auto !im
   .card{padding:14px;margin-bottom:12px}
   .data-table{display:block;overflow-x:auto;white-space:nowrap;-webkit-overflow-scrolling:touch}
   .data-table th,.data-table td{padding:8px 10px;font-size:12px}
+  /* Catch-all for plain <table> elements added by newer pages that don't
+     opt into the .data-table class. Lets them scroll horizontally inside
+     their card instead of overflowing the viewport. */
+  table:not(.data-table){display:block;width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch;white-space:nowrap}
+  table:not(.data-table) th,table:not(.data-table) td{font-size:12px}
+  /* If a card was sized in inline styles, let it shrink with the viewport. */
+  .card{max-width:100%}
   .filter-row{overflow-x:auto;flex-wrap:nowrap;-webkit-overflow-scrolling:touch;padding-bottom:4px}
   .chip{white-space:nowrap;flex-shrink:0}
-  .modal-overlay{align-items:flex-end;padding:0}
-  .modal{max-width:100%;width:100%;border-radius:16px 16px 0 0;max-height:90vh;padding:20px 16px}
-  .modal-wide{max-width:100%}
+  /* Modals on mobile: centered card with breathing room. Previous bottom-
+     anchored sheet was hard to dismiss in Safari (address bar covered the
+     close button) and felt like the modal had got stuck. */
+  .modal-overlay{align-items:center;justify-content:center;padding:16px}
+  .modal{max-width:calc(100vw - 32px);width:calc(100vw - 32px);border-radius:14px;max-height:calc(100vh - 32px);padding:20px 16px}
+  .modal-wide{max-width:calc(100vw - 32px)}
+
+  /* === Mobile KPI / chart fixes (user feedback) === */
+  /* 1. KPI tile rows that use kpi-row / kpi-card classes — stack to a
+        single column. Previously the values truncated mid-digit because
+        flex-shrink let each tile compress narrower than the AED string. */
+  .kpi-row{grid-template-columns:1fr!important;gap:10px}
+  .kpi-card{padding:14px 16px;min-width:0}
+  /* 2. Any inline 'repeat(N, ...)' KPI grids elsewhere in the app fall
+        back to a single column too (catches the 5-tile Financial Summary
+        row in AssetFinancialPanel and the 3-tile rows on asset cards). */
+  div[style*="grid-template-columns:repeat(5"], div[style*="grid-template-columns: repeat(5"],
+  div[style*="grid-template-columns:repeat(4"], div[style*="grid-template-columns: repeat(4"],
+  div[style*="grid-template-columns:repeat(3"], div[style*="grid-template-columns: repeat(3"]{
+    grid-template-columns:1fr!important;
+  }
+  /* 3. Charts must stay inside their card. Chart.js leaks past the card
+        when the parent doesn't clip — common when the chart's canvas
+        keeps its desktop width on a narrow viewport. */
+  .card canvas{max-width:100%!important;height:auto!important}
+  .card > div[style*="grid-template-columns"]{overflow:hidden}
+  /* 4. KPI label / value typography: prevent numbers from intersecting
+        on cards that pack a label, value, and trend into a small space. */
+  .kpi-card .value, .kpi-card .label{word-break:break-word;min-width:0}
+  /* 5. Properties page: swap the horizontal tab row for a native <select>
+        on mobile so the user gets familiar OS chrome instead of a hidden
+        scroll affordance. */
+  .pmc-asset-tabs-row{display:none!important}
+  .pmc-asset-tabs-mob{display:block!important}
+  /* Several modals (Service Requests detail/create, all four Vendors
+     modals) set inline maxWidth/maxHeight on the .modal node, which
+     beats the class rules above. Re-assert the bottom-sheet sizing
+     with !important so inline styles can't undo it on mobile. */
+  .modal[style*="max-width"],.modal[style*="maxWidth"]{max-width:100%!important;width:100%!important;border-radius:16px 16px 0 0!important;max-height:90vh!important}
+  /* The Create-SR modal uses a custom sticky header + scroll body with
+     28px lateral padding — too tight at 375px. Squeeze it back to 16px. */
+  .modal > div[style*="padding: 24px 28px"],
+  .modal > div[style*="padding:24px 28px"]{padding:14px 16px!important}
+  .modal > div[style*="padding: 20px 28px"],
+  .modal > div[style*="padding:20px 28px"]{padding:14px 16px 18px 16px!important}
+  .modal > div[style*="padding: 14px 28px"],
+  .modal > div[style*="padding:14px 28px"]{padding:12px 16px 14px 16px!important}
+  /* Stack inline 2-col form grids inside modals (Vendors edit, Vendors
+     payment, Vendors renew, Create-SR all use 1fr 1fr). */
+  .modal div[style*="grid-template-columns: 1fr 1fr"],
+  .modal div[style*="grid-template-columns:1fr 1fr"]{grid-template-columns:1fr!important}
+  /* Vendor detail modal — repeat(2, 1fr) field grid. */
+  .modal div[style*="grid-template-columns: repeat(2, 1fr)"],
+  .modal div[style*="grid-template-columns:repeat(2, 1fr)"]{grid-template-columns:1fr!important}
+  /* Vendor edit modal — building chip grid forces 180px min columns,
+     which overflows at 375px. Collapse to a single column. */
+  .modal div[style*="minmax(180px"]{grid-template-columns:1fr!important}
+  /* Inline KPI grids that force 4 or 5 column tracks (Service Requests
+     KPI row, Vendor list KPIs, Vendor payments tab KPIs). Let them use
+     the .kpi-row 2-col mobile rule by overriding the inline grid. */
+  .kpi-row[style*="repeat(5"],
+  .kpi-row[style*="repeat(4"],
+  .kpi-row[style*="repeat(3"]{grid-template-columns:repeat(2,1fr)!important}
+  /* Vendor detail modal — tab button row. Let buttons wrap rather than
+     forcing a horizontal scroll. */
+  .modal > div[style*="gap: 8px"][style*="margin-bottom: 18px"],
+  .modal > div[style*="gap:8px"][style*="margin-bottom:18px"]{flex-wrap:wrap;gap:6px!important}
+  /* In-card filter rows on the SR + Vendors pages use inline flex with
+     fixed flex-basis. Make each control take a full row at 375px. */
+  .card > div[style*="flex-wrap: wrap"] > div[style*="flex: 1 1"],
+  .card > div[style*="flex-wrap: wrap"] > div[style*="flex: 0 0"],
+  .card > div[style*="flex-wrap: wrap"] > div[style*="flex: 2 1"],
+  .card > div[style*="flex-wrap:wrap"] > div[style*="flex:1 1"],
+  .card > div[style*="flex-wrap:wrap"] > div[style*="flex:0 0"],
+  .card > div[style*="flex-wrap:wrap"] > div[style*="flex:2 1"]{flex:1 1 100%!important}
+  /* The "Outstanding only" toggle in vendors filter row + Clear button
+     in SR filter row — let them sit on their own row. */
+  .card > div[style*="flex-wrap: wrap"] > label[style*="white-space: nowrap"],
+  .card > div[style*="flex-wrap:wrap"] > label[style*="white-space:nowrap"]{flex:1 1 100%!important;justify-content:flex-start}
+  .card > div[style*="flex-wrap: wrap"] > .btn-sm,
+  .card > div[style*="flex-wrap:wrap"] > .btn-sm{flex:1 1 100%!important;justify-content:center}
+  /* Empty-state placeholder cards use inline maxWidth:520 with margin
+     auto. React serializes that to `max-width: 520px`. Trim padding so
+     the card doesn't dominate the viewport. */
+  .card > div[style*="max-width: 520px"],
+  .card > div[style*="max-width:520px"]{padding:24px 18px!important;margin:12px auto!important}
   .settings-layout{grid-template-columns:1fr}
   .settings-contacts{display:none}
   .btn{padding:10px 14px;font-size:13px}
@@ -384,6 +510,11 @@ html[dir="rtl"] div[style*="position:absolute"][style*="left:0"] { left:auto !im
      sign-out is always one tap away from any screen. The sidebar's
      Sign out row is also available via the hamburger as a backup. */
   .topbar-right .topbar-icon{display:none}
+  /* The chevron next to the avatar lives at right:-14, which pushes it
+     past the viewport edge on a 375px screen. Tapping the avatar itself
+     already opens the dropdown, so the chevron is purely decorative —
+     hide it on mobile to recover the gutter. */
+  .topbar-right > div > svg[style*="right:-14"]{display:none!important}
   .guard-carousel{overflow-x:auto;-webkit-overflow-scrolling:touch}
   .announcement-card .stats{flex-wrap:wrap;gap:12px}
   .toast{bottom:72px;left:16px;right:16px;text-align:center}
@@ -405,11 +536,213 @@ html[dir="rtl"] div[style*="position:absolute"][style*="left:0"] { left:auto !im
   /* Reports layout */
   div[style*="grid-template-columns: 200px"]{grid-template-columns:1fr!important}
   div[style*="grid-template-columns:200px"]{grid-template-columns:1fr!important}
+
+  /* ===== Overview / Dashboard mobile tweaks ===== */
+  /* Hero KPI card: tighten padding so the gradient panel doesn't eat the row. */
+  .pmc-overview-hero{padding:16px 16px!important}
+  /* Smaller stat tiles + closer gap so all 3 stack readably without the
+     30px hero values overflowing iPhone SE width. */
+  .pmc-overview-hero-row{gap:14px!important}
+  .pmc-overview-hero-stat{min-width:0!important;flex-basis:100%!important}
+  .pmc-overview-hero-stat .pmc-overview-hero-value{font-size:22px!important;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  /* "Needs your attention" rows: let long titles wrap to a second line
+     instead of getting cut off by the right-hand status chip + chevron. */
+  .pmc-overview-attn-row{padding:12px 14px!important;gap:10px!important}
+  .pmc-overview-attn-row .pmc-overview-attn-title{white-space:normal!important;overflow:visible!important;text-overflow:clip!important;font-size:13px!important;line-height:1.3}
+  .pmc-overview-attn-row .pmc-overview-attn-detail{font-size:11px!important;line-height:1.3}
+  /* Per-asset card grid: force single column so each asset gets its full row. */
+  .pmc-overview-asset-grid{grid-template-columns:1fr!important;gap:12px!important}
+
+  /* ===== Reports page mobile tweaks ===== */
+  /* 7 section tabs scroll horizontally on mobile instead of wrapping into
+     two ragged rows of chips. The base.css catch-all for plain <table>
+     already handles horizontal scrolling for the report's wide
+     multi-column tables — .reports-table inherits it. */
+  .reports-tabs{flex-wrap:nowrap!important;overflow-x:auto;-webkit-overflow-scrolling:touch;gap:4px!important;margin-bottom:18px!important}
+  .reports-tabs::-webkit-scrollbar{display:none}
+  .reports-tab{flex-shrink:0;padding:10px 14px!important;font-size:12px!important}
+  /* Header action row (Time range picker + Download Data button) — stretch
+     to full width and let each child flex so the button doesn't squeeze
+     off-screen at 375px. */
+  .reports-header-actions{width:100%;justify-content:flex-start}
+  .reports-header-actions > *{flex:1 1 auto;min-width:0}
+  /* Side-by-side chart + legend grids (Occupancy Mix, Visitors by Type)
+     stack on mobile so the doughnut and its legend each get the full
+     card width. */
+  .reports-split{grid-template-columns:1fr!important;gap:14px!important}
+  /* Tighten the inline-styled KPI grids so 2 tiles fit cleanly per row. */
+  .card > div[style*="repeat(auto-fit"][style*="minmax(150px"]{gap:10px!important}
+  .card > div[style*="repeat(auto-fit"][style*="minmax(180px"]{gap:10px!important}
+
+  /* ===== PMC Properties / Assets mobile tweaks ===== */
+  /* Asset-type tabs (Summary / Residential / …): scroll horizontally
+     instead of wrapping into two ragged rows. */
+  .pmc-asset-tabs{overflow-x:auto;-webkit-overflow-scrolling:touch;flex-wrap:nowrap!important;padding-bottom:2px}
+  .pmc-asset-tabs::-webkit-scrollbar{height:0}
+  .pmc-asset-tabs button{padding:10px 12px!important;font-size:12px!important}
+  /* Summary KPI tiles: 4-up → 2-up so each tile keeps its amount on one line. */
+  .pmc-summary-kpis{grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:8px!important}
+  /* Revenue-by-type rows: legend + amount stay on row 1; bar + share/coll
+     drop to their own rows under the legend so each value gets room. */
+  .pmc-revenue-type-row{grid-template-columns:1fr auto!important;grid-template-rows:auto auto auto!important;gap:6px 10px!important;padding:10px 4px!important}
+  .pmc-revenue-type-row > div:nth-child(1){grid-column:1;grid-row:1}
+  .pmc-revenue-type-row > div:nth-child(2){grid-column:1 / -1;grid-row:2}
+  .pmc-revenue-type-row > div:nth-child(3){grid-column:2;grid-row:1}
+  .pmc-revenue-type-row > div:nth-child(4){grid-column:1 / -1;grid-row:3;text-align:left!important}
+  /* Two-up summary cards stack on mobile. */
+  .pmc-summary-two-up{grid-template-columns:1fr!important;gap:12px!important}
+  /* Outstanding invoice row: description spans full width on row 1, then
+     status chip + amount sit on row 2 (chip left, amount right). */
+  .pmc-outstanding-row{grid-template-columns:1fr auto!important;gap:4px 10px!important}
+  .pmc-outstanding-row > div:first-child{grid-column:1 / -1}
+  .pmc-outstanding-row > span:nth-child(2){justify-self:start}
+  .pmc-outstanding-row > div:last-child{justify-self:end}
+  /* Per-asset card 3-tile KPI strip → single column so values don't truncate. */
+  .pmc-card-kpis{grid-template-columns:1fr!important;gap:6px!important}
+  /* Tighter side padding on the asset card body. */
+  .pmc-asset-card-body{padding:14px 14px!important}
+  /* Empty-state "Add buildings" CTA full-width for an easy tap target. */
+  .pmc-cta-fullwidth-mobile{width:100%;justify-content:center}
+
+  /* ===== Announcements composer (wizard pills + step grids) ===== */
+  /* 4 wizard pills (Compose - Audience - Schedule - Preview) with
+     whiteSpace:nowrap won't fit at 375; scroll horizontally instead. */
+  .announcement-wizard-steps{overflow-x:auto;flex-wrap:nowrap!important;-webkit-overflow-scrolling:touch;padding-bottom:4px}
+  .announcement-wizard-steps > *{flex-shrink:0}
+  /* Step 3 publish-mode tile grid (Now / Schedule / Draft) — three across
+     is too cramped at 375; stack to a single column. */
+  .composer-publish-modes{grid-template-columns:1fr!important}
+  /* Step 3 schedule date + time pickers — stack on mobile so each input
+     gets the full width. */
+  .composer-schedule-pickers{grid-template-columns:1fr!important}
+  /* Step 4 recap grid (Audience / Priority / Publish / Attachment) —
+     keep two across, but let long values wrap rather than overflow. */
+  .composer-recap-grid > div{min-width:0;word-break:break-word}
+
+  /* ===== Announcement card list ===== */
+  /* Trim the desktop 24px padding and bump the edit/delete icon-button
+     touch targets to 36x36. */
+  .announcement-card{padding:16px}
+  .announcement-card .btn-sm{width:36px!important;height:36px!important}
+
+  /* ===== Guards table — Chat button touch target ===== */
+  /* The per-row Chat button is ~28px tall; bump to 36 on mobile. */
+  .guard-action-chat{padding:10px 14px!important;font-size:12px!important}
+
+  /* ===== GuardDetailModal: detail field grid stacks on mobile ===== */
+  .guard-detail-grid{grid-template-columns:1fr!important}
+
+  /* ===== Document Library page ===== */
+  /* 7-col KPI strip collapses to 2 cols on mobile. The strip uses an inline
+     repeat(7, minmax(0,1fr)) which we override here. */
+  .docs-kpi-strip{grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:8px!important}
+  .docs-kpi-strip > div{padding:10px 12px!important}
+  /* Page header: stack the H1 + Download Data action, make button full-row. */
+  .docs-header{flex-direction:column;align-items:stretch!important}
+  .docs-header-actions{justify-content:flex-start;width:100%}
+  .docs-header-actions .btn-primary{flex:1 1 auto;justify-content:center}
+  /* Filter row: search + select stack to full-width controls. */
+  .docs-filter-row > input{flex-basis:100%!important;width:100%}
+  .docs-filter-row > select{flex-basis:100%!important;width:100%}
+  /* Per-unit nested rows: drop the 38px left indent that pushes content
+     past the viewport, tighten right gutter. */
+  .docs-unit-row{padding:10px 12px 10px 14px!important}
+  /* Attachment cards stack one-per-row so file/date/badge/icons all fit
+     comfortably inside a 375px card. */
+  .docs-attachment-grid{grid-template-columns:1fr!important}
+  /* Download Data modal: tighten side padding, footer wraps so the
+     Cancel / Download buttons get a row of their own. */
+  .docs-download-body{padding:14px 16px 18px!important}
+  .docs-download-foot{padding:12px 16px!important;flex-wrap:wrap;gap:10px!important}
+  .docs-download-foot > div:last-child{width:100%;justify-content:flex-end}
+  /* Inside the modal body: kinds checkbox grid collapses to 1 column. */
+  .docs-download-body div[style*="grid-template-columns:1fr 1fr"],
+  .docs-download-body div[style*="grid-template-columns: 1fr 1fr"]{grid-template-columns:1fr!important}
+
+  /* ===== Profile Creation / Database page ===== */
+  /* Top section tabs: keep horizontal scroll (inline) but trim padding
+     so more labels are reachable without a long swipe. */
+  .pc-section-tabs > div{padding:10px 14px!important;font-size:13px!important}
+  /* Summary / Bulk upload / Manual upload sub-tabs: equal width, can wrap. */
+  .pc-inner-tabs > div{flex:1 1 auto;text-align:center;min-width:0}
+  /* 2-col manual entry form grids inside a .card → 1 col. The inline style
+     on these rows is grid-template-columns:1fr 1fr (and the spaced variant). */
+  .card div[style*="grid-template-columns:1fr 1fr"],
+  .card div[style*="grid-template-columns: 1fr 1fr"]{grid-template-columns:1fr!important}
+  /* "Add another unit" row uses 130px 1fr 40px — shrink the 130px floor
+     column so the unit-number input gets room, keep the × tap target at 40px. */
+  .card div[style*="grid-template-columns:130px 1fr 40px"],
+  .card div[style*="grid-template-columns: 130px 1fr 40px"]{grid-template-columns:80px 1fr 40px!important}
+
+  /* ===== PMC deep-dive modal mobile overrides =====
+     Unit / Building / Resident / Asset-Financial modals all use a
+     custom inline-styled inner container (padding:0, sticky header with
+     32px padding) because they're full-bleed deep-dives. On mobile we
+     pull the padding in so content fits 375px while base.css still
+     handles full-width + rounded top corners on the .modal. */
+  .modal.unit-detail-modal .modal-header,
+  .modal.building-detail-modal .modal-header,
+  .modal.asset-financial-modal .modal-header{padding:16px 16px 12px!important}
+  .modal.unit-detail-modal .unit-detail-body,
+  .modal.building-detail-modal .building-detail-body,
+  .modal.asset-financial-modal .afp-body{padding:14px 16px 24px!important}
+  .modal.resident-detail-modal{padding:16px!important}
+
+  /* Stacked modal header — title block goes full-width, close button is
+     absolute-positioned so it stays in line with the title, action
+     buttons (Download Data, Edit) drop to a row below. */
+  .modal.unit-detail-modal .modal-header,
+  .modal.building-detail-modal .modal-header,
+  .modal.asset-financial-modal .modal-header,
+  .modal.resident-detail-modal .modal-header{position:relative!important}
+  .modal-header-stacked{flex-wrap:wrap;gap:8px;padding-right:44px!important}
+  .modal-header-stacked > div:first-child{flex:1 1 100%;min-width:0}
+  .modal-header-stacked h2{font-size:17px!important;line-height:1.2}
+  .modal-header-stacked .modal-sub{font-size:11px!important}
+  .modal-header-stacked > .modal-close{position:absolute;top:12px;right:10px;width:36px;height:36px}
+  .afp-header-actions{flex:1 1 100%;justify-content:flex-start;flex-wrap:wrap;gap:8px}
+  .afp-header-actions > .modal-close{display:none}
+  .rdm-header-actions{flex:1 1 100%;justify-content:flex-start;width:auto;gap:8px}
+  .rdm-header-actions > .modal-close{display:none}
+
+  /* BuildingDetailModal — unit chip grid: 110px tiles too wide for 375px.
+     Drop to ~80px so floor sections still show 3-4 chips per row. */
+  .unit-chip-grid{grid-template-columns:repeat(auto-fill, minmax(80px, 1fr))!important;gap:6px!important}
+
+  /* UnitDetailModal Field rows — label above value instead of side-by-side
+     so long values ('Khalifa Industrial Holdings') aren't crushed into a
+     ~150px column. */
+  .udm-field{flex-direction:column!important;gap:2px!important;padding:6px 0!important}
+  .udm-field-label{width:auto!important;font-size:11px!important;letter-spacing:0.04em;text-transform:uppercase;color:#61707D}
+  .udm-field-value{font-size:13px!important}
+
+  /* Owner edit form — 2-col grid → single column on mobile so inputs
+     are full-width touch targets. */
+  .owner-edit-grid{grid-template-columns:1fr!important}
+
+  /* AssetFinancialPanel — 5 KPI tiles → 2 columns on mobile (consistent
+     with the global .kpi-row rule). */
+  .afp-kpi-grid{grid-template-columns:repeat(2, minmax(0,1fr))!important;gap:8px!important}
+
+  /* ResidentDetailModal — Personal Details / Contract grids go 2-col so
+     the 10 InfoCells stack without each row being absurdly tall. */
+  .rdm-info-grid{grid-template-columns:repeat(2, 1fr)!important;gap:10px!important;padding:12px!important}
 }
 
 @media(max-width:380px){
   .kpi-row{grid-template-columns:1fr!important}
+  /* Match specificity of the inline-style override rules so 1-col still
+     wins at iPhone SE width on the Service Requests / Vendors KPI rows. */
+  .kpi-row[style*="repeat(5"],
+  .kpi-row[style*="repeat(4"],
+  .kpi-row[style*="repeat(3"]{grid-template-columns:1fr!important}
   .grid-4{grid-template-columns:1fr}
   .topbar .property-select{padding:4px 8px;font-size:12px}
   .topbar .property-select span:nth-child(2){max-width:80px}
+  /* Documents KPI strip — single column on the very smallest viewport. */
+  .docs-kpi-strip{grid-template-columns:1fr!important}
+  /* PMC deep-dive modals — extra-tight collapse at 380px. */
+  .afp-kpi-grid{grid-template-columns:1fr!important}
+  .rdm-info-grid{grid-template-columns:1fr!important}
+  .unit-chip-grid{grid-template-columns:repeat(auto-fill, minmax(70px, 1fr))!important}
 }

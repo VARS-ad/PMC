@@ -145,7 +145,8 @@ const ResidentDetailModal = ({ resident, onClose }) => {
     if (!rows || rows.length === 0) return null;
     const isPaid = kind === 'paid';
     return (
-      <table className="data-table" style={{fontSize: 12, marginBottom: 10}}>
+      <div className="data-table-scroll" style={{marginBottom:10}}>
+      <table className="data-table" style={{fontSize: 12, minWidth: 640}}>
         <thead>
           <tr>
             <th>Invoice #</th>
@@ -187,19 +188,20 @@ const ResidentDetailModal = ({ resident, onClose }) => {
           ))}
         </tbody>
       </table>
+      </div>
     );
   };
 
   return (
     <div className="modal-overlay" onClick={onClose}>
-      <div className="modal modal-wide" onClick={e => e.stopPropagation()} style={{maxWidth:820,maxHeight:'90vh',overflowY:'auto'}}>
-        <div className="modal-header">
-          <div>
+      <div className="modal modal-wide resident-detail-modal" onClick={e => e.stopPropagation()} style={{maxWidth:820,maxHeight:'90vh',overflowY:'auto'}}>
+        <div className="modal-header modal-header-stacked">
+          <div style={{minWidth:0,flex:1}}>
             <div style={{fontSize:10,letterSpacing:'0.08em',textTransform:'uppercase',color:'var(--text-muted)',marginBottom:4}}>Resident</div>
-            <h2>{resident.full_name}</h2>
-            <div className="modal-sub">{resident.building_name} · Floor {resident.floor} · Unit {resident.unit_number}{resident.tenure ? ' · ' + resident.tenure : ''}</div>
+            <h2 style={{wordBreak:'break-word'}}>{resident.full_name}</h2>
+            <div className="modal-sub" style={{wordBreak:'break-word'}}>{resident.building_name} · Floor {resident.floor} · Unit {resident.unit_number}{resident.tenure ? ' · ' + resident.tenure : ''}</div>
           </div>
-          <div className="btn-group">
+          <div className="btn-group rdm-header-actions">
             <button className="btn" onClick={() => setShowDownload(true)}>Download Data</button>
             <button className="modal-close" onClick={onClose}>×</button>
           </div>
@@ -209,7 +211,7 @@ const ResidentDetailModal = ({ resident, onClose }) => {
 
         {/* === Personal Details === */}
         <SectionTitle>Personal Details</SectionTitle>
-        <div style={{display:'grid',gridTemplateColumns:'repeat(3, 1fr)',gap:14,padding:16,background:'var(--bg-surface)',borderRadius:8,border:'1px solid var(--border-light)'}}>
+        <div className="rdm-info-grid" style={{display:'grid',gridTemplateColumns:'repeat(3, 1fr)',gap:14,padding:16,background:'var(--bg-surface)',borderRadius:8,border:'1px solid var(--border-light)'}}>
           <InfoCell label="Emirates ID"      value={extra ? extra.emirates_id : '…'}/>
           <InfoCell label="Passport number"  value={resident.passport_number}/>
           <InfoCell label="Date of birth"    value={resident.date_of_birth}/>
@@ -224,7 +226,7 @@ const ResidentDetailModal = ({ resident, onClose }) => {
 
         {/* === Contract === */}
         <SectionTitle>Contract & Tenancy</SectionTitle>
-        <div style={{display:'grid',gridTemplateColumns:'repeat(3, 1fr)',gap:14,padding:16,background:'var(--bg-surface)',borderRadius:8,border:'1px solid var(--border-light)'}}>
+        <div className="rdm-info-grid" style={{display:'grid',gridTemplateColumns:'repeat(3, 1fr)',gap:14,padding:16,background:'var(--bg-surface)',borderRadius:8,border:'1px solid var(--border-light)'}}>
           <InfoCell label="Tenure" value={resident.tenure}/>
           {resident.tenure === 'Tenant' ? (<>
             <InfoCell label="Lease start"     value={resident.lease_start}/>

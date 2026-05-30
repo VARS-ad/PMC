@@ -1195,13 +1195,13 @@ const DocumentLibraryPage = ({ embedded } = {}) => {
   const kpiBox = { background:'#fff', border:'1px solid var(--border-light)', borderRadius:8, padding:'14px 16px', display:'flex', flexDirection:'column', gap:4 };
 
   return (
-    <div className="page-padding">
-      <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-end',marginBottom:8,flexWrap:'wrap',gap:14}}>
+    <div className="page-padding docs-page">
+      <div className="docs-header" style={{display:'flex',justifyContent:'space-between',alignItems:'flex-end',marginBottom:8,flexWrap:'wrap',gap:14}}>
         <div>
           <h1 style={{margin:0}}>Documents</h1>
           <div style={{fontSize:13,color:'var(--text-muted)',marginTop:4}}>Every attachment in the system, grouped by asset.</div>
         </div>
-        <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
+        <div className="docs-header-actions" style={{display:'flex',gap:8,flexWrap:'wrap'}}>
           <button className="btn btn-primary" onClick={() => setShowDownloadData(true)} disabled={!!genStatus} title="Pick which documents to download — filtered by kind + asset + format.">Download Data</button>
           <input ref={replaceInputRef} type="file" style={{display:'none'}}
                  onChange={e => {
@@ -1235,8 +1235,9 @@ const DocumentLibraryPage = ({ embedded } = {}) => {
         </div>
       )}
 
-      {/* KPI strip */}
-      <div style={{display:'grid',gridTemplateColumns:'repeat(7, minmax(0, 1fr))',gap:10,marginBottom:18}}>
+      {/* KPI strip — auto-fits 7 cols on desktop, collapses to 2-3 on tablets,
+          and to 2 cols at 375px width via base.css @media(max-width:768px). */}
+      <div className="docs-kpi-strip" style={{display:'grid',gridTemplateColumns:'repeat(7, minmax(0, 1fr))',gap:10,marginBottom:18}}>
         <div style={kpiBox}>
           <div style={{fontSize:10,letterSpacing:'0.08em',textTransform:'uppercase',color:'var(--text-secondary)',fontWeight:600}}>Total</div>
           <div style={{fontSize:22,fontWeight:600}}>{stats.total}</div>
@@ -1268,9 +1269,9 @@ const DocumentLibraryPage = ({ embedded } = {}) => {
       </div>
 
       {/* Filter row */}
-      <div style={{display:'flex',gap:10,flexWrap:'wrap',alignItems:'center',marginBottom:14}}>
+      <div className="docs-filter-row" style={{display:'flex',gap:10,flexWrap:'wrap',alignItems:'center',marginBottom:14}}>
         <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search filename / unit / asset…"
-          style={{flex:'1 1 280px',minWidth:240,padding:'9px 12px',fontSize:13,border:'1px solid var(--border-light)',borderRadius:6,outline:'none',background:'#fff'}}/>
+          style={{flex:'1 1 280px',minWidth:0,padding:'9px 12px',fontSize:13,border:'1px solid var(--border-light)',borderRadius:6,outline:'none',background:'#fff'}}/>
         <select value={filterKind} onChange={e => setFilterKind(e.target.value)}
           style={{padding:'9px 12px',fontSize:13,border:'1px solid var(--border-light)',borderRadius:6,background:'#fff',cursor:'pointer'}}>
           <option value="all">All types</option>
@@ -1316,7 +1317,7 @@ const DocumentLibraryPage = ({ embedded } = {}) => {
                     // hides every attachment on this unit.
                     if (ua.length === 0 && lowerSearch) return null;
                     return (
-                      <div key={u.id} style={{padding:'10px 18px 10px 38px',borderBottom:'1px solid #f4f4f4'}}>
+                      <div key={u.id} className="docs-unit-row" style={{padding:'10px 18px 10px 38px',borderBottom:'1px solid #f4f4f4'}}>
                         <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:10,marginBottom:8,flexWrap:'wrap'}}>
                           <div style={{display:'flex',alignItems:'baseline',gap:10}}>
                             <span style={{fontSize:13,fontWeight:500,color:'var(--text-dark)'}}>Unit {u.unit_number}</span>
@@ -1340,7 +1341,7 @@ const DocumentLibraryPage = ({ embedded } = {}) => {
                           </div>
                         </div>
                         {ua.length > 0 && (
-                          <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill, minmax(280px, 1fr))',gap:6}}>
+                          <div className="docs-attachment-grid" style={{display:'grid',gridTemplateColumns:'repeat(auto-fill, minmax(280px, 1fr))',gap:6}}>
                             {ua.map(a => (
                               <div key={a.id}
                                 style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8,padding:'8px 10px',background:'#fff',border:'1px solid var(--border-light)',borderRadius:6,transition:'background 0.12s'}}
@@ -1455,7 +1456,7 @@ const DownloadDataModal = ({ buildings, units, attachments, onClose, onSubmit })
   );
   return (
     <div className="modal-overlay" onClick={onClose}>
-      <div className="modal" onClick={e => e.stopPropagation()} style={{maxWidth:640,maxHeight:'88vh',display:'flex',flexDirection:'column'}}>
+      <div className="modal docs-download-modal" onClick={e => e.stopPropagation()} style={{maxWidth:640,maxHeight:'88vh',display:'flex',flexDirection:'column'}}>
         <div className="modal-header">
           <div>
             <div style={{fontSize:11,letterSpacing:'0.08em',textTransform:'uppercase',color:'var(--text-muted)',marginBottom:4}}>Documents</div>
@@ -1464,7 +1465,7 @@ const DownloadDataModal = ({ buildings, units, attachments, onClose, onSubmit })
           </div>
           <button className="modal-close" onClick={onClose}>×</button>
         </div>
-        <div style={{padding:'20px 28px 24px',overflowY:'auto',flex:1}}>
+        <div className="docs-download-body" style={{padding:'20px 28px 24px',overflowY:'auto',flex:1}}>
           {/* Format */}
           <div style={{marginBottom:20}}>
             <div style={{fontSize:10,letterSpacing:'0.08em',textTransform:'uppercase',color:'var(--text-secondary)',marginBottom:8,fontWeight:600}}>Format</div>
@@ -1507,7 +1508,7 @@ const DownloadDataModal = ({ buildings, units, attachments, onClose, onSubmit })
             </div>
           </div>
         </div>
-        <div style={{borderTop:'1px solid var(--border-light)',padding:'14px 28px',display:'flex',justifyContent:'space-between',alignItems:'center',gap:12,background:'var(--bg-surface)'}}>
+        <div className="docs-download-foot" style={{borderTop:'1px solid var(--border-light)',padding:'14px 28px',display:'flex',justifyContent:'space-between',alignItems:'center',gap:12,background:'var(--bg-surface)'}}>
           <div style={{fontSize:12,color:'var(--text-muted)'}}>
             <strong style={{color:'var(--text-dark)'}}>{matchCount}</strong> file{matchCount === 1 ? '' : 's'} match
           </div>
