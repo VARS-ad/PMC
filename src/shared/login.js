@@ -325,9 +325,43 @@ const LoginPage = ({ onLogin, syncStatus }) => {
           <p style={{fontSize:10,letterSpacing:'0.16em',textTransform:'uppercase',color:'var(--text-secondary)',margin:'8px 0 0',fontWeight:400,textAlign:'center'}}>{t('login.subtitle')}</p>
         </div>
 
-        {/* Demo: no tabs — Sign In is the default surface, switching to
-            Create account happens via the link under the form. Working
-            keeps the legacy three-way role selector. */}
+        {/* Demo: a soft sand banner above the form spelling out that
+            anyone can spin up a sandbox. Visible only in signin mode so
+            it doesn't shout at users already trying to create an account.
+            Click anywhere on the banner to flip to signup. */}
+        {IS_DEMO && mode === 'signin' && (
+          <div onClick={() => { setMode('signup'); safeSetError(null); }}
+            style={{
+              display:'flex',alignItems:'center',gap:14,
+              padding:'14px 16px',marginBottom:22,cursor:'pointer',
+              background:'linear-gradient(135deg, #f1e3d0 0%, #e9dbc4 100%)',
+              border:'1px solid #d8c7ac',borderRadius:10,
+              transition:'transform .15s, box-shadow .15s',
+            }}
+            onMouseEnter={e => { e.currentTarget.style.transform='translateY(-1px)'; e.currentTarget.style.boxShadow='0 4px 12px rgba(91,72,52,0.10)'; }}
+            onMouseLeave={e => { e.currentTarget.style.transform='none'; e.currentTarget.style.boxShadow='none'; }}>
+            <div style={{
+              width:34,height:34,borderRadius:'50%',background:'#3E4C59',color:'#fff',
+              display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,
+            }}>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+              </svg>
+            </div>
+            <div style={{flex:1,minWidth:0}}>
+              <div style={{fontSize:13,fontWeight:600,color:'#131F23',letterSpacing:'-0.005em',marginBottom:2}}>
+                Try VARS — create a free demo account
+              </div>
+              <div style={{fontSize:11,color:'#5a4a30',lineHeight:1.4}}>
+                Anyone can register. You get your own sandbox with sample buildings, residents, vendors and invoices.
+              </div>
+            </div>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#3E4C59" strokeWidth="2.5" style={{flexShrink:0}}>
+              <polyline points="9 18 15 12 9 6"/>
+            </svg>
+          </div>
+        )}
+
         {IS_DEMO ? null : (
           <>
             <div style={{fontSize:10,letterSpacing:'0.1em',textTransform:'uppercase',color:'var(--text-secondary)',marginBottom:10,fontWeight:500}}>{t('login.selectRole')}</div>
