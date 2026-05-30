@@ -12,7 +12,13 @@ const LoginPage = ({ onLogin, syncStatus }) => {
   // to the PMC overview. On the working deployment everything below
   // behaves the same as before.
   const IS_DEMO = (typeof VARS_TARGET !== 'undefined' && VARS_TARGET === 'demo');
-  const [mode, setMode] = useState('signin'); // 'signin' | 'signup'
+  // Demo lands users on a 'choose' surface (just two white pill buttons) so
+  // returning + new visitors split paths up-front. Working build skips the
+  // choose state entirely and lands on its legacy role selector + signin.
+  const [mode, setMode] = useState(() => {
+    try { if (typeof VARS_TARGET !== 'undefined' && VARS_TARGET === 'demo') return 'choose'; } catch (_) {}
+    return 'signin';
+  }); // 'choose' | 'signin' | 'signup'
   const [selectedRole, setSelectedRole] = useState(IS_DEMO ? 'manager' : 'resident');
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
@@ -316,36 +322,53 @@ const LoginPage = ({ onLogin, syncStatus }) => {
       <div className="login-card" style={{maxWidth:460,padding:'40px 44px',border:'1px solid var(--border-light)',boxShadow:'0 8px 40px rgba(146,137,137,0.18)',borderRadius:14,
         animation: splashStage === 'ready' ? 'vars-login-in .55s cubic-bezier(.2,.7,.2,1) both' : 'none',
         visibility: splashStage === 'ready' ? 'visible' : 'hidden'}}>
-        {/* Header — VARS brand mark stacked vertically (icon on top of
-            wordmark). Side-by-side lockup kept reading slightly off-axis
-            because the door icon's visual weight pulled the row left of
-            true centre. Stacked matches the splash screen and is a clean
-            centre regardless of card width. */}
+        {/* Header — VARS brand mark side-by-side (icon + wordmark in a row).
+            Wordmark is the visual anchor; the icon sits to its left. */}
         <div style={{display:'flex',flexDirection:'column',alignItems:'center',marginBottom:32}}>
-          <svg width="50" height="50" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg" aria-label="VARS" style={{display:'block'}}>
-            <rect width="100" height="100" rx="4" fill="#3E4C59"/>
-            <path d="M33.3 16.7 L50 16.7 L58.1 25.2 L66.7 33.3 L66.7 83.3 L50 83.3 L33.3 66.7 Z" fill="#ffffff"/>
-          </svg>
-          <h1 style={{fontSize:36,fontWeight:500,letterSpacing:'-0.01em',margin:'12px 0 0',color:'#131F23',lineHeight:1}}>VARS</h1>
+          <div style={{display:'flex',alignItems:'center',gap:12}}>
+            <svg width="42" height="42" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg" aria-label="VARS" style={{display:'block',flexShrink:0}}>
+              <rect width="100" height="100" rx="4" fill="#3E4C59"/>
+              <path d="M33.3 16.7 L50 16.7 L58.1 25.2 L66.7 33.3 L66.7 83.3 L50 83.3 L33.3 66.7 Z" fill="#ffffff"/>
+            </svg>
+            <h1 style={{fontSize:36,fontWeight:500,letterSpacing:'-0.01em',margin:0,color:'#131F23',lineHeight:1}}>VARS</h1>
+          </div>
           <p style={{fontSize:10,letterSpacing:'0.16em',textTransform:'uppercase',color:'var(--text-secondary)',margin:'14px 0 0',fontWeight:400,textAlign:'center'}}>{t('login.subtitle')}</p>
         </div>
 
-        {/* Demo: parallel CTAs — "Create a free demo account" (warm sand,
-            new visitors) above and the Sign In form below (slate, returning
-            users). Two different colour treatments so the choice is
-            unmistakable. */}
-        {IS_DEMO && mode === 'signin' && (
-          <div onClick={() => { setMode('signup'); safeSetError(null); }}
-            style={{
-              display:'flex',alignItems:'center',justifyContent:'center',gap:8,
-              padding:'13px 14px',marginBottom:22,cursor:'pointer',
-              background:'#DBC5AE',border:'1px solid #c8af90',borderRadius:8,
-              transition:'background .15s, border-color .15s, transform .15s',
-            }}
-            onMouseEnter={e => { e.currentTarget.style.background='#cfb89d'; e.currentTarget.style.borderColor='#b29575'; }}
-            onMouseLeave={e => { e.currentTarget.style.background='#DBC5AE'; e.currentTarget.style.borderColor='#c8af90'; }}>
-            <span style={{fontSize:13,fontWeight:600,color:'#3E4C59',letterSpacing:'-0.005em'}}>
-              Create a free demo account
+        {/* Demo landing — two white-box choices. Pick one to reveal that
+            path's form. Both buttons use the exact same style; the user
+            picks based on intent, not visual hierarchy. */}
+        {IS_DEMO && mode === 'choose' && (
+          <div style={{display:'flex',flexDirection:'column',gap:10}}>
+            {[
+              {id:'signup', label:'Create a free demo account'},
+              {id:'signin', label:'Sign in'},
+            ].map(opt => (
+              <div key={opt.id}
+                onClick={() => { setMode(opt.id); safeSetError(null); }}
+                style={{
+                  display:'flex',alignItems:'center',justifyContent:'center',gap:8,
+                  padding:'14px 16px',cursor:'pointer',
+                  background:'#fff',border:'1px solid var(--border-light)',borderRadius:8,
+                  transition:'border-color .15s, background .15s',
+                }}
+                onMouseEnter={e => { e.currentTarget.style.borderColor='var(--bg-warm-dark)'; e.currentTarget.style.background='var(--bg-surface)'; }}
+                onMouseLeave={e => { e.currentTarget.style.borderColor='var(--border-light)'; e.currentTarget.style.background='#fff'; }}>
+                <span style={{fontSize:14,fontWeight:500,color:'var(--text-dark)',letterSpacing:'-0.005em'}}>
+                  {opt.label}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Back to choose link — shown on demo when in the signin or signup
+            form so the user can flip path. */}
+        {IS_DEMO && mode !== 'choose' && (
+          <div style={{marginBottom:18,fontSize:12}}>
+            <span onClick={() => { setMode('choose'); safeSetError(null); }}
+              style={{color:'var(--text-muted)',cursor:'pointer'}}>
+              ← Back
             </span>
           </div>
         )}
@@ -386,7 +409,10 @@ const LoginPage = ({ onLogin, syncStatus }) => {
           </>
         )}
 
-        {/* Form */}
+        {/* Form — hidden on demo while the user is still on the choose
+            surface. Once they pick "Create a free demo account" or
+            "Sign in" the matching form renders. */}
+        {!(IS_DEMO && mode === 'choose') && (
         <form onSubmit={IS_DEMO && mode === 'signup' ? handleSignup : handleSubmit}>
           {IS_DEMO && mode === 'signup' && (
             <div className="form-group">
@@ -434,6 +460,7 @@ const LoginPage = ({ onLogin, syncStatus }) => {
             </div>
           )}
         </form>
+        )}
 
         {/* Footer — kept on the working build. The demo build drops it
             because the login surface is already clean and the sync state
