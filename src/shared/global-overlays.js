@@ -33,9 +33,12 @@ const __VARS_IS_DEMO = (typeof VARS_TARGET !== 'undefined' && VARS_TARGET === 'd
 })();
 
 // ---- WhatsApp "Need help?" floating button ---------------------------------
-// Placeholder number — replace with the real support WhatsApp once it's set
-// up. wa.me accepts plain digits (country code + number, no '+').
-const VARS_HELP_WHATSAPP_NUMBER = '971501234567';
+// Real support WhatsApp. wa.me accepts plain digits (country code + number,
+// no '+'). Update here if the support line ever changes.
+const VARS_HELP_WHATSAPP_NUMBER = '971504967084';
+// Official WhatsApp brand greens — rest #25D366, hover/active #128C7E.
+const WA_GREEN       = '#25D366';
+const WA_GREEN_HOVER = '#128C7E';
 
 const WhatsAppHelpButton = () => {
   const [hover, setHover] = React.useState(false);
@@ -85,14 +88,14 @@ const WhatsAppHelpButton = () => {
           height: 56,
           borderRadius: '50%',
           border: 'none',
-          background: 'var(--accent-warm)',
+          background: hover ? WA_GREEN_HOVER : WA_GREEN,
           color: '#fff',
           cursor: 'pointer',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          boxShadow: '0 8px 22px rgba(0,0,0,0.22)',
-          transition: 'transform .15s ease, box-shadow .15s ease',
+          boxShadow: hover ? '0 10px 26px rgba(37,211,102,0.45)' : '0 8px 22px rgba(0,0,0,0.22)',
+          transition: 'transform .15s ease, box-shadow .15s ease, background .15s ease',
           transform: hover ? 'translateY(-2px)' : 'translateY(0)'
         }}
       >
