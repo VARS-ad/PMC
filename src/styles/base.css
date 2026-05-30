@@ -349,6 +349,11 @@ html[dir="rtl"] div[style*="position:absolute"][style*="left:0"] { left:auto !im
 /* Mobile sidebar overlay */
 .sidebar-overlay{display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);z-index:99}
 
+/* SR drill modal: by default show the long View-in-X label on desktop,
+   hide the short one. The mobile media query below flips this. */
+.sr-drill-view-long{display:inline}
+.sr-drill-view-short{display:none}
+
 /* Hamburger */
 .hamburger{display:none;width:36px;height:36px;border:none;background:none;cursor:pointer;padding:6px;flex-shrink:0}
 .hamburger span{display:block;width:20px;height:2px;background:#4d4d4f;margin:4px auto;border-radius:1px}
@@ -443,6 +448,16 @@ html[dir="rtl"] div[style*="position:absolute"][style*="left:0"] { left:auto !im
         scroll affordance. */
   .pmc-asset-tabs-row{display:none!important}
   .pmc-asset-tabs-mob{display:block!important}
+  /* 6. Service-request drill modal: hide the Created date-range filter
+        AND the Created column on the table — they don't pay rent on a
+        375px viewport. View-button gets a short label too so it doesn't
+        wrap the building name onto two lines. */
+  .sr-drill-filter-created{display:none!important}
+  .sr-drill-col-created{display:none!important}
+  table .sr-drill-col-created + th, /* fallback if browsers don't match nth-child */
+  table tr td:nth-last-child(1){display:table-cell}
+  .sr-drill-view-long{display:none}
+  .sr-drill-view-short{display:inline}
   /* Several modals (Service Requests detail/create, all four Vendors
      modals) set inline maxWidth/maxHeight on the .modal node, which
      beats the class rules above. Re-assert the bottom-sheet sizing

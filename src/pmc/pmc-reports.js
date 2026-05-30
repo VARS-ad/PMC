@@ -935,10 +935,13 @@ const FinancialReports = ({ stats, fmt, fmtShort }) => (
       <ChartCanvas height={240} config={{
         type: 'bar',
         data: { labels: stats.futureLabels, datasets: [{ label: 'Projected AED', data: stats.futureRevenue, backgroundColor: '#a07d3c' }] },
-        options: { responsive:true, maintainAspectRatio:false, layout:{padding:{top:24}}, plugins:{ legend:{display:false}, tooltip:{ callbacks:{ label:(c)=>fmt(c.parsed.y) } } }, scales:{ x:{grid:{display:false}}, y:{display:false,beginAtZero:true} } },
-        plugins: [_barDataLabelsPlugin(_fmtBarAed)],
+        // No on-bar data labels — the 12 monthly values intersect badly
+        // on phone widths. Hover/tap the bar to see the exact AED amount
+        // (the tooltip formatter already shows the full number); the
+        // headline "Projected AED ..." total sits above the chart.
+        options: { responsive:true, maintainAspectRatio:false, layout:{padding:{top:8}}, plugins:{ legend:{display:false}, tooltip:{ callbacks:{ label:(c)=>fmt(c.parsed.y) } } }, scales:{ x:{grid:{display:false}}, y:{display:false,beginAtZero:true} } },
       }}/>
-      <div style={{fontSize:11,color:'var(--text-muted)',marginTop:8}}>Based on active leases' monthly rent · stops counting once lease_end has passed.</div>
+      <div style={{fontSize:11,color:'var(--text-muted)',marginTop:8}}>Based on active leases' monthly rent · stops counting once lease_end has passed. Tap a bar to see the exact figure.</div>
     </div>
   </div>
 );
