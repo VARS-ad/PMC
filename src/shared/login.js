@@ -207,11 +207,24 @@ const LoginPage = ({ onLogin, syncStatus }) => {
         const { data, error: authErr } = await supabaseClient.auth.signInWithPassword({ email, password });
         if (!authErr && data && data.session) {
           const u = data.session.user;
+          // Role resolution. Demo signups never get app_metadata.role
+          // populated server-side, so previously they fell through to the
+          // "Wrong email or password" branch even though Supabase had
+          // signed them in. On IS_DEMO we always treat the signed-in user
+          // as a PMC manager (it's their own portfolio). On the working
+          // build we still trust app_metadata.role but fall back to
+          // 'manager' for unknown values so login never silently fails.
           const authRole = u && u.app_metadata && u.app_metadata.role;
-          const mapped = authRole === 'pmc' ? 'manager' : authRole;
-          // Hydrate data.currentUser from the real Supabase session so the
-          // topbar dropdown and My Profile page show the actual signed-in
-          // person — not the legacy "Hassan Al-PM" seed in store.js.
+          let mapped;
+          if (IS_DEMO) {
+            mapped = 'manager';
+          } else if (authRole === 'pmc') {
+            mapped = 'manager';
+          } else if (authRole === 'security' || authRole === 'resident' || authRole === 'manager') {
+            mapped = authRole;
+          } else {
+            mapped = 'manager';
+          }
           if (mapped && setData) {
             let fullName = (u.user_metadata && (u.user_metadata.full_name || u.user_metadata.name)) || '';
             let phone    = u.phone || '';
