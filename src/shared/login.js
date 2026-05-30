@@ -30,26 +30,32 @@ const _detectAuthCallback = () => {
   if (_varsAuthCallback !== undefined) return _varsAuthCallback;
   try {
     if (typeof window === 'undefined') { _varsAuthCallback = null; return null; }
-    // 1. Early-capture event from supabase-client.js wins if present.
-    //    PKCE recovery has no usable URL hint (only ?code=...) so we rely
-    //    on the PASSWORD_RECOVERY event firing into this global.
-    if (window._varspmAuthCallback) {
-      _varsAuthCallback = window._varspmAuthCallback;
-      return _varsAuthCallback;
-    }
-    // 2. Otherwise look at the URL. type=recovery in hash means implicit-
-    //    flow reset; type=signup / type=invite means email confirm.
-    //    access_token= alone (no explicit type) is implicit-flow confirm.
-    //    ?code= alone is PKCE — kind 'pending' until the event tells us
-    //    which flavour it is.
     const hash  = window.location.hash  || '';
     const query = window.location.search || '';
     const combined = hash + query;
     let kind = null;
-    if (/[?&#]type=recovery/.test(combined))            kind = 'recovery';
+    // 1. Our own breadcrumb flags. handleForgotPassword sets ?recovery=1
+    //    on the redirectTo URL; handleSignup sets ?confirmed=1 on
+    //    emailRedirectTo. Supabase preserves arbitrary query params
+    //    across the verify redirect, so these survive into our load.
+    //    This is the primary signal — works for both PKCE and implicit.
+    if (/[?&]recovery=1/.test(query))                   kind = 'recovery';
+    else if (/[?&]confirmed=1/.test(query))             kind = 'confirm';
+    // 2. Implicit-flow fallback (older Supabase or non-default config).
+    else if (/[?&#]type=recovery/.test(combined))       kind = 'recovery';
     else if (/[?&#]type=(signup|invite)/.test(combined)) kind = 'confirm';
     else if (/access_token=/.test(hash))                 kind = 'confirm';
+    // 3. Bare PKCE code with no breadcrumb — old links from before this
+    //    fix. Park on signin form and wait for the event listener to
+    //    upgrade to 'reset' if PASSWORD_RECOVERY fires.
     else if (/[?&]code=/.test(query))                    kind = 'pending';
+    // 4. Last resort: an early-captured event flag from supabase-client.js
+    //    (for old links predating this fix).
+    else if (window._varspmAuthCallback) {
+      _varsAuthCallback = window._varspmAuthCallback;
+      return _varsAuthCallback;
+    }
+    console.log('[auth] _detectAuthCallback: kind=', kind, ' query=', query, ' hash=', hash);
     if (!kind) { _varsAuthCallback = null; return null; }
     let email = '';
     try {
@@ -58,7 +64,8 @@ const _detectAuthCallback = () => {
     } catch (_) {}
     _varsAuthCallback = { kind, email };
     return _varsAuthCallback;
-  } catch (_) {
+  } catch (e) {
+    console.log('[auth] _detectAuthCallback error:', e.message);
     _varsAuthCallback = null;
     return null;
   }
@@ -277,10 +284,17 @@ const LoginPage = ({ onLogin, syncStatus }) => {
       // on "Working…". Supabase normally responds in 1-3s; anything
       // longer almost always means SMTP is misconfigured and the
       // confirmation email is timing out somewhere.
+      // emailRedirectTo carries our own ?confirmed=1 breadcrumb so the
+      // landing page can recognise it as a confirm-signup callback
+      // regardless of PKCE / implicit flow.
+      const _origin = (typeof window !== 'undefined' && window.location) ? window.location.origin : '';
       const signupCall = supabaseClient.auth.signUp({
         email,
         password,
-        options: { data: { full_name: (fullName || '').trim() || null } },
+        options: {
+          data: { full_name: (fullName || '').trim() || null },
+          emailRedirectTo: _origin + '/?confirmed=1',
+        },
       });
       const timeoutCall = new Promise((_, rej) =>
         setTimeout(() => rej(new Error('Sign-up is taking longer than expected. Email delivery may be misconfigured — try again, or contact support if this keeps happening.')), 20000));
@@ -323,8 +337,12 @@ const LoginPage = ({ onLogin, syncStatus }) => {
     if (!supabaseClient) { safeSetError('Password reset is not available right now.'); return; }
     safeSetError(null);
     try {
+      // redirectTo carries our own ?recovery=1 breadcrumb so the landing
+      // page can recognise it as a password-reset callback regardless of
+      // PKCE / implicit flow.
+      const _origin = (typeof window !== 'undefined' && window.location) ? window.location.origin : '';
       const { error: resetErr } = await supabaseClient.auth.resetPasswordForEmail(email, {
-        redirectTo: typeof window !== 'undefined' ? window.location.origin : undefined,
+        redirectTo: _origin + '/?recovery=1',
       });
       if (resetErr) { safeSetError(resetErr); return; }
       flashNotice('Password reset email sent to ' + email + '.');
