@@ -24,36 +24,38 @@
 //                                  whose submit calls updateUser(password).
 //   null                         — normal page load, splash + choose surface.
 //
-// Cached so re-renders during the same load don't double-strip the URL.
+// Cached so re-renders during the same load don't re-evaluate.
 let _varsAuthCallback;
 const _detectAuthCallback = () => {
   if (_varsAuthCallback !== undefined) return _varsAuthCallback;
   try {
     if (typeof window === 'undefined') { _varsAuthCallback = null; return null; }
+    // 1. Early-capture event from supabase-client.js wins if present.
+    //    PKCE recovery has no usable URL hint (only ?code=...) so we rely
+    //    on the PASSWORD_RECOVERY event firing into this global.
+    if (window._varspmAuthCallback) {
+      _varsAuthCallback = window._varspmAuthCallback;
+      return _varsAuthCallback;
+    }
+    // 2. Otherwise look at the URL. type=recovery in hash means implicit-
+    //    flow reset; type=signup / type=invite means email confirm.
+    //    access_token= alone (no explicit type) is implicit-flow confirm.
+    //    ?code= alone is PKCE — kind 'pending' until the event tells us
+    //    which flavour it is.
     const hash  = window.location.hash  || '';
     const query = window.location.search || '';
     const combined = hash + query;
     let kind = null;
-    if (/[?&#]type=recovery/.test(combined)) {
-      kind = 'recovery';
-    } else if (/[?&#]type=signup/.test(combined) || /[?&#]type=invite/.test(combined)) {
-      kind = 'confirm';
-    } else if (/access_token=/.test(hash)) {
-      // Hash-flow without an explicit type. Assume confirm — recovery would
-      // have explicitly carried type=recovery.
-      kind = 'confirm';
-    }
+    if (/[?&#]type=recovery/.test(combined))            kind = 'recovery';
+    else if (/[?&#]type=(signup|invite)/.test(combined)) kind = 'confirm';
+    else if (/access_token=/.test(hash))                 kind = 'confirm';
+    else if (/[?&]code=/.test(query))                    kind = 'pending';
     if (!kind) { _varsAuthCallback = null; return null; }
-    // Pull the email we stashed during signup so we can pre-fill the form.
-    // One-shot: clear it so a later refresh doesn't carry stale state.
     let email = '';
     try {
       email = sessionStorage.getItem('varspm_pending_confirm_email') || '';
       sessionStorage.removeItem('varspm_pending_confirm_email');
     } catch (_) {}
-    // DON'T strip the URL hash here — Supabase JS needs the access_token to
-    // create the session. It auto-strips after detection. We just record
-    // what kind of callback this was.
     _varsAuthCallback = { kind, email };
     return _varsAuthCallback;
   } catch (_) {
@@ -82,6 +84,10 @@ const LoginPage = ({ onLogin, syncStatus }) => {
   const [mode, setMode] = useState(() => {
     if (_authCallback && _authCallback.kind === 'recovery') return 'reset';
     if (_authCallback && _authCallback.kind === 'confirm')  return 'signin';
+    // 'pending' = PKCE callback whose flavour isn't known yet. Park on the
+    // signin form (instead of the choose surface) and let the event listener
+    // upgrade to 'reset' if Supabase fires PASSWORD_RECOVERY.
+    if (_authCallback && _authCallback.kind === 'pending') return 'signin';
     try { if (typeof VARS_TARGET !== 'undefined' && VARS_TARGET === 'demo') return 'choose'; } catch (_) {}
     return 'signin';
   }); // 'choose' | 'signin' | 'signup' | 'reset'
@@ -130,8 +136,35 @@ const LoginPage = ({ onLogin, syncStatus }) => {
       flashNotice('Email confirmed. Sign in to continue.');
     } else if (_authCallback.kind === 'recovery') {
       flashNotice('Reset link verified. Set a new password to sign in.');
+    } else if (_authCallback.kind === 'pending') {
+      flashNotice('Verifying your link...');
     }
   // _authCallback is captured once at mount; safe to leave out of deps.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Live auth-callback listener — handles the case where the URL was
+  // ambiguous (PKCE: just ?code=...) at mount time and the event hadn't
+  // fired yet. supabase-client.js dispatches a custom event when
+  // PASSWORD_RECOVERY / SIGNED_IN fires from URL detection; we promote
+  // the mode here once it does.
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const handler = (e) => {
+      const detail = (e && e.detail) || {};
+      if (detail.kind === 'recovery') {
+        setMode('reset');
+        setSplashStage('ready');
+        flashNotice('Reset link verified. Set a new password to sign in.');
+      } else if (detail.kind === 'confirm') {
+        setMode('signin');
+        setSplashStage('ready');
+        if (detail.email) setEmail(detail.email);
+        flashNotice('Email confirmed. Sign in to continue.');
+      }
+    };
+    window.addEventListener('varspm:auth-callback', handler);
+    return () => window.removeEventListener('varspm:auth-callback', handler);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 

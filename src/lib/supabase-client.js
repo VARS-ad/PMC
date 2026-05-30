@@ -39,10 +39,38 @@ try {
     // Supabase session. That's what lets you sign in as PMC in tab 1, Resident in tab 2,
     // Security in tab 3 simultaneously without them overwriting each other.
     supabaseClient = _createClient(SUPABASE_URL, SUPABASE_KEY, {
-      auth: { storage: window.sessionStorage, persistSession: true, autoRefreshToken: true }
+      auth: { storage: window.sessionStorage, persistSession: true, autoRefreshToken: true, detectSessionInUrl: true }
     });
     supabaseReady = true;
     console.log('Supabase client initialized OK');
+
+    // Early auth-event capture. Supabase JS processes the URL fragment /
+    // PKCE code asynchronously after createClient returns. By the time the
+    // LoginPage component mounts and reads its initial state, the events
+    // (PASSWORD_RECOVERY for reset links, SIGNED_IN for confirm links) may
+    // have already fired. Stash whichever event fires first in a module-
+    // level flag so LoginPage can recover it synchronously on mount.
+    try {
+      window._varspmAuthCallback = null;
+      supabaseClient.auth.onAuthStateChange((event, session) => {
+        if (event === 'PASSWORD_RECOVERY') {
+          window._varspmAuthCallback = { kind: 'recovery' };
+          window.dispatchEvent(new CustomEvent('varspm:auth-callback', { detail: { kind: 'recovery' } }));
+        } else if (event === 'SIGNED_IN' && !window._varspmAuthCallback) {
+          // Only treat SIGNED_IN as a confirm callback if the URL still
+          // carries a code= or access_token= signal (i.e. we just landed
+          // from an email link). Otherwise this fires on every normal
+          // sign-in.
+          const u = (typeof window !== 'undefined' && window.location)
+            ? (window.location.hash + window.location.search) : '';
+          if (/access_token=/.test(u) || /[?&]code=/.test(u)) {
+            const email = (session && session.user && session.user.email) || '';
+            window._varspmAuthCallback = { kind: 'confirm', email };
+            window.dispatchEvent(new CustomEvent('varspm:auth-callback', { detail: { kind: 'confirm', email } }));
+          }
+        }
+      });
+    } catch (_) {}
   } else {
     console.log('createClient not found. supabase type:', typeof _sb, 'keys:', _sb ? Object.keys(_sb) : 'N/A');
   }
