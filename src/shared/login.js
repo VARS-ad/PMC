@@ -20,6 +20,17 @@ const LoginPage = ({ onLogin, syncStatus }) => {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
+  // Success-style banner (e.g. after signup). Rendered as a green toast at
+  // the top of the page so it doesn't read like a form error. Auto-dismiss
+  // after 7s; the dismissTimer ref lets us cancel it on unmount.
+  const [notice, setNotice] = useState('');
+  const noticeTimer = useRef(null);
+  const flashNotice = (text) => {
+    if (noticeTimer.current) clearTimeout(noticeTimer.current);
+    setNotice(text);
+    noticeTimer.current = setTimeout(() => setNotice(''), 7000);
+  };
+  useEffect(() => () => { if (noticeTimer.current) clearTimeout(noticeTimer.current); }, []);
   // Splash sequence: 'splash' (full-screen intro) → 'transition' (fade out
   // splash + fade in login card) → 'ready' (login card only).
   // Skip the whole sequence when we just came back from a logout — the
@@ -148,9 +159,13 @@ const LoginPage = ({ onLogin, syncStatus }) => {
         onLogin('manager');
         return;
       }
-      // No session means email confirmation is still on. Tell the user.
-      setError('Account created. Check your email to confirm, then sign in.');
+      // No session means email confirmation is still on. Tell the user
+      // via the green success toast (not the red error line) and flip
+      // back to the Sign In tab.
+      flashNotice('Account created. Check your email to confirm, then sign in.');
       setMode('signin');
+      setPassword('');
+      setConfirmPassword('');
     } catch (err) {
       setError(err.message || 'Sign-up failed.');
     } finally {
@@ -187,11 +202,33 @@ const LoginPage = ({ onLogin, syncStatus }) => {
     @keyframes vars-splash-tag-in  { 0% { opacity: 0; transform: translateY(6px); } 100% { opacity: 1; transform: translateY(0); } }
     @keyframes vars-splash-dot     { 0%, 100% { opacity: 0.25; transform: scale(0.8); } 50% { opacity: 1; transform: scale(1); } }
     @keyframes vars-login-in       { 0% { opacity: 0; transform: translateY(8px); } 100% { opacity: 1; transform: translateY(0); } }
+    @keyframes vars-toast-in       { 0% { opacity: 0; transform: translate(-50%, -10px); } 100% { opacity: 1; transform: translate(-50%, 0); } }
   `;
 
   return (
     <div className="login-page" style={{position:'relative'}}>
       <style>{splashCss}</style>
+
+      {/* Green success toast — rendered above everything (zIndex 1000)
+          so the splash doesn't sit on top of it. Auto-dismisses after
+          7s via the noticeTimer ref in state. */}
+      {notice && splashStage === 'ready' && (
+        <div style={{position:'fixed',top:24,left:'50%',transform:'translateX(-50%)',zIndex:1000,
+          display:'flex',alignItems:'center',gap:10,
+          padding:'12px 18px 12px 14px',
+          background:'#5a6b4f',color:'#fff',
+          borderRadius:10,boxShadow:'0 8px 24px rgba(19,31,35,0.18)',
+          fontSize:13,fontWeight:500,letterSpacing:'-0.005em',
+          maxWidth:'calc(100vw - 32px)',
+          animation:'vars-toast-in .35s cubic-bezier(.2,.7,.2,1) both'}}>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" style={{flexShrink:0}}>
+            <polyline points="20 6 9 17 4 12"/>
+          </svg>
+          <span>{notice}</span>
+          <span onClick={() => setNotice('')}
+            style={{marginLeft:6,cursor:'pointer',opacity:0.7,padding:'0 2px',fontSize:16,lineHeight:1}}>×</span>
+        </div>
+      )}
 
       {/* Brand splash — full-screen, 3.0s static then 0.7s fade out.
           Quiet warm-light palette to match the rest of the app — the
