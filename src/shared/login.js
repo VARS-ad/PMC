@@ -520,7 +520,12 @@ const LoginPage = ({ onLogin, syncStatus }) => {
             {/* line-height matches the icon height so the wordmark's optical
                 centre aligns with the icon's; the previous line-height:1 put
                 the text baseline a few pixels above mid. */}
-            <h1 style={{fontSize:36,fontWeight:500,letterSpacing:'-0.01em',margin:0,color:'#131F23',lineHeight:'42px',height:42,display:'flex',alignItems:'center'}}>VARS</h1>
+            {/* paddingTop nudges the cap-height optical centre down so it
+                lines up with the icon's geometric centre. fontSize:36 with
+                line-height:1 puts the glyph in the upper 70% of the box
+                (caps top, no descenders); padding-top:5 compensates so
+                both phone and desktop read as truly centred. */}
+            <h1 style={{fontSize:36,fontWeight:500,letterSpacing:'-0.01em',margin:0,color:'#131F23',lineHeight:1,paddingTop:5}}>VARS</h1>
           </div>
           <p style={{fontSize:10,letterSpacing:'0.16em',textTransform:'uppercase',color:'var(--text-secondary)',margin:'14px 0 0',fontWeight:400,textAlign:'center'}}>{t('login.subtitle')}</p>
         </div>

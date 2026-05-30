@@ -136,10 +136,11 @@ const BuildingDrillModal = ({ building, view, onClose, setPage }) => {
               {total != null && ' · ' + fmt(total)}
             </div>
           </div>
-          <div className="btn-group">
+          <div className="btn-group sr-drill-actions">
             {setPage && (
-              <button className="btn btn-sm" onClick={() => { onClose(); setPage(v.page); }}>
-                View in {v.page === 'payment' ? 'Service Charges' : v.page === 'service' ? 'Service Requests' : 'Profile Creation'} →
+              <button className="btn btn-sm sr-drill-view-btn" onClick={() => { onClose(); setPage(v.page); }}>
+                <span className="sr-drill-view-long">View in {v.page === 'payment' ? 'Service Charges' : v.page === 'service' ? 'Service Requests' : 'Profile Creation'} →</span>
+                <span className="sr-drill-view-short">View all →</span>
               </button>
             )}
             <button className="modal-close" onClick={onClose}>×</button>
@@ -175,7 +176,7 @@ const BuildingDrillModal = ({ building, view, onClose, setPage }) => {
                   <option value="In Progress">In Progress</option>
                 </select>
               </div>
-              <div style={{display:'flex', alignItems:'center', gap:6}}>
+              <div className="sr-drill-filter-created" style={{display:'flex', alignItems:'center', gap:6}}>
                 <span style={{fontSize:11, color:'var(--text-muted)', letterSpacing:'0.04em', textTransform:'uppercase'}}>Created</span>
                 <input type="date" value={srDateStart} onChange={e => setSrDateStart(e.target.value)} style={{padding:'6px 8px', fontSize:12, border:'1px solid var(--border-light)', borderRadius:6, background:'#fff'}}/>
                 <span style={{fontSize:11, color:'var(--text-muted)'}}>→</span>
@@ -200,7 +201,7 @@ const BuildingDrillModal = ({ building, view, onClose, setPage }) => {
                     <th style={{width:'8%'}}>Unit</th>
                     <th style={{width:'10%', cursor:'pointer', userSelect:'none'}} onClick={() => toggleSrSort('priority')}>Priority<SrSortArrow col="priority"/></th>
                     <th style={{width:'10%', cursor:'pointer', userSelect:'none'}} onClick={() => toggleSrSort('status')}>Status<SrSortArrow col="status"/></th>
-                    <th style={{width:'10%', cursor:'pointer', userSelect:'none'}} onClick={() => toggleSrSort('created_at')}>Created<SrSortArrow col="created_at"/></th>
+                    <th className="sr-drill-col-created" style={{width:'10%', cursor:'pointer', userSelect:'none'}} onClick={() => toggleSrSort('created_at')}>Created<SrSortArrow col="created_at"/></th>
                   </tr>
                 </thead>
                 <tbody>
