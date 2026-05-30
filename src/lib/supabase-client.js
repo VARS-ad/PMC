@@ -14,6 +14,9 @@ const DEVICE_ID = (function() {
 // project so opening index.html directly still works.
 const SUPABASE_URL = (() => { const v = '@@SUPABASE_URL@@'; return v.startsWith('@@') ? 'https://khhguxuxvkxvycndkron.supabase.co' : v; })();
 const SUPABASE_KEY = (() => { const v = '@@SUPABASE_KEY@@'; return v.startsWith('@@') ? 'sb_publishable_JFWXeWDyB2_-po46Qyu6rA_HH7Uueyj' : v; })();
+// Which deployment is this — "working" or "demo". Demo unlocks public
+// signup + the seed-clone flow; working keeps the bootstrap-only login.
+const VARS_TARGET = (() => { const v = '@@VARS_TARGET@@'; return v.startsWith('@@') ? 'working' : v; })();
 
 let supabaseClient = null;
 let supabaseReady = false;

@@ -7,9 +7,18 @@
 // login page opens.
 const LoginPage = ({ onLogin, syncStatus }) => {
   const { t, setData } = useApp();
-  const [selectedRole, setSelectedRole] = useState('resident');
+  // On the demo deployment every user is their own PMC. We hide the
+  // role selector, expose a Sign Up tab, and after sign-up auto-route
+  // to the PMC overview. On the working deployment everything below
+  // behaves the same as before.
+  const IS_DEMO = (typeof VARS_TARGET !== 'undefined' && VARS_TARGET === 'demo');
+  const [mode, setMode] = useState('signin'); // 'signin' | 'signup'
+  const [selectedRole, setSelectedRole] = useState(IS_DEMO ? 'manager' : 'resident');
+  const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
   // Splash sequence: 'splash' (full-screen intro) → 'transition' (fade out
   // splash + fade in login card) → 'ready' (login card only).
@@ -94,12 +103,58 @@ const LoginPage = ({ onLogin, syncStatus }) => {
       }
     }
 
-    // Demo-credentials fallback (legacy role-pick flow)
-    const cred = credentials[selectedRole];
-    if (email === cred.email && password === cred.password) {
-      onLogin(selectedRole);
-    } else {
-      setError(t('login.invalid'));
+    // Demo-credentials fallback (legacy role-pick flow). Skip on the
+    // demo deployment — there are no fake roles to fall back to.
+    if (!IS_DEMO) {
+      const cred = credentials[selectedRole];
+      if (email === cred.email && password === cred.password) {
+        onLogin(selectedRole);
+        return;
+      }
+    }
+    setError(IS_DEMO ? 'Wrong email or password.' : t('login.invalid'));
+  };
+
+  // Sign-up handler used only on the demo deployment. Creates a Supabase
+  // Auth user; the on_demo_user_signup trigger seeds their portfolio
+  // server-side. If Supabase returns a session immediately (email
+  // confirmation disabled — which is the demo's intended setting) we
+  // route straight to the PMC overview; otherwise we ask the user to
+  // sign in once their account is confirmed.
+  const handleSignup = async (e) => {
+    e.preventDefault();
+    setError('');
+    if (!email || !password) { setError('Email and password are required.'); return; }
+    if (password.length < 6)       { setError('Password must be at least 6 characters.'); return; }
+    if (password !== confirmPassword) { setError('Passwords do not match.'); return; }
+    if (!supabaseClient)           { setError('Sign-up is not available right now.'); return; }
+    setSubmitting(true);
+    try {
+      const { data, error: signErr } = await supabaseClient.auth.signUp({
+        email,
+        password,
+        options: { data: { full_name: (fullName || '').trim() || null } },
+      });
+      if (signErr) { setError(signErr.message || 'Sign-up failed.'); setSubmitting(false); return; }
+      if (data && data.session) {
+        // Already signed in — set currentUser and route to PMC overview.
+        const u = data.session.user;
+        const displayName = (fullName || '').trim()
+          || (u.email || '').split('@')[0].replace(/[._-]+/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+        if (setData) setData(prev => ({
+          ...prev,
+          currentUser: { ...prev.currentUser, name: displayName, email: u.email, phone: '', role: 'Property Manager' },
+        }));
+        onLogin('manager');
+        return;
+      }
+      // No session means email confirmation is still on. Tell the user.
+      setError('Account created. Check your email to confirm, then sign in.');
+      setMode('signin');
+    } catch (err) {
+      setError(err.message || 'Sign-up failed.');
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -203,53 +258,92 @@ const LoginPage = ({ onLogin, syncStatus }) => {
           <p style={{fontSize:10,letterSpacing:'0.16em',textTransform:'uppercase',color:'var(--text-secondary)',margin:'8px 0 0',fontWeight:400}}>{t('login.subtitle')}</p>
         </div>
 
-        {/* Role Selection */}
-        <div style={{fontSize:10,letterSpacing:'0.1em',textTransform:'uppercase',color:'var(--text-secondary)',marginBottom:10,fontWeight:500}}>{t('login.selectRole')}</div>
-        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:10,marginBottom:28}}>
-          {[
-            {id:'resident',label:t('role.resident'),sub:''},
-            {id:'security',label:t('role.security'),sub:''},
-            {id:'manager',label:t('role.manager'),sub:''}
-          ].map(role => {
-            const active = selectedRole === role.id;
-            return (
-              <div
-                key={role.id}
-                onClick={() => setSelectedRole(role.id)}
-                style={{
-                  padding:'16px 8px 14px',
-                  border: active ? '1.5px solid var(--bg-warm-dark)' : '1px solid var(--border-light)',
-                  borderRadius:10,
-                  textAlign:'center',
-                  cursor:'pointer',
-                  background: active ? 'var(--bg-surface)' : '#fff',
-                  transition:'all .2s',
-                  position:'relative'
-                }}
-              >
-                {active && <div style={{position:'absolute',top:-1,left:'50%',transform:'translateX(-50%)',width:20,height:2,background:'var(--bg-warm-dark)',borderRadius:1}}></div>}
-                <div style={{display:'flex',justifyContent:'center',marginBottom:8}}>{roleIcons[role.id](active)}</div>
-                <div style={{fontSize:12,fontWeight:500,color: active ? 'var(--text-dark)' : 'var(--text-muted)',letterSpacing:'-0.01em'}}>{role.label}</div>
-                {role.sub && <div style={{fontSize:9,color: active ? 'var(--text-secondary)' : '#ccc',letterSpacing:'0.04em',marginTop:2,textTransform:'uppercase'}}>{role.sub}</div>}
-              </div>
-            );
-          })}
-        </div>
+        {/* Demo: Sign In / Sign Up tabs replace the role selector.
+            Working: keep the three-way role selector intact. */}
+        {IS_DEMO ? (
+          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:0,marginBottom:24,border:'1px solid var(--border-light)',borderRadius:10,overflow:'hidden'}}>
+            {[{id:'signin',label:'Sign In'},{id:'signup',label:'Create account'}].map(tab => {
+              const active = mode === tab.id;
+              return (
+                <div key={tab.id} onClick={() => { setMode(tab.id); setError(''); }}
+                  style={{padding:'12px 14px',textAlign:'center',cursor:'pointer',fontSize:13,fontWeight:active?600:500,
+                    background: active ? 'var(--bg-warm-dark)' : '#fff',
+                    color: active ? '#fff' : 'var(--text-secondary)',transition:'all .15s'}}>
+                  {tab.label}
+                </div>
+              );
+            })}
+          </div>
+        ) : (
+          <>
+            <div style={{fontSize:10,letterSpacing:'0.1em',textTransform:'uppercase',color:'var(--text-secondary)',marginBottom:10,fontWeight:500}}>{t('login.selectRole')}</div>
+            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:10,marginBottom:28}}>
+              {[
+                {id:'resident',label:t('role.resident'),sub:''},
+                {id:'security',label:t('role.security'),sub:''},
+                {id:'manager',label:t('role.manager'),sub:''}
+              ].map(role => {
+                const active = selectedRole === role.id;
+                return (
+                  <div
+                    key={role.id}
+                    onClick={() => setSelectedRole(role.id)}
+                    style={{
+                      padding:'16px 8px 14px',
+                      border: active ? '1.5px solid var(--bg-warm-dark)' : '1px solid var(--border-light)',
+                      borderRadius:10,
+                      textAlign:'center',
+                      cursor:'pointer',
+                      background: active ? 'var(--bg-surface)' : '#fff',
+                      transition:'all .2s',
+                      position:'relative'
+                    }}
+                  >
+                    {active && <div style={{position:'absolute',top:-1,left:'50%',transform:'translateX(-50%)',width:20,height:2,background:'var(--bg-warm-dark)',borderRadius:1}}></div>}
+                    <div style={{display:'flex',justifyContent:'center',marginBottom:8}}>{roleIcons[role.id](active)}</div>
+                    <div style={{fontSize:12,fontWeight:500,color: active ? 'var(--text-dark)' : 'var(--text-muted)',letterSpacing:'-0.01em'}}>{role.label}</div>
+                    {role.sub && <div style={{fontSize:9,color: active ? 'var(--text-secondary)' : '#ccc',letterSpacing:'0.04em',marginTop:2,textTransform:'uppercase'}}>{role.sub}</div>}
+                  </div>
+                );
+              })}
+            </div>
+          </>
+        )}
 
         {/* Form */}
-        <form onSubmit={handleSubmit}>
+        <form onSubmit={IS_DEMO && mode === 'signup' ? handleSignup : handleSubmit}>
+          {IS_DEMO && mode === 'signup' && (
+            <div className="form-group">
+              <label style={{fontSize:10,letterSpacing:'0.08em',textTransform:'uppercase',color:'var(--text-secondary)',fontWeight:500}}>Full name (optional)</label>
+              <input className="form-input" type="text" value={fullName} onChange={e=>setFullName(e.target.value)} placeholder="e.g. Hassan Al-Mansoori" style={{borderColor:'var(--border-light)',fontSize:13,borderRadius:8}}/>
+            </div>
+          )}
           <div className="form-group">
             <label style={{fontSize:10,letterSpacing:'0.08em',textTransform:'uppercase',color:'var(--text-secondary)',fontWeight:500}}>{t('login.email')}</label>
             <input className="form-input" type="email" value={email} onChange={e=>setEmail(e.target.value)} placeholder={t('login.emailPlaceholder')} style={{borderColor:'var(--border-light)',fontSize:13,borderRadius:8}}/>
           </div>
           <div className="form-group">
             <label style={{fontSize:10,letterSpacing:'0.08em',textTransform:'uppercase',color:'var(--text-secondary)',fontWeight:500}}>{t('login.password')}</label>
-            <input className="form-input" type="password" value={password} onChange={e=>setPassword(e.target.value)} placeholder={t('login.passwordPlaceholder')} style={{borderColor:'var(--border-light)',fontSize:13,borderRadius:8}}/>
+            <input className="form-input" type="password" value={password} onChange={e=>setPassword(e.target.value)} placeholder={IS_DEMO && mode==='signup' ? 'Choose a password (min 6 characters)' : t('login.passwordPlaceholder')} style={{borderColor:'var(--border-light)',fontSize:13,borderRadius:8}}/>
           </div>
-
+          {IS_DEMO && mode === 'signup' && (
+            <div className="form-group">
+              <label style={{fontSize:10,letterSpacing:'0.08em',textTransform:'uppercase',color:'var(--text-secondary)',fontWeight:500}}>Confirm password</label>
+              <input className="form-input" type="password" value={confirmPassword} onChange={e=>setConfirmPassword(e.target.value)} placeholder="Re-enter the same password" style={{borderColor:'var(--border-light)',fontSize:13,borderRadius:8}}/>
+            </div>
+          )}
 
           {error && <p style={{color:'#8b4a42',fontSize:12,marginBottom:12}}>{error}</p>}
-          <button type="submit" className="btn btn-primary" style={{width:'100%',padding:'13px',fontSize:12,marginTop:4,background:'var(--bg-warm-dark)',border:'none',borderRadius:8,color:'#fff',fontWeight:500,letterSpacing:'0.02em',textTransform:'uppercase',cursor:'pointer',transition:'all .2s'}}>{t('login.signIn')}</button>
+          <button type="submit" className="btn btn-primary" disabled={submitting} style={{width:'100%',padding:'13px',fontSize:12,marginTop:4,background:'var(--bg-warm-dark)',border:'none',borderRadius:8,color:'#fff',fontWeight:500,letterSpacing:'0.02em',textTransform:'uppercase',cursor: submitting ? 'default' : 'pointer',opacity: submitting ? 0.7 : 1,transition:'all .2s'}}>
+            {submitting ? 'Working…' : (IS_DEMO && mode === 'signup' ? 'Create account' : t('login.signIn'))}
+          </button>
+          {IS_DEMO && (
+            <p style={{fontSize:11,color:'var(--text-muted)',marginTop:14,textAlign:'center',lineHeight:1.5}}>
+              {mode === 'signup'
+                ? <>This is a playground. Your sign-up gets its own sandbox with sample data — nothing here is real.</>
+                : <>New here? <span onClick={() => { setMode('signup'); setError(''); }} style={{color:'var(--bg-warm-dark)',cursor:'pointer',fontWeight:500}}>Create an account</span> to spin up your own demo sandbox.</>}
+            </p>
+          )}
         </form>
 
         {/* Footer */}

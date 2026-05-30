@@ -57,6 +57,7 @@ const PLACEHOLDER_REPLACEMENTS = {
   'src/lib/supabase-client.js': [
     [/@@SUPABASE_URL@@/g, TARGET.url],
     [/@@SUPABASE_KEY@@/g, TARGET.key],
+    [/@@VARS_TARGET@@/g,  TARGET_KEY],
   ],
 };
 
