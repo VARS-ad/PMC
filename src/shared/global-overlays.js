@@ -207,9 +207,13 @@ const DemoBanner = ({ showToast }) => {
 // Single host component — render once per role-app and it handles both the
 // banner (demo-only) and the help button (always).
 const GlobalOverlays = ({ showToast }) => {
+  // Demo banner removed at user request — the top bar with "Demo mode —
+  // every action is sandboxed. Click anything safely. Reset to fresh
+  // data" was more visual noise than affordance. The Reset action is
+  // still useful but doesn't justify a persistent banner; reinstate as
+  // a one-time hint or move into the avatar dropdown later.
   return (
     <React.Fragment>
-      {__VARS_IS_DEMO && <DemoBanner showToast={showToast}/>}
       <WhatsAppHelpButton/>
     </React.Fragment>
   );
