@@ -1,10 +1,25 @@
 // ==================== LOGIN PAGE ====================
+// Plays a short brand splash (~1.8s) on first mount before the login card
+// fades in. Gives the user a moment of "welcome" rather than dumping them
+// straight into a form. Tap anywhere on the splash to skip; the splash
+// also dismisses itself once the timer fires. We don't gate this on
+// sessionStorage because the user explicitly wants it every time the
+// login page opens.
 const LoginPage = ({ onLogin, syncStatus }) => {
   const { t, setData } = useApp();
   const [selectedRole, setSelectedRole] = useState('resident');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
+  // Splash sequence: 'splash' (full-screen intro) → 'transition' (fade out
+  // splash + fade in login card) → 'ready' (login card only).
+  const [splashStage, setSplashStage] = useState('splash');
+  useEffect(() => {
+    const t1 = setTimeout(() => setSplashStage('transition'), 1600);
+    const t2 = setTimeout(() => setSplashStage('ready'),      2300);
+    return () => { clearTimeout(t1); clearTimeout(t2); };
+  }, []);
+  const skipSplash = () => { setSplashStage(s => s === 'splash' ? 'transition' : s); setTimeout(() => setSplashStage('ready'), 500); };
 
   const credentials = {
     resident: { email: 'nitin@resident.ae', password: 'resident123' },
@@ -95,13 +110,58 @@ const LoginPage = ({ onLogin, syncStatus }) => {
     )
   };
 
+  // Inline keyframes for the splash → login transition. Injected once; CSS-in-
+  // JS is enough here since the rest of the app already does this inline.
+  const splashCss = `
+    @keyframes vars-splash-logo-in { 0% { opacity: 0; transform: scale(0.92); } 60% { opacity: 1; transform: scale(1.02); } 100% { opacity: 1; transform: scale(1); } }
+    @keyframes vars-splash-tag-in  { 0% { opacity: 0; transform: translateY(6px); } 100% { opacity: 1; transform: translateY(0); } }
+    @keyframes vars-splash-dot     { 0%, 100% { opacity: 0.25; transform: scale(0.8); } 50% { opacity: 1; transform: scale(1); } }
+    @keyframes vars-login-in       { 0% { opacity: 0; transform: translateY(8px); } 100% { opacity: 1; transform: translateY(0); } }
+  `;
+
   return (
     <div className="login-page" style={{position:'relative'}}>
+      <style>{splashCss}</style>
+
+      {/* Brand splash — full-screen, 1.6s static then 0.7s fade out. */}
+      {splashStage !== 'ready' && (
+        <div onClick={skipSplash}
+          style={{position:'fixed',inset:0,zIndex:50,background:'#3E4C59',display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',gap:18,cursor:'pointer',
+            opacity: splashStage === 'transition' ? 0 : 1,
+            transition: 'opacity .6s ease',
+            pointerEvents: splashStage === 'transition' ? 'none' : 'auto'}}>
+          {/* Logo block */}
+          <div style={{display:'inline-flex',alignItems:'center',gap:18,animation:'vars-splash-logo-in .8s cubic-bezier(.2,.7,.2,1) both'}}>
+            <svg width="78" height="78" viewBox="0 0 100 100" fill="none" aria-label="VARS">
+              <rect width="100" height="100" rx="6" fill="#ffffff"/>
+              <path d="M33.3 16.7 L50 16.7 L58.1 25.2 L66.7 33.3 L66.7 83.3 L50 83.3 L33.3 66.7 Z" fill="#3E4C59"/>
+            </svg>
+            <div style={{fontSize:60,fontWeight:500,letterSpacing:'-0.02em',color:'#fff',lineHeight:1}}>VARS</div>
+          </div>
+          {/* Tag line + supporting copy */}
+          <div style={{textAlign:'center',animation:'vars-splash-tag-in .7s .35s cubic-bezier(.2,.7,.2,1) both'}}>
+            <div style={{fontSize:14,letterSpacing:'0.18em',textTransform:'uppercase',color:'#d4c8c0',fontWeight:500,marginBottom:14}}>Property Management Software</div>
+            <div style={{fontSize:18,color:'#fff',fontWeight:400,letterSpacing:'-0.005em',maxWidth:420,padding:'0 24px',lineHeight:1.45}}>
+              Welcome — your buildings, residents and ops in one place.
+            </div>
+          </div>
+          {/* Three loading dots */}
+          <div style={{display:'flex',gap:8,marginTop:22,animation:'vars-splash-tag-in .7s .6s cubic-bezier(.2,.7,.2,1) both'}}>
+            {[0,1,2].map(i => (
+              <span key={i} style={{width:8,height:8,borderRadius:'50%',background:'#d4c8c0',display:'inline-block',animation:'vars-splash-dot 1.2s ease-in-out '+ (i*0.15) +'s infinite'}}/>
+            ))}
+          </div>
+          <div style={{position:'absolute',bottom:24,fontSize:11,color:'rgba(255,255,255,0.45)',letterSpacing:'0.08em'}}>Tap anywhere to continue →</div>
+        </div>
+      )}
+
       {/* Language switcher — top right corner */}
-      <div style={{position:'absolute',top:20,right:20,zIndex:10}}>
+      <div style={{position:'absolute',top:20,right:20,zIndex:10,opacity: splashStage === 'ready' ? 1 : 0,transition:'opacity .4s ease'}}>
         <LanguageSwitcher/>
       </div>
-      <div className="login-card" style={{maxWidth:460,padding:'40px 44px',border:'1px solid var(--border-light)',boxShadow:'0 8px 40px rgba(146,137,137,0.18)',borderRadius:14}}>
+      <div className="login-card" style={{maxWidth:460,padding:'40px 44px',border:'1px solid var(--border-light)',boxShadow:'0 8px 40px rgba(146,137,137,0.18)',borderRadius:14,
+        animation: splashStage === 'ready' ? 'vars-login-in .55s cubic-bezier(.2,.7,.2,1) both' : 'none',
+        visibility: splashStage === 'ready' ? 'visible' : 'hidden'}}>
         {/* Header — VARS brand mark (exact from vars.live) */}
         <div style={{textAlign:'center',marginBottom:32}}>
           <div style={{display:'inline-flex',alignItems:'center',gap:14,marginBottom:10}}>
