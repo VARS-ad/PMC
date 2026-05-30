@@ -126,22 +126,34 @@ const LoginPage = ({ onLogin, syncStatus }) => {
       {/* Brand splash — full-screen, 1.6s static then 0.7s fade out. */}
       {splashStage !== 'ready' && (
         <div onClick={skipSplash}
-          style={{position:'fixed',inset:0,zIndex:50,background:'#3E4C59',display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',gap:18,cursor:'pointer',
+          style={{position:'fixed',inset:0,zIndex:50,
+            // Layered background: a warm slate radial centred on the logo,
+            // a soft sand bloom in the upper-left, and a deeper slate fade
+            // toward the bottom-right so the screen has depth instead of
+            // reading as a flat solid colour.
+            background:
+              'radial-gradient(120% 90% at 50% 35%, #4d5d6a 0%, #3a4853 55%, #2c3740 100%),'
+              + 'radial-gradient(60% 50% at 10% 0%, rgba(219,197,174,0.18), transparent 70%),'
+              + 'radial-gradient(45% 40% at 100% 100%, rgba(19,31,35,0.45), transparent 70%)',
+            backgroundBlendMode:'normal, screen, multiply',
+            display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',textAlign:'center',gap:18,padding:'0 28px',cursor:'pointer',
             opacity: splashStage === 'transition' ? 0 : 1,
             transition: 'opacity .6s ease',
             pointerEvents: splashStage === 'transition' ? 'none' : 'auto'}}>
-          {/* Logo block */}
-          <div style={{display:'inline-flex',alignItems:'center',gap:18,animation:'vars-splash-logo-in .8s cubic-bezier(.2,.7,.2,1) both'}}>
-            <svg width="78" height="78" viewBox="0 0 100 100" fill="none" aria-label="VARS">
-              <rect width="100" height="100" rx="6" fill="#ffffff"/>
+          {/* Logo block — stacked vertically and centred so the wordmark
+              sits directly under the door icon. Cleaner read than the
+              side-by-side row at large sizes. */}
+          <div style={{display:'flex',flexDirection:'column',alignItems:'center',gap:18,animation:'vars-splash-logo-in .8s cubic-bezier(.2,.7,.2,1) both'}}>
+            <svg width="86" height="86" viewBox="0 0 100 100" fill="none" aria-label="VARS" style={{filter:'drop-shadow(0 6px 18px rgba(0,0,0,0.28))'}}>
+              <rect width="100" height="100" rx="8" fill="#ffffff"/>
               <path d="M33.3 16.7 L50 16.7 L58.1 25.2 L66.7 33.3 L66.7 83.3 L50 83.3 L33.3 66.7 Z" fill="#3E4C59"/>
             </svg>
-            <div style={{fontSize:60,fontWeight:500,letterSpacing:'-0.02em',color:'#fff',lineHeight:1}}>VARS</div>
+            <div style={{fontSize:64,fontWeight:500,letterSpacing:'-0.02em',color:'#fff',lineHeight:1,textAlign:'center'}}>VARS</div>
           </div>
-          {/* Tag line + supporting copy */}
-          <div style={{textAlign:'center',animation:'vars-splash-tag-in .7s .35s cubic-bezier(.2,.7,.2,1) both'}}>
-            <div style={{fontSize:14,letterSpacing:'0.18em',textTransform:'uppercase',color:'#d4c8c0',fontWeight:500,marginBottom:14}}>Property Management Software</div>
-            <div style={{fontSize:18,color:'#fff',fontWeight:400,letterSpacing:'-0.005em',maxWidth:420,padding:'0 24px',lineHeight:1.45}}>
+          {/* Tag line + supporting copy — fully centred under the logo */}
+          <div style={{textAlign:'center',maxWidth:480,animation:'vars-splash-tag-in .7s .35s cubic-bezier(.2,.7,.2,1) both'}}>
+            <div style={{fontSize:13,letterSpacing:'0.22em',textTransform:'uppercase',color:'#d4c8c0',fontWeight:500,marginBottom:16,textAlign:'center'}}>Property Management Software</div>
+            <div style={{fontSize:18,color:'#fff',fontWeight:400,letterSpacing:'-0.005em',lineHeight:1.5,textAlign:'center',margin:'0 auto'}}>
               Welcome — your buildings, residents and ops in one place.
             </div>
           </div>
@@ -151,7 +163,7 @@ const LoginPage = ({ onLogin, syncStatus }) => {
               <span key={i} style={{width:8,height:8,borderRadius:'50%',background:'#d4c8c0',display:'inline-block',animation:'vars-splash-dot 1.2s ease-in-out '+ (i*0.15) +'s infinite'}}/>
             ))}
           </div>
-          <div style={{position:'absolute',bottom:24,fontSize:11,color:'rgba(255,255,255,0.45)',letterSpacing:'0.08em'}}>Tap anywhere to continue →</div>
+          <div style={{position:'absolute',bottom:24,fontSize:11,color:'rgba(255,255,255,0.5)',letterSpacing:'0.08em',textAlign:'center',width:'100%'}}>Tap anywhere to continue →</div>
         </div>
       )}
 
