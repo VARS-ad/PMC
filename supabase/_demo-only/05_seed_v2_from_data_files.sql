@@ -339,6 +339,71 @@ BEGIN
     (v_shield,b_aljil,p_uid),(v_shield,b_marina,p_uid),(v_shield,b_boulev,p_uid),
     (v_urban,b_skyline,p_uid),(v_urban,b_qurm,p_uid);
 
+  -- 6b. Vendor payments — last 6 months of monthly invoices per vendor.
+  -- Most paid, one or two pending, so the maintenance modal shows real
+  -- totals (Paid / Pending / Overdue KPIs + payment history table).
+  DECLARE
+    v_rec record;
+    m int;
+    pay_date date; inv_date date;
+    pay_status text; pay_amt numeric;
+  BEGIN
+    FOR v_rec IN
+      SELECT id, name, service_category, contract_value_aed
+      FROM public.vendors WHERE owner_id = p_uid
+    LOOP
+      -- Skip the expired vendor — no recent payments.
+      IF v_rec.name = 'Handy Pros General' THEN CONTINUE; END IF;
+      pay_amt := COALESCE(NULLIF(v_rec.contract_value_aed, 0), 18000) / 12.0;
+      FOR m IN 0..5 LOOP
+        inv_date := (date_trunc('month', current_date) - (m * interval '1 month'))::date + 1;
+        pay_date := inv_date + 12;
+        IF m = 0 THEN pay_status := 'Pending';
+        ELSIF m = 1 AND v_rec.name = 'CoolBreeze HVAC' THEN pay_status := 'Overdue';
+        ELSE pay_status := 'Paid';
+        END IF;
+        INSERT INTO public.vendor_payments
+          (vendor_id, invoice_number, invoice_date, description, category, amount_aed,
+           payment_status, paid_date, payment_method, payment_reference, owner_id)
+        VALUES
+          (v_rec.id,
+           'VND-' || to_char(inv_date, 'YYYYMM') || '-' || substr(v_rec.id::text, 1, 4),
+           inv_date,
+           v_rec.service_category || ' service - ' || to_char(inv_date, 'Mon YYYY'),
+           v_rec.service_category,
+           round(pay_amt),
+           pay_status,
+           CASE WHEN pay_status = 'Paid' THEN pay_date ELSE NULL END,
+           CASE WHEN pay_status = 'Paid' THEN 'Bank Transfer' ELSE NULL END,
+           CASE WHEN pay_status = 'Paid' THEN 'TXN-' || lpad((100000 + (m * 17))::text, 6, '0') ELSE NULL END,
+           p_uid);
+      END LOOP;
+    END LOOP;
+  END;
+
+  -- 6c. Vendor documents — one signed contract per vendor. Storage path
+  -- points at a placeholder slot; the UI falls back to a stock thumbnail
+  -- when the object is missing (so the row still opens). Lets the
+  -- maintenance modal show non-zero Documents count.
+  DECLARE
+    v_rec record;
+  BEGIN
+    FOR v_rec IN
+      SELECT id, name FROM public.vendors WHERE owner_id = p_uid
+    LOOP
+      INSERT INTO public.vendor_documents (vendor_id, kind, filename, storage_path, owner_id)
+      VALUES
+        (v_rec.id, 'contract',
+         replace(v_rec.name, ' ', '_') || '_Service_Agreement.pdf',
+         v_rec.id::text || '/contract-placeholder.pdf',
+         p_uid),
+        (v_rec.id, 'invoice',
+         replace(v_rec.name, ' ', '_') || '_Latest_Invoice.pdf',
+         v_rec.id::text || '/invoice-placeholder.pdf',
+         p_uid);
+    END LOOP;
+  END;
+
   -- =========================================================================
   -- 7. Invoices — realistic distribution
   --

@@ -2,10 +2,20 @@
 
 // Stock placeholder URLs when the storage object is missing (seed-only).
 const ATTACHMENT_PLACEHOLDER = {
-  photo:         'https://images.unsplash.com/photo-1502672023488-70e25813eb80?w=1400',
-  title_deed:    'https://images.unsplash.com/photo-1554224155-6726b3ff858f?w=1400',
-  layout:        'https://images.unsplash.com/photo-1503387837-b154d5074bd2?w=1400',
-  other:         'https://images.unsplash.com/photo-1568667256549-094345857637?w=1400',
+  photo:           'https://images.unsplash.com/photo-1502672023488-70e25813eb80?w=1400',
+  title_deed:      'https://images.unsplash.com/photo-1554224155-6726b3ff858f?w=1400',
+  layout:          'https://images.unsplash.com/photo-1503387837-b154d5074bd2?w=1400',
+  other:           'https://images.unsplash.com/photo-1568667256549-094345857637?w=1400',
+  // Vendor + resident document kinds — same fallback so a click on a
+  // seeded row opens *something* instead of throwing "Object not found".
+  contract:        'https://images.unsplash.com/photo-1554224155-6726b3ff858f?w=1400',
+  invoice:         'https://images.unsplash.com/photo-1554224155-6726b3ff858f?w=1400',
+  payment_receipt: 'https://images.unsplash.com/photo-1554224155-6726b3ff858f?w=1400',
+  emirates_id:     'https://images.unsplash.com/photo-1554224155-6726b3ff858f?w=1400',
+  passport:        'https://images.unsplash.com/photo-1554224155-6726b3ff858f?w=1400',
+  tenancy_contract:'https://images.unsplash.com/photo-1554224155-6726b3ff858f?w=1400',
+  owning_contract: 'https://images.unsplash.com/photo-1554224155-6726b3ff858f?w=1400',
+  lease_contract:  'https://images.unsplash.com/photo-1554224155-6726b3ff858f?w=1400',
 };
 
 const UnitAttachmentRow = ({ file, onDelete, canDelete, bucket }) => {

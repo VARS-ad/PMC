@@ -126,7 +126,7 @@ const PMCReportsPage = () => {
       try {
         const filterB = selectedProperties.length > 0 ? selectedProperties : null;
         const { data: buildings } = await supabaseClient.from('buildings').select('id,name,property_type,address,parking_spots,amenities');
-        const { data: units } = await supabaseClient.from('units').select('id,building_id,floor,unit_number');
+        const { data: units } = await supabaseClient.from('units').select('id,building_id,floor,unit_number,tenant_name,tenant_phone,tenant_tenure,tenant_lease_start,tenant_lease_end,tenant_monthly_payment_aed,tenant_contract_number');
         const filteredUnits = (units || []).filter(u => !filterB || filterB.includes(u.building_id));
         const fIds = filteredUnits.map(u => u.id);
         const probeIds = fIds.length ? fIds : ['00000000-0000-0000-0000-000000000000'];
@@ -173,13 +173,19 @@ const PMCReportsPage = () => {
         const assetsByType = {};
         buildingsScoped.forEach(b => { assetsByType[b.property_type || 'Other'] = (assetsByType[b.property_type || 'Other'] || 0) + 1; });
         const totalUnits = unitsScoped.length;
-        const occupiedUnits = new Set(ras.map(r => r.unit_id)).size;
+        // Occupied = unit has a resident_assignment OR units.tenant_name is set
+        // (commercial / villa clients live there). Dedupe by unit_id.
+        const occupiedSet = new Set(ras.map(r => r.unit_id));
+        for (const u of unitsScoped) if (u.tenant_name) occupiedSet.add(u.id);
+        const occupiedUnits = occupiedSet.size;
         const occupancyRate = totalUnits > 0 ? Math.round((occupiedUnits / totalUnits) * 100) : 0;
         const vacant = Math.max(totalUnits - occupiedUnits, 0);
         const owners = ras.filter(r => r.tenure === 'Owner').length;
-        const tenants = ras.filter(r => r.tenure === 'Tenant').length;
-        // Vacancy list — units NOT in resident_assignments
-        const occupiedSet = new Set(ras.map(r => r.unit_id));
+        // Tenants = residential tenants (in ras) + non-residential occupants
+        // (units.tenant_name) so the Residents tab reflects all clients.
+        const nonResTenants = unitsScoped.filter(u => u.tenant_name && !ras.some(r => r.unit_id === u.id)).length;
+        const tenants = ras.filter(r => r.tenure === 'Tenant').length + nonResTenants;
+        // Vacancy list — units NOT occupied (by either path).
         const vacancyList = unitsScoped.filter(u => !occupiedSet.has(u.id)).slice(0, 10).map(u => ({
           building: (bldgById[u.building_id] || {}).name || '—',
           floor: u.floor,
@@ -277,7 +283,7 @@ const PMCReportsPage = () => {
 
         // ============ Residents ============
         const profilesById = Object.fromEntries(profiles.map(p => [p.id, p]));
-        const activeTenants = ras.map(r => {
+        const residentialTenants = ras.map(r => {
           const p = profilesById[r.profile_id] || {};
           const u = unitById[r.unit_id] || {};
           const b = bldgById[u.building_id] || {};
@@ -294,18 +300,49 @@ const PMCReportsPage = () => {
             contractNo: r.contract_number || '—',
           };
         });
+        // Non-residential clients live on units.tenant_*. Merge them in so
+        // commercial/villa/land tenants appear in the Active Tenants table.
+        const raUnitIds = new Set(ras.map(r => r.unit_id));
+        const nonResTenantsRows = unitsScoped
+          .filter(u => u.tenant_name && !raUnitIds.has(u.id))
+          .map(u => {
+            const b = bldgById[u.building_id] || {};
+            return {
+              name: u.tenant_name,
+              phone: u.tenant_phone || '—',
+              role: '—',
+              building: b.name || '—',
+              unit: u.unit_number || '—',
+              tenure: u.tenant_tenure || 'Tenant',
+              leaseStart: u.tenant_lease_start || '—',
+              leaseEnd: u.tenant_lease_end || '—',
+              monthly: Number(u.tenant_monthly_payment_aed) || 0,
+              contractNo: u.tenant_contract_number || '—',
+            };
+          });
+        const activeTenants = residentialTenants.concat(nonResTenantsRows);
 
         const today = new Date(); today.setHours(0,0,0,0);
         const in60 = new Date(today); in60.setDate(in60.getDate() + 60);
         const in90 = new Date(today); in90.setDate(in90.getDate() + 90);
-        const leasesExpSoon = ras.filter(r => r.lease_end && new Date(r.lease_end) <= in90 && new Date(r.lease_end) >= today).length;
+        // Lease-end union: residential (ras.lease_end) + non-residential
+        // (units.tenant_lease_end). Same for lease_start used by move-ins.
+        const allLeaseEnds = [
+          ...ras.map(r => r.lease_end).filter(Boolean),
+          ...unitsScoped.map(u => u.tenant_lease_end).filter(Boolean),
+        ];
+        const allLeaseStarts = [
+          ...ras.map(r => r.lease_start).filter(Boolean),
+          ...unitsScoped.map(u => u.tenant_lease_start).filter(Boolean),
+        ];
+        const leasesExpSoon = allLeaseEnds.filter(d => new Date(d) <= in90 && new Date(d) >= today).length;
         const leasesExpiring60 = activeTenants.filter(r => r.leaseEnd !== '—' && new Date(r.leaseEnd) <= in60 && new Date(r.leaseEnd) >= today);
-        const leasesExpired = ras.filter(r => r.lease_end && new Date(r.lease_end) < today).length;
+        const leasesExpired = allLeaseEnds.filter(d => new Date(d) < today).length;
 
         // Move-ins / move-outs within the period (proxy = lease_start /
         // lease_end falling inside the period window).
-        const moveIns  = ras.filter(r => r.lease_start && r.lease_start >= cutoff && r.lease_start <= periodEnd).length;
-        const moveOuts = ras.filter(r => r.lease_end   && r.lease_end   >= cutoff && r.lease_end   <= periodEnd).length;
+        const moveIns  = allLeaseStarts.filter(d => d >= cutoff && d <= periodEnd).length;
+        const moveOuts = allLeaseEnds.filter(d => d >= cutoff && d <= periodEnd).length;
 
         // Top arrears — group outstanding invoices by tenant
         const arrearsByTenant = {};
@@ -1280,12 +1317,6 @@ const VisitorsGuardsReports = ({ stats }) => (
       )}
     </div>
 
-    <div className="card">
-      <div style={{fontSize:14,fontWeight:700,letterSpacing:'-0.01em',color:'var(--text-dark)',marginBottom:18,paddingBottom:12,borderBottom:'1px solid var(--border-light)'}}>Incidents</div>
-      <div style={{color:'var(--text-muted)',fontSize:13,padding:20}}>
-        No incidents table exists yet — add a <code>incidents</code> table to surface guard-reported events here.
-      </div>
-    </div>
   </div>
 );
 
@@ -1651,12 +1682,6 @@ async function renderFullReportPdf(stats, brand, period) {
     doc.text('No guards assigned in the selected scope.', margin, y + 18);
     y += 30;
   }
-  // Incidents — table doesn't exist
-  doc.setFont('helvetica','italic');
-  doc.setFontSize(9);
-  doc.setTextColor(...REPORT_BRAND.textMuteRgb);
-  doc.text('Incidents: no incidents table is wired yet — section omitted.', margin, y + 18);
-
   // ---------- Section 7: Compliance ----------
   doc.addPage();
   _drawSectionHeader(doc, '7 · COMPLIANCE', margin, pageW);

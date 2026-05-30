@@ -425,7 +425,12 @@ const PMCOverviewPage = ({ setPage }) => {
         const realBuildingsCount = (buildings || []).length;
         const selectedPropsCount = filterB ? filterB.length : realBuildingsCount;
         const totalUnits = filteredUnits.length;
-        const occupied = new Set((ras || []).map(r => r.unit_id)).size;
+        // Occupied = unit appears in resident_assignments OR has a direct
+        // tenant_name on the unit (commercial occupants live there). Dedupe
+        // by unit_id so villas carrying both don't get double-counted.
+        const occupiedIds = new Set((ras || []).map(r => r.unit_id));
+        for (const u of (filteredUnits || [])) if (u.tenant_name) occupiedIds.add(u.id);
+        const occupied = occupiedIds.size;
         const occupancyRate = totalUnits > 0 ? Math.round((occupied / totalUnits) * 100) : 0;
         const lastMonthCollected = (invoices || [])
           .filter(i => i.status === 'Paid' && i.created_at && i.created_at.slice(0,10) >= lastMonthStart && i.created_at.slice(0,10) <= lastMonthEnd)
@@ -793,8 +798,14 @@ const PMCOverviewPage = ({ setPage }) => {
             const bUnits = filteredUnits.filter(u => u.building_id === b.id);
             const bUnitIds = new Set(bUnits.map(u => u.id));
             const bAssigned = (ras || []).filter(r => bUnitIds.has(r.unit_id));
-            const bTenantOccupied = bUnits.filter(u => u.tenant_name).length;
-            const occupiedCount = bAssigned.length + bTenantOccupied;
+            // A unit counts as occupied if it has *either* a resident_assignment
+            // row *or* a direct tenant_name on the unit. Some seeded villas
+            // carry both, so we dedupe by unit_id to avoid double-counting
+            // (which used to produce 200% occupancy).
+            const occupiedUnitIds = new Set();
+            for (const r of bAssigned) occupiedUnitIds.add(r.unit_id);
+            for (const u of bUnits) if (u.tenant_name) occupiedUnitIds.add(u.id);
+            const occupiedCount = occupiedUnitIds.size;
             // Period-aware collected. Honours the top-bar time-range so
             // the figure on each card matches the headline above.
             const periodCollected = periodInvoices.filter(i => bUnitIds.has(i.unit_id) && i.status === 'Paid').reduce((s, i) => s + Number(i.amount_aed), 0);
