@@ -340,15 +340,31 @@ BEGIN
     (v_urban,b_skyline,p_uid),(v_urban,b_qurm,p_uid);
 
   -- =========================================================================
-  -- 7. Invoices (~200, spread across 12 months — residents + commercial)
+  -- 7. Invoices — realistic distribution
+  --
+  -- Target shape for the headline KPIs (last 3 months collected):
+  --   Collected ............ ~AED 1.8M (residential rent + commercial leases,
+  --                                     3 months back, all Paid)
+  --   Upcoming (30 days) ... ~AED 350K (next-month invoices, status Pending)
+  --   Overdue .............. ~AED 50K  (only 3 accounts, single past-due each)
+  --
+  -- Implementation:
+  --   1. For every tenant (residential + commercial) generate 3 months of
+  --      Paid invoices (this month, -1 month, -2 months). High collection
+  --      rate -- the demo is a well-run portfolio.
+  --   2. For ~25 tenants spread invoices in the next 30 days as Pending so
+  --      Upcoming KPI shows real money.
+  --   3. Pick 3 specific accounts to have a single Overdue invoice ~30 days
+  --      late, totalling ~50K. "Worst" account leads the Needs Attention
+  --      drill.
   -- =========================================================================
   DECLARE
     rec record;
-    i int := 0;
     seq int := 0;
+    i int;
     inv_due date; inv_created date;
   BEGIN
-    -- Residential tenant invoices: each tenant gets 6 months of invoices
+    -- 1. Paid invoices for residential tenants — last 3 months
     FOR rec IN
       SELECT ra.profile_id, ra.unit_id, COALESCE(ra.monthly_payment_aed, 9000) AS amt
       FROM public.resident_assignments ra
@@ -356,23 +372,17 @@ BEGIN
       ORDER BY ra.unit_id
     LOOP
       seq := seq + 1;
-      FOR i IN 0..5 LOOP
+      FOR i IN 0..2 LOOP  -- current month + 2 prior
         inv_created := (date_trunc('month', current_date) - (i * interval '1 month'))::date + 1;
         inv_due     := inv_created + 5;
         INSERT INTO public.invoices (invoice_number, unit_id, resident_profile_id, description, amount_aed, status, due_date, created_at, owner_id)
           VALUES ('RNT-' || to_char(inv_created, 'YYYYMM') || '-' || lpad(seq::text, 4, '0'),
                   rec.unit_id, rec.profile_id, 'Monthly rent - ' || to_char(inv_created, 'Mon YYYY'),
-                  rec.amt,
-                  CASE
-                    WHEN i = 0 THEN 'Pending'
-                    WHEN i = 1 AND seq % 5 = 0 THEN 'Overdue'
-                    ELSE 'Paid'
-                  END,
-                  inv_due, inv_created, p_uid);
+                  rec.amt, 'Paid', inv_due, inv_created, p_uid);
       END LOOP;
     END LOOP;
 
-    -- Commercial tenant invoices: each occupied commercial unit gets 4 months
+    -- 2. Paid invoices for commercial tenants — last 3 months
     FOR rec IN
       SELECT u.id AS unit_id, u.tenant_monthly_payment_aed AS amt
       FROM public.units u
@@ -382,37 +392,54 @@ BEGIN
       ORDER BY u.unit_number
     LOOP
       seq := seq + 1;
-      FOR i IN 0..3 LOOP
+      FOR i IN 0..2 LOOP
         inv_created := (date_trunc('month', current_date) - (i * interval '1 month'))::date + 1;
         inv_due     := inv_created + 5;
         INSERT INTO public.invoices (invoice_number, unit_id, resident_profile_id, description, amount_aed, status, due_date, created_at, owner_id)
           VALUES ('CMT-' || to_char(inv_created, 'YYYYMM') || '-' || lpad(seq::text, 4, '0'),
                   rec.unit_id, NULL, 'Office lease - ' || to_char(inv_created, 'Mon YYYY'),
-                  rec.amt,
-                  CASE WHEN i = 0 THEN 'Pending' WHEN i = 1 AND seq % 7 = 0 THEN 'Overdue' ELSE 'Paid' END,
-                  inv_due, inv_created, p_uid);
+                  rec.amt, 'Paid', inv_due, inv_created, p_uid);
       END LOOP;
     END LOOP;
 
-    -- Service charge invoices for all owner-occupied residential units (4/yr)
+    -- 3. Upcoming (Pending) invoices — next 30 days, ~25 tenants
+    --    Each Pending invoice ~AED 12-15K, total target ~AED 350K
+    seq := 100;
     FOR rec IN
-      SELECT ra.profile_id, ra.unit_id, 3500 AS amt
+      SELECT ra.profile_id, ra.unit_id, COALESCE(ra.monthly_payment_aed, 12000) AS amt
       FROM public.resident_assignments ra
-      WHERE ra.owner_id = p_uid AND ra.tenure = 'Owner'
+      WHERE ra.owner_id = p_uid AND ra.tenure = 'Tenant'
       ORDER BY ra.unit_id
-      LIMIT 30
+      LIMIT 25
     LOOP
       seq := seq + 1;
-      FOR i IN 0..1 LOOP
-        inv_created := (date_trunc('month', current_date) - (i * interval '3 month'))::date + 1;
-        inv_due     := inv_created + 14;
-        INSERT INTO public.invoices (invoice_number, unit_id, resident_profile_id, description, amount_aed, status, due_date, created_at, owner_id)
-          VALUES ('SCG-' || to_char(inv_created, 'YYYYMM') || '-' || lpad(seq::text, 4, '0'),
-                  rec.unit_id, rec.profile_id, 'Service charge - Q' || to_char(inv_created, 'Q YYYY'),
-                  rec.amt,
-                  CASE WHEN i = 0 THEN 'Pending' ELSE 'Paid' END,
-                  inv_due, inv_created, p_uid);
-      END LOOP;
+      inv_due     := current_date + 15 + (seq % 14);   -- spread across next 15-29 days
+      inv_created := current_date - 1;
+      INSERT INTO public.invoices (invoice_number, unit_id, resident_profile_id, description, amount_aed, status, due_date, created_at, owner_id)
+        VALUES ('RNT-UP-' || lpad(seq::text, 4, '0'),
+                rec.unit_id, rec.profile_id,
+                'Monthly rent - ' || to_char(inv_due, 'Mon YYYY'),
+                rec.amt, 'Pending', inv_due, inv_created, p_uid);
+    END LOOP;
+
+    -- 4. Overdue — exactly 3 accounts, ~50K total
+    --    Pick the 3 with highest rent to make the "Needs Attention" drill
+    --    meaningful.
+    seq := 300;
+    FOR rec IN
+      SELECT ra.profile_id, ra.unit_id, COALESCE(ra.monthly_payment_aed, 15000) AS amt
+      FROM public.resident_assignments ra
+      WHERE ra.owner_id = p_uid AND ra.tenure = 'Tenant'
+      ORDER BY ra.monthly_payment_aed DESC NULLS LAST
+      LIMIT 3
+    LOOP
+      seq := seq + 1;
+      inv_due     := current_date - (20 + seq);
+      inv_created := inv_due - 10;
+      INSERT INTO public.invoices (invoice_number, unit_id, resident_profile_id, description, amount_aed, status, due_date, created_at, owner_id)
+        VALUES ('RNT-OD-' || lpad(seq::text, 4, '0'),
+                rec.unit_id, rec.profile_id, 'Monthly rent - past due',
+                rec.amt, 'Overdue', inv_due, inv_created, p_uid);
     END LOOP;
   END;
 
