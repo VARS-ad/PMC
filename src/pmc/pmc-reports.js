@@ -75,14 +75,14 @@ function _doughnutCenterPlugin(top, bottom) {
   };
 }
 
-// Compact bar-label formatter — keeps strings short so they fit on top of
-// narrow bars. Strips the "AED " prefix since the card header already shows
-// the full total with the prefix.
+// Bar-label formatter — full integer with thousands separators, no K/M
+// abbreviation (per user feedback: report consumers want exact figures,
+// not 1.14M). The card header still prefixes "AED" for the total chip;
+// individual bar labels skip the prefix to fit on narrow bars.
 const _fmtBarAed = (n) => {
-  const r = Math.round(n);
+  const r = Math.round(Number(n) || 0);
   if (r === 0) return '';
-  if (r >= 1_000_000) return (r/1_000_000).toFixed(2).replace(/\.?0+$/, '') + 'M';
-  return r.toLocaleString();
+  return r.toLocaleString('en-US');
 };
 
 const PMCReportsPage = () => {
@@ -269,13 +269,21 @@ const PMCReportsPage = () => {
           return out;
         })();
         const futureRevenue = futureBuckets.map(b => {
-          const bucketEnd = new Date(b.ts);
-          bucketEnd.setMonth(bucketEnd.getMonth() + 1);
+          const bucketDate = new Date(b.ts);
           let amt = 0;
+          // Residential leases live in resident_assignments.
           ras.forEach(r => {
             const mp = Number(r.monthly_payment_aed) || 0;
             if (!mp) return;
-            if (r.lease_end && new Date(r.lease_end) < new Date(b.ts)) return;
+            if (r.lease_end && new Date(r.lease_end) < bucketDate) return;
+            amt += mp;
+          });
+          // Non-residential clients live on units.tenant_*. Include them so
+          // Villas + Commercial + Land actually contribute to the chart.
+          unitsScoped.forEach(u => {
+            const mp = Number(u.tenant_monthly_payment_aed) || 0;
+            if (!mp) return;
+            if (u.tenant_lease_end && new Date(u.tenant_lease_end) < bucketDate) return;
             amt += mp;
           });
           return amt;
@@ -506,12 +514,11 @@ const PMCReportsPage = () => {
     return () => { mounted = false; };
   }, [selectedProperties.join(','), timeRange, customStart, customEnd]);
 
-  const fmt = (n) => 'AED ' + Math.round(n).toLocaleString();
-  const fmtShort = (n) => {
-    if (n >= 1_000_000) return 'AED ' + (n/1_000_000).toFixed(2) + 'M';
-    if (n >= 1_000)     return 'AED ' + (n/1_000).toFixed(1) + 'K';
-    return 'AED ' + Math.round(n);
-  };
+  const fmt = (n) => 'AED ' + Math.round(Number(n) || 0).toLocaleString('en-US');
+  // Full amounts with thousands separators everywhere — no K/M
+  // abbreviations. Per user feedback: it's a property report, the user
+  // wants exact figures.
+  const fmtShort = fmt;
 
   const sections = [
     { id: 'portfolio',     label: 'Portfolio' },
@@ -1392,12 +1399,10 @@ async function renderFullReportPdf(stats, brand, period) {
   const pageH = doc.internal.pageSize.getHeight();
   const margin = 36;
 
-  const fmt = (n) => 'AED ' + Math.round(n || 0).toLocaleString('en-US');
-  const fmtShort = (n) => {
-    if (n >= 1_000_000) return 'AED ' + (n/1_000_000).toFixed(2) + 'M';
-    if (n >= 1_000)     return 'AED ' + (n/1_000).toFixed(1) + 'K';
-    return 'AED ' + Math.round(n || 0);
-  };
+  const fmt = (n) => 'AED ' + Math.round(Number(n) || 0).toLocaleString('en-US');
+  // Same in the PDF — keep amounts in full so the printed report doesn't
+  // hide the trailing digits behind a K/M abbreviation.
+  const fmtShort = fmt;
 
   // ---------- Cover page ----------
   // Big slate header band with shield + wordmark, then "PORTFOLIO REPORT"

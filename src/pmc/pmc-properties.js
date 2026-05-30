@@ -556,12 +556,18 @@ const PMCPropertiesPage = ({ setPage }) => {
               contract_number: u.tenant_contract_number || null,
             }));
           // Combined tenants list — what landlords actually see as
-          // 'occupied' regardless of property type.
-          const tenants = occupied.filter(o => o.tenure === 'Tenant').concat(nonResOccupants);
+          // 'occupied' regardless of property type. Dedupe by unit_id so
+          // villas carrying BOTH a resident_assignment AND a tenant_name
+          // on the unit row don't get counted twice (was producing 200%
+          // occupied on the villas tab).
+          const _occupiedUnitIds = new Set();
+          for (const o of occupied)        _occupiedUnitIds.add(o.unit_id);
+          for (const n of nonResOccupants) _occupiedUnitIds.add(n.unit_id);
+          const tenants = occupied.filter(o => o.tenure === 'Tenant').concat(
+            nonResOccupants.filter(n => !occupied.some(o => o.unit_id === n.unit_id))
+          );
           const monthlyRev = tenants.reduce((s, t) => s + Number(t.monthly_payment_aed || 0), 0);
-          // Combined occupancy count: residential assignments + non-
-          // residential tenants from units.tenant_name.
-          const occupiedCount = occupied.length + nonResOccupants.length;
+          const occupiedCount = _occupiedUnitIds.size;
           const _nowMs = Date.now();
           const bInvoices = (invoices || [])
             .filter(i => unitIds.includes(i.unit_id))
