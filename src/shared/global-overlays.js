@@ -52,7 +52,7 @@ const WhatsAppHelpButton = () => {
   return (
     <div
       className="vars-wa-help-btn"
-      style={{ position: 'fixed', bottom: 24, right: 24, zIndex: 90 }}
+      style={{ position: 'fixed', bottom: 48, right: 24, zIndex: 90 }}
     >
       {hover && (
         <div
