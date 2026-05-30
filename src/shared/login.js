@@ -504,7 +504,10 @@ const LoginPage = ({ onLogin, syncStatus }) => {
               <rect width="100" height="100" rx="4" fill="#3E4C59"/>
               <path d="M33.3 16.7 L50 16.7 L58.1 25.2 L66.7 33.3 L66.7 83.3 L50 83.3 L33.3 66.7 Z" fill="#ffffff"/>
             </svg>
-            <h1 style={{fontSize:36,fontWeight:500,letterSpacing:'-0.01em',margin:0,color:'#131F23',lineHeight:1}}>VARS</h1>
+            {/* line-height matches the icon height so the wordmark's optical
+                centre aligns with the icon's; the previous line-height:1 put
+                the text baseline a few pixels above mid. */}
+            <h1 style={{fontSize:36,fontWeight:500,letterSpacing:'-0.01em',margin:0,color:'#131F23',lineHeight:'42px',height:42,display:'flex',alignItems:'center'}}>VARS</h1>
           </div>
           <p style={{fontSize:10,letterSpacing:'0.16em',textTransform:'uppercase',color:'var(--text-secondary)',margin:'14px 0 0',fontWeight:400,textAlign:'center'}}>{t('login.subtitle')}</p>
         </div>
