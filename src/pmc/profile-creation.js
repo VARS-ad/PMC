@@ -1124,6 +1124,24 @@ const PCSummary = ({ section }) => {
 };
 
 const BuildingDetailModal = ({ building, onClose }) => {
+  // Diagnostic log: prints the shape of the building object so we can see
+  // why the modal blanks on villa / commercial-land. Stays on until the
+  // bug is closed; cheap and only fires on open.
+  try {
+    console.log('[BuildingDetailModal] open', {
+      id: building && building.id,
+      name: building && building.name,
+      property_type: building && building.property_type,
+      has_units_field: !!(building && building.units),
+      unit_count: building && building.units ? building.units.length : 0,
+      sample_unit: building && building.units && building.units[0] ? {
+        id: building.units[0].id,
+        unit_number: building.units[0].unit_number,
+        floor: building.units[0].floor,
+        floor_type: typeof building.units[0].floor,
+      } : null,
+    });
+  } catch (e) { try { console.log('[BuildingDetailModal] log error:', e.message); } catch (_) {} }
   const [selectedUnit, setSelectedUnit] = useState(null);
   // unit_id -> { assignment, profile } so the tooltip on each unit chip
   // can show "Reem Al Maktoum · Tenant" or "Vacant" at a glance, and
