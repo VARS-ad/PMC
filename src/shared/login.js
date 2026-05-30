@@ -321,23 +321,10 @@ const LoginPage = ({ onLogin, syncStatus }) => {
           <p style={{fontSize:10,letterSpacing:'0.16em',textTransform:'uppercase',color:'var(--text-secondary)',margin:'8px 0 0',fontWeight:400}}>{t('login.subtitle')}</p>
         </div>
 
-        {/* Demo: Sign In / Sign Up tabs replace the role selector.
-            Working: keep the three-way role selector intact. */}
-        {IS_DEMO ? (
-          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:0,marginBottom:24,border:'1px solid var(--border-light)',borderRadius:10,overflow:'hidden'}}>
-            {[{id:'signin',label:'Sign In'},{id:'signup',label:'Create account'}].map(tab => {
-              const active = mode === tab.id;
-              return (
-                <div key={tab.id} onClick={() => { setMode(tab.id); setError(''); }}
-                  style={{padding:'12px 14px',textAlign:'center',cursor:'pointer',fontSize:13,fontWeight:active?600:500,
-                    background: active ? 'var(--bg-warm-dark)' : '#fff',
-                    color: active ? '#fff' : 'var(--text-secondary)',transition:'all .15s'}}>
-                  {tab.label}
-                </div>
-              );
-            })}
-          </div>
-        ) : (
+        {/* Demo: no tabs — Sign In is the default surface, switching to
+            Create account happens via the link under the form. Working
+            keeps the legacy three-way role selector. */}
+        {IS_DEMO ? null : (
           <>
             <div style={{fontSize:10,letterSpacing:'0.1em',textTransform:'uppercase',color:'var(--text-secondary)',marginBottom:10,fontWeight:500}}>{t('login.selectRole')}</div>
             <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:10,marginBottom:28}}>
@@ -400,9 +387,10 @@ const LoginPage = ({ onLogin, syncStatus }) => {
           <button type="submit" className="btn btn-primary" disabled={submitting} style={{width:'100%',padding:'13px',fontSize:12,marginTop:4,background:'var(--bg-warm-dark)',border:'none',borderRadius:8,color:'#fff',fontWeight:500,letterSpacing:'0.02em',textTransform:'uppercase',cursor: submitting ? 'default' : 'pointer',opacity: submitting ? 0.7 : 1,transition:'all .2s'}}>
             {submitting ? 'Working…' : (IS_DEMO && mode === 'signup' ? 'Create account' : t('login.signIn'))}
           </button>
-          {/* Sign-in sub-actions: Create account + Forgot password — only in
-              demo + signin mode. Signup mode no longer carries the noisy
-              "playground" disclaimer. */}
+          {/* Demo: links under the button switch between modes and offer
+              the password reset. In signin mode: Create account ↔ Forgot
+              password. In signup mode: just Sign in (no "Forgot password"
+              when you haven't created an account yet). */}
           {IS_DEMO && mode === 'signin' && (
             <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginTop:14,gap:10,fontSize:12}}>
               <span onClick={() => { setMode('signup'); safeSetError(null); }}
@@ -412,6 +400,15 @@ const LoginPage = ({ onLogin, syncStatus }) => {
               <span onClick={handleForgotPassword}
                 style={{color:'var(--text-muted)',cursor:'pointer'}}>
                 Forgot password?
+              </span>
+            </div>
+          )}
+          {IS_DEMO && mode === 'signup' && (
+            <div style={{marginTop:14,fontSize:12,textAlign:'left'}}>
+              <span style={{color:'var(--text-muted)'}}>Already have an account? </span>
+              <span onClick={() => { setMode('signin'); safeSetError(null); }}
+                style={{color:'var(--bg-warm-dark)',cursor:'pointer',fontWeight:500}}>
+                Sign in
               </span>
             </div>
           )}
