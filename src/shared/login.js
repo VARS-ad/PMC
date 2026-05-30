@@ -325,38 +325,23 @@ const LoginPage = ({ onLogin, syncStatus }) => {
           <p style={{fontSize:10,letterSpacing:'0.16em',textTransform:'uppercase',color:'var(--text-secondary)',margin:'8px 0 0',fontWeight:400,textAlign:'center'}}>{t('login.subtitle')}</p>
         </div>
 
-        {/* Demo: a soft sand banner above the form spelling out that
-            anyone can spin up a sandbox. Visible only in signin mode so
-            it doesn't shout at users already trying to create an account.
-            Click anywhere on the banner to flip to signup. */}
+        {/* Demo: a quiet outlined "Create a free demo account" pill above
+            the form. Same palette as the form fields — same border colour,
+            white background, slate text. Click to flip to signup mode. */}
         {IS_DEMO && mode === 'signin' && (
           <div onClick={() => { setMode('signup'); safeSetError(null); }}
             style={{
-              display:'flex',alignItems:'center',gap:14,
-              padding:'14px 16px',marginBottom:22,cursor:'pointer',
-              background:'linear-gradient(135deg, #f1e3d0 0%, #e9dbc4 100%)',
-              border:'1px solid #d8c7ac',borderRadius:10,
-              transition:'transform .15s, box-shadow .15s',
+              display:'flex',alignItems:'center',justifyContent:'center',gap:8,
+              padding:'12px 14px',marginBottom:22,cursor:'pointer',
+              background:'#fff',border:'1px solid var(--border-light)',borderRadius:8,
+              transition:'border-color .15s, background .15s',
             }}
-            onMouseEnter={e => { e.currentTarget.style.transform='translateY(-1px)'; e.currentTarget.style.boxShadow='0 4px 12px rgba(91,72,52,0.10)'; }}
-            onMouseLeave={e => { e.currentTarget.style.transform='none'; e.currentTarget.style.boxShadow='none'; }}>
-            <div style={{
-              width:34,height:34,borderRadius:'50%',background:'#3E4C59',color:'#fff',
-              display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,
-            }}>
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
-              </svg>
-            </div>
-            <div style={{flex:1,minWidth:0}}>
-              <div style={{fontSize:13,fontWeight:600,color:'#131F23',letterSpacing:'-0.005em',marginBottom:2}}>
-                Try VARS — create a free demo account
-              </div>
-              <div style={{fontSize:11,color:'#5a4a30',lineHeight:1.4}}>
-                Anyone can register. You get your own sandbox with sample buildings, residents, vendors and invoices.
-              </div>
-            </div>
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#3E4C59" strokeWidth="2.5" style={{flexShrink:0}}>
+            onMouseEnter={e => { e.currentTarget.style.borderColor='var(--bg-warm-dark)'; e.currentTarget.style.background='var(--bg-surface)'; }}
+            onMouseLeave={e => { e.currentTarget.style.borderColor='var(--border-light)'; e.currentTarget.style.background='#fff'; }}>
+            <span style={{fontSize:13,fontWeight:500,color:'var(--text-dark)',letterSpacing:'-0.005em'}}>
+              Create a free demo account
+            </span>
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--text-secondary)" strokeWidth="2" style={{flexShrink:0}}>
               <polyline points="9 18 15 12 9 6"/>
             </svg>
           </div>
@@ -425,16 +410,11 @@ const LoginPage = ({ onLogin, syncStatus }) => {
           <button type="submit" className="btn btn-primary" disabled={submitting} style={{width:'100%',padding:'13px',fontSize:12,marginTop:4,background:'var(--bg-warm-dark)',border:'none',borderRadius:8,color:'#fff',fontWeight:500,letterSpacing:'0.02em',textTransform:'uppercase',cursor: submitting ? 'default' : 'pointer',opacity: submitting ? 0.7 : 1,transition:'all .2s'}}>
             {submitting ? 'Working…' : (IS_DEMO && mode === 'signup' ? 'Create account' : t('login.signIn'))}
           </button>
-          {/* Demo: links under the button switch between modes and offer
-              the password reset. In signin mode: Create account ↔ Forgot
-              password. In signup mode: just Sign in (no "Forgot password"
-              when you haven't created an account yet). */}
+          {/* Signin mode: just Forgot password? on the right. The
+              "Create account" affordance now lives in the pill above
+              the form, so no duplicate link here. */}
           {IS_DEMO && mode === 'signin' && (
-            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginTop:14,gap:10,fontSize:12}}>
-              <span onClick={() => { setMode('signup'); safeSetError(null); }}
-                style={{color:'var(--bg-warm-dark)',cursor:'pointer',fontWeight:500}}>
-                Create account
-              </span>
+            <div style={{display:'flex',justifyContent:'flex-end',alignItems:'center',marginTop:14,gap:10,fontSize:12}}>
               <span onClick={handleForgotPassword}
                 style={{color:'var(--text-muted)',cursor:'pointer'}}>
                 Forgot password?
