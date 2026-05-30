@@ -132,13 +132,23 @@ const LoginPage = ({ onLogin, syncStatus }) => {
   // confirmation disabled — which is the demo's intended setting) we
   // route straight to the PMC overview; otherwise we ask the user to
   // sign in once their account is confirmed.
+  // Always coerce to a string so the JSX error <p> never renders an object
+  // literal (the "{}" the user reported was Supabase returning an error
+  // without a .message on it).
+  const safeSetError = (val) => {
+    if (val == null) { setError(''); return; }
+    if (typeof val === 'string') { setError(val); return; }
+    if (typeof val === 'object' && val.message) { setError(String(val.message)); return; }
+    setError('Something went wrong. Please try again.');
+  };
+
   const handleSignup = async (e) => {
     e.preventDefault();
-    setError('');
-    if (!email || !password) { setError('Email and password are required.'); return; }
-    if (password.length < 6)       { setError('Password must be at least 6 characters.'); return; }
-    if (password !== confirmPassword) { setError('Passwords do not match.'); return; }
-    if (!supabaseClient)           { setError('Sign-up is not available right now.'); return; }
+    safeSetError(null);
+    if (!email || !password) { safeSetError('Email and password are required.'); return; }
+    if (password.length < 6)       { safeSetError('Password must be at least 6 characters.'); return; }
+    if (password !== confirmPassword) { safeSetError('Passwords do not match.'); return; }
+    if (!supabaseClient)           { safeSetError('Sign-up is not available right now.'); return; }
     setSubmitting(true);
     try {
       const { data, error: signErr } = await supabaseClient.auth.signUp({
@@ -146,7 +156,7 @@ const LoginPage = ({ onLogin, syncStatus }) => {
         password,
         options: { data: { full_name: (fullName || '').trim() || null } },
       });
-      if (signErr) { setError(signErr.message || 'Sign-up failed.'); setSubmitting(false); return; }
+      if (signErr) { safeSetError(signErr); setSubmitting(false); return; }
       if (data && data.session) {
         // Already signed in — set currentUser and route to PMC overview.
         const u = data.session.user;
@@ -167,10 +177,26 @@ const LoginPage = ({ onLogin, syncStatus }) => {
       setPassword('');
       setConfirmPassword('');
     } catch (err) {
-      setError(err.message || 'Sign-up failed.');
+      safeSetError(err);
     } finally {
       setSubmitting(false);
     }
+  };
+
+  // Forgot password — fires Supabase's resetPasswordForEmail using the email
+  // currently typed into the form. Result surfaces in the same green toast
+  // so the user gets a unified success affordance.
+  const handleForgotPassword = async () => {
+    if (!email) { safeSetError('Enter your email first, then click Forgot password.'); return; }
+    if (!supabaseClient) { safeSetError('Password reset is not available right now.'); return; }
+    safeSetError(null);
+    try {
+      const { error: resetErr } = await supabaseClient.auth.resetPasswordForEmail(email, {
+        redirectTo: typeof window !== 'undefined' ? window.location.origin : undefined,
+      });
+      if (resetErr) { safeSetError(resetErr); return; }
+      flashNotice('Password reset email sent to ' + email + '.');
+    } catch (err) { safeSetError(err); }
   };
 
   const roleIcons = {
@@ -351,7 +377,7 @@ const LoginPage = ({ onLogin, syncStatus }) => {
         <form onSubmit={IS_DEMO && mode === 'signup' ? handleSignup : handleSubmit}>
           {IS_DEMO && mode === 'signup' && (
             <div className="form-group">
-              <label style={{fontSize:10,letterSpacing:'0.08em',textTransform:'uppercase',color:'var(--text-secondary)',fontWeight:500}}>Full name (optional)</label>
+              <label style={{fontSize:10,letterSpacing:'0.08em',textTransform:'uppercase',color:'var(--text-secondary)',fontWeight:500}}>Full name</label>
               <input className="form-input" type="text" value={fullName} onChange={e=>setFullName(e.target.value)} placeholder="e.g. Hassan Al-Mansoori" style={{borderColor:'var(--border-light)',fontSize:13,borderRadius:8}}/>
             </div>
           )}
@@ -370,28 +396,30 @@ const LoginPage = ({ onLogin, syncStatus }) => {
             </div>
           )}
 
-          {error && <p style={{color:'#8b4a42',fontSize:12,marginBottom:12}}>{error}</p>}
+          {error && <p style={{color:'#8b4a42',fontSize:12,marginBottom:12}}>{typeof error === 'string' ? error : 'Something went wrong. Please try again.'}</p>}
           <button type="submit" className="btn btn-primary" disabled={submitting} style={{width:'100%',padding:'13px',fontSize:12,marginTop:4,background:'var(--bg-warm-dark)',border:'none',borderRadius:8,color:'#fff',fontWeight:500,letterSpacing:'0.02em',textTransform:'uppercase',cursor: submitting ? 'default' : 'pointer',opacity: submitting ? 0.7 : 1,transition:'all .2s'}}>
             {submitting ? 'Working…' : (IS_DEMO && mode === 'signup' ? 'Create account' : t('login.signIn'))}
           </button>
-          {IS_DEMO && (
-            <p style={{fontSize:11,color:'var(--text-muted)',marginTop:14,textAlign:'center',lineHeight:1.5}}>
-              {mode === 'signup'
-                ? <>This is a playground. Your sign-up gets its own sandbox with sample data — nothing here is real.</>
-                : <>New here? <span onClick={() => { setMode('signup'); setError(''); }} style={{color:'var(--bg-warm-dark)',cursor:'pointer',fontWeight:500}}>Create an account</span> to spin up your own demo sandbox.</>}
-            </p>
+          {/* Sign-in sub-actions: Create account + Forgot password — only in
+              demo + signin mode. Signup mode no longer carries the noisy
+              "playground" disclaimer. */}
+          {IS_DEMO && mode === 'signin' && (
+            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginTop:14,gap:10,fontSize:12}}>
+              <span onClick={() => { setMode('signup'); safeSetError(null); }}
+                style={{color:'var(--bg-warm-dark)',cursor:'pointer',fontWeight:500}}>
+                Create account
+              </span>
+              <span onClick={handleForgotPassword}
+                style={{color:'var(--text-muted)',cursor:'pointer'}}>
+                Forgot password?
+              </span>
+            </div>
           )}
         </form>
 
-        {/* Footer */}
-        <div style={{display:'flex',alignItems:'center',justifyContent:'center',gap:6,marginTop:20,fontSize:11,color: syncStatus === 'online' ? '#6b8e6b' : '#b05050'}}>
-          <div style={{width:6,height:6,borderRadius:'50%',background: syncStatus === 'online' ? '#4caf50' : '#f44336'}}></div>
-          {syncStatus === 'online' ? t('login.syncActive') : t('login.syncInactive')}
-        </div>
-
-        <div style={{marginTop:12,textAlign:'center'}}>
-          <p style={{fontSize:10,color:'#D0D6D5',letterSpacing:'0.04em'}}>{formatDateTime(new Date())}</p>
-        </div>
+        {/* Sync indicator + datetime footer removed — they read like dev
+            scaffolding next to the polished form. Only useful for debugging,
+            which I can do from the browser console. */}
       </div>
     </div>
   );
