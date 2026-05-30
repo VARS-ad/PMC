@@ -712,9 +712,12 @@ html[dir="rtl"] div[style*="position:absolute"][style*="left:0"] { left:auto !im
   /* UnitDetailModal Field rows — label above value instead of side-by-side
      so long values ('Khalifa Industrial Holdings') aren't crushed into a
      ~150px column. */
-  .udm-field{flex-direction:column!important;gap:2px!important;padding:6px 0!important}
-  .udm-field-label{width:auto!important;font-size:11px!important;letter-spacing:0.04em;text-transform:uppercase;color:#61707D}
-  .udm-field-value{font-size:13px!important}
+  .udm-field{flex-direction:column!important;gap:6px!important;padding:8px 0!important;align-items:stretch!important}
+  .udm-field-label{width:auto!important;font-size:11px!important;letter-spacing:0.04em;text-transform:uppercase;color:#61707D;text-align:left!important}
+  .udm-field-value{font-size:13px!important;text-align:left!important;justify-content:flex-start!important;flex-wrap:wrap!important;gap:8px!important}
+  /* Value rows that contain a button (Replace / Upload PDF / etc.) should
+     keep the button full-width on mobile so it's a real tap target. */
+  .udm-field-value > .btn{width:100%;justify-content:center}
 
   /* Owner edit form — 2-col grid → single column on mobile so inputs
      are full-width touch targets. */
