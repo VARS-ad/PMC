@@ -6,31 +6,44 @@
 // sessionStorage because the user explicitly wants it every time the
 // login page opens.
 
-// Detect whether the page is loading from a Supabase "Confirm email"
-// callback. Supabase tacks `type=signup` onto either the hash or query of
-// the configured Site URL after the user clicks the confirm link. We use
-// this signal to skip the brand splash, jump straight to the Sign In form,
-// pre-fill the email (stashed at signup time), and show a green
-// "Email confirmed" banner — instead of dumping the user back on the
-// neutral choose-account screen.
+// Detect whether the page is loading from a Supabase auth callback —
+// either email confirmation (signup / invite) or password recovery.
+// Supabase tacks `type=signup` / `type=invite` / `type=recovery` onto the
+// hash or query of the configured Site URL after the user clicks the link.
+//
+// Returns one of:
+//   { kind: 'confirm', email }   — confirm-signup / invite. We use this to
+//                                  skip the brand splash, jump straight to
+//                                  the Sign In form, pre-fill the email
+//                                  (stashed at signup time), and show a
+//                                  green "Email confirmed" banner.
+//   { kind: 'recovery' }         — password-reset callback. The user already
+//                                  holds a short-lived session via the
+//                                  access_token in the URL hash; we route
+//                                  them into a "Set a new password" form
+//                                  whose submit calls updateUser(password).
+//   null                         — normal page load, splash + choose surface.
 //
 // Cached so re-renders during the same load don't double-strip the URL.
-let _varsConfirmCallback;
-const _detectConfirmCallback = () => {
-  if (_varsConfirmCallback !== undefined) return _varsConfirmCallback;
+let _varsAuthCallback;
+const _detectAuthCallback = () => {
+  if (_varsAuthCallback !== undefined) return _varsAuthCallback;
   try {
-    if (typeof window === 'undefined') { _varsConfirmCallback = null; return null; }
+    if (typeof window === 'undefined') { _varsAuthCallback = null; return null; }
     const hash  = window.location.hash  || '';
     const query = window.location.search || '';
-    // signup or invite both want the same UX (land on Sign In + banner);
-    // recovery is the password-reset flow which has its own page.
-    const isConfirm =
-      /[?&#]type=signup/.test(hash + query) ||
-      /[?&#]type=invite/.test(hash + query) ||
-      // Hash-flow without an explicit type but with access_token is almost
-      // always a confirm callback (recovery would carry type=recovery).
-      (/access_token=/.test(hash) && !/type=recovery/.test(hash));
-    if (!isConfirm) { _varsConfirmCallback = null; return null; }
+    const combined = hash + query;
+    let kind = null;
+    if (/[?&#]type=recovery/.test(combined)) {
+      kind = 'recovery';
+    } else if (/[?&#]type=signup/.test(combined) || /[?&#]type=invite/.test(combined)) {
+      kind = 'confirm';
+    } else if (/access_token=/.test(hash)) {
+      // Hash-flow without an explicit type. Assume confirm — recovery would
+      // have explicitly carried type=recovery.
+      kind = 'confirm';
+    }
+    if (!kind) { _varsAuthCallback = null; return null; }
     // Pull the email we stashed during signup so we can pre-fill the form.
     // One-shot: clear it so a later refresh doesn't carry stale state.
     let email = '';
@@ -38,12 +51,13 @@ const _detectConfirmCallback = () => {
       email = sessionStorage.getItem('varspm_pending_confirm_email') || '';
       sessionStorage.removeItem('varspm_pending_confirm_email');
     } catch (_) {}
-    // Strip the auth fragment / query so reloads don't re-trigger this.
-    try { window.history.replaceState({}, '', window.location.pathname); } catch (_) {}
-    _varsConfirmCallback = { email };
-    return _varsConfirmCallback;
+    // DON'T strip the URL hash here — Supabase JS needs the access_token to
+    // create the session. It auto-strips after detection. We just record
+    // what kind of callback this was.
+    _varsAuthCallback = { kind, email };
+    return _varsAuthCallback;
   } catch (_) {
-    _varsConfirmCallback = null;
+    _varsAuthCallback = null;
     return null;
   }
 };
@@ -58,13 +72,22 @@ const LoginPage = ({ onLogin, syncStatus }) => {
   // Demo lands users on a 'choose' surface (just two white pill buttons) so
   // returning + new visitors split paths up-front. Working build skips the
   // choose state entirely and lands on its legacy role selector + signin.
+  //
+  // Two auth-callback paths override the default:
+  //   - confirm callback (signup / invite confirmed): land on 'signin' with
+  //     a green "Email confirmed" banner and the email pre-filled.
+  //   - recovery callback (password reset): land on 'reset' which renders
+  //     a "Set a new password" form that calls supabase.auth.updateUser.
+  const _authCallback = _detectAuthCallback();
   const [mode, setMode] = useState(() => {
+    if (_authCallback && _authCallback.kind === 'recovery') return 'reset';
+    if (_authCallback && _authCallback.kind === 'confirm')  return 'signin';
     try { if (typeof VARS_TARGET !== 'undefined' && VARS_TARGET === 'demo') return 'choose'; } catch (_) {}
     return 'signin';
-  }); // 'choose' | 'signin' | 'signup'
+  }); // 'choose' | 'signin' | 'signup' | 'reset'
   const [selectedRole, setSelectedRole] = useState(IS_DEMO ? 'manager' : 'resident');
   const [fullName, setFullName] = useState('');
-  const [email, setEmail] = useState('');
+  const [email, setEmail] = useState(() => (_authCallback && _authCallback.email) || '');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -87,6 +110,10 @@ const LoginPage = ({ onLogin, syncStatus }) => {
   // after they explicitly signed out. The flag is set by handleLogout in
   // app.js and consumed here so the very next mount starts in 'ready'.
   const [splashStage, setSplashStage] = useState(() => {
+    // Skip the brand splash when arriving from an auth callback — the
+    // user is mid-flow and shouldn't be made to wait 3.7s before they
+    // can finish.
+    if (_authCallback) return 'ready';
     try {
       if (sessionStorage.getItem('varspm_just_logged_out') === '1') {
         sessionStorage.removeItem('varspm_just_logged_out');
@@ -95,6 +122,19 @@ const LoginPage = ({ onLogin, syncStatus }) => {
     } catch (_) {}
     return 'splash';
   });
+  // Fire the post-callback banner once the splash has resolved (we set
+  // splashStage='ready' immediately on callback so this fires right away).
+  useEffect(() => {
+    if (!_authCallback) return;
+    if (_authCallback.kind === 'confirm') {
+      flashNotice('Email confirmed. Sign in to continue.');
+    } else if (_authCallback.kind === 'recovery') {
+      flashNotice('Reset link verified. Set a new password to sign in.');
+    }
+  // _authCallback is captured once at mount; safe to leave out of deps.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   useEffect(() => {
     if (splashStage === 'ready') return;
     // ~3.0s of full-visibility static + 0.7s fade = ~3.7s total so the
@@ -228,6 +268,9 @@ const LoginPage = ({ onLogin, syncStatus }) => {
       // No session means email confirmation is still on. Tell the user
       // via the green success toast (not the red error line) and flip
       // back to the Sign In tab.
+      // Stash the email so the confirm callback can pre-fill the sign-in
+      // form once they come back from clicking the confirm link.
+      try { sessionStorage.setItem('varspm_pending_confirm_email', email); } catch (_) {}
       flashNotice('Account created. Check your email to confirm, then sign in.');
       setMode('signin');
       setPassword('');
@@ -253,6 +296,43 @@ const LoginPage = ({ onLogin, syncStatus }) => {
       if (resetErr) { safeSetError(resetErr); return; }
       flashNotice('Password reset email sent to ' + email + '.');
     } catch (err) { safeSetError(err); }
+  };
+
+  // Recovery flow — runs when we landed via the password-reset email link.
+  // Supabase JS has already created a short-lived session from the access_token
+  // in the URL hash. updateUser({password}) lets us set the new password on
+  // that session; we then route the user straight into the app.
+  const handleResetSubmit = async (e) => {
+    e.preventDefault();
+    safeSetError(null);
+    if (!password)                    { safeSetError('Pick a new password.'); return; }
+    if (password.length < 6)          { safeSetError('Password must be at least 6 characters.'); return; }
+    if (password !== confirmPassword) { safeSetError('Passwords do not match.'); return; }
+    if (!supabaseClient)              { safeSetError('Password reset is not available right now.'); return; }
+    setSubmitting(true);
+    try {
+      const { data, error: updErr } = await supabaseClient.auth.updateUser({ password });
+      if (updErr) { safeSetError(updErr); setSubmitting(false); return; }
+      // Strip the recovery hash from the URL so a refresh doesn't put them
+      // back in this flow.
+      try { window.history.replaceState({}, '', window.location.pathname); } catch (_) {}
+      // Route straight into the app. updateUser keeps the session alive and
+      // the existing onAuthStateChange listener in app.js would also handle
+      // this, but routing explicitly avoids a flicker.
+      const u = data && data.user;
+      if (u && setData) {
+        const fullName = (u.user_metadata && (u.user_metadata.full_name || u.user_metadata.name)) || '';
+        setData(prev => ({
+          ...prev,
+          currentUser: { ...prev.currentUser, name: fullName || (u.email || '').split('@')[0], email: u.email || prev.currentUser?.email, role: 'Property Manager' },
+        }));
+      }
+      flashNotice('Password updated. Welcome back.');
+      onLogin('manager');
+    } catch (err) {
+      safeSetError(err);
+      setSubmitting(false);
+    }
   };
 
   const roleIcons = {
@@ -378,10 +458,37 @@ const LoginPage = ({ onLogin, syncStatus }) => {
           <p style={{fontSize:10,letterSpacing:'0.16em',textTransform:'uppercase',color:'var(--text-secondary)',margin:'14px 0 0',fontWeight:400,textAlign:'center'}}>{t('login.subtitle')}</p>
         </div>
 
+        {/* Password recovery — the user landed here from a reset-password
+            email link. Show a focused "set new password" form; everything
+            else (choose surface, role picker, signin form) is suppressed
+            below by the mode !== 'reset' guards. */}
+        {mode === 'reset' && (
+          <form onSubmit={handleResetSubmit}>
+            <div style={{fontSize:14,fontWeight:600,letterSpacing:'-0.005em',color:'var(--text-dark)',marginBottom:6}}>
+              Set a new password
+            </div>
+            <p style={{fontSize:12,color:'var(--text-muted)',margin:'0 0 18px 0',lineHeight:1.5}}>
+              Choose a new password for your account. You'll be signed in once it's saved.
+            </p>
+            <div className="form-group">
+              <label style={{fontSize:10,letterSpacing:'0.08em',textTransform:'uppercase',color:'var(--text-secondary)',fontWeight:500}}>New password</label>
+              <input className="form-input" type="password" value={password} onChange={e=>setPassword(e.target.value)} placeholder="Min 6 characters" autoFocus style={{borderColor:'var(--border-light)',fontSize:13,borderRadius:8}}/>
+            </div>
+            <div className="form-group">
+              <label style={{fontSize:10,letterSpacing:'0.08em',textTransform:'uppercase',color:'var(--text-secondary)',fontWeight:500}}>Confirm new password</label>
+              <input className="form-input" type="password" value={confirmPassword} onChange={e=>setConfirmPassword(e.target.value)} placeholder="Re-enter the same password" style={{borderColor:'var(--border-light)',fontSize:13,borderRadius:8}}/>
+            </div>
+            {error && <p style={{color:'#8b4a42',fontSize:12,marginBottom:12}}>{typeof error === 'string' ? error : 'Something went wrong. Please try again.'}</p>}
+            <button type="submit" className="btn btn-primary" disabled={submitting} style={{width:'100%',padding:'13px',fontSize:12,marginTop:4,background:'var(--bg-warm-dark)',border:'none',borderRadius:8,color:'#fff',fontWeight:500,letterSpacing:'0.02em',textTransform:'uppercase',cursor: submitting ? 'default' : 'pointer',opacity: submitting ? 0.7 : 1,transition:'all .2s'}}>
+              {submitting ? 'Saving…' : 'Set new password'}
+            </button>
+          </form>
+        )}
+
         {/* Demo landing — two white-box choices. Pick one to reveal that
             path's form. Both buttons use the exact same style; the user
             picks based on intent, not visual hierarchy. */}
-        {IS_DEMO && mode === 'choose' && (
+        {mode !== 'reset' && IS_DEMO && mode === 'choose' && (
           <div style={{display:'flex',flexDirection:'column',gap:10}}>
             {[
               {id:'signup', label:'Create a free demo account'},
@@ -406,8 +513,9 @@ const LoginPage = ({ onLogin, syncStatus }) => {
         )}
 
         {/* Back to choose link — shown on demo when in the signin or signup
-            form so the user can flip path. */}
-        {IS_DEMO && mode !== 'choose' && (
+            form so the user can flip path. Hidden in reset mode (no path
+            to flip — they're mid password change). */}
+        {IS_DEMO && mode !== 'choose' && mode !== 'reset' && (
           <div style={{marginBottom:18,fontSize:12}}>
             <span onClick={() => { setMode('choose'); safeSetError(null); }}
               style={{color:'var(--text-muted)',cursor:'pointer'}}>
@@ -416,7 +524,7 @@ const LoginPage = ({ onLogin, syncStatus }) => {
           </div>
         )}
 
-        {IS_DEMO ? null : (
+        {IS_DEMO || mode === 'reset' ? null : (
           <>
             <div style={{fontSize:10,letterSpacing:'0.1em',textTransform:'uppercase',color:'var(--text-secondary)',marginBottom:10,fontWeight:500}}>{t('login.selectRole')}</div>
             <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:10,marginBottom:28}}>
@@ -453,9 +561,9 @@ const LoginPage = ({ onLogin, syncStatus }) => {
         )}
 
         {/* Form — hidden on demo while the user is still on the choose
-            surface. Once they pick "Create a free demo account" or
-            "Sign in" the matching form renders. */}
-        {!(IS_DEMO && mode === 'choose') && (
+            surface or in the reset-password flow. Once they pick "Create
+            a free demo account" or "Sign in" the matching form renders. */}
+        {!(IS_DEMO && mode === 'choose') && mode !== 'reset' && (
         <form onSubmit={IS_DEMO && mode === 'signup' ? handleSignup : handleSubmit}>
           {IS_DEMO && mode === 'signup' && (
             <div className="form-group">
