@@ -5,6 +5,49 @@
 // also dismisses itself once the timer fires. We don't gate this on
 // sessionStorage because the user explicitly wants it every time the
 // login page opens.
+
+// Detect whether the page is loading from a Supabase "Confirm email"
+// callback. Supabase tacks `type=signup` onto either the hash or query of
+// the configured Site URL after the user clicks the confirm link. We use
+// this signal to skip the brand splash, jump straight to the Sign In form,
+// pre-fill the email (stashed at signup time), and show a green
+// "Email confirmed" banner — instead of dumping the user back on the
+// neutral choose-account screen.
+//
+// Cached so re-renders during the same load don't double-strip the URL.
+let _varsConfirmCallback;
+const _detectConfirmCallback = () => {
+  if (_varsConfirmCallback !== undefined) return _varsConfirmCallback;
+  try {
+    if (typeof window === 'undefined') { _varsConfirmCallback = null; return null; }
+    const hash  = window.location.hash  || '';
+    const query = window.location.search || '';
+    // signup or invite both want the same UX (land on Sign In + banner);
+    // recovery is the password-reset flow which has its own page.
+    const isConfirm =
+      /[?&#]type=signup/.test(hash + query) ||
+      /[?&#]type=invite/.test(hash + query) ||
+      // Hash-flow without an explicit type but with access_token is almost
+      // always a confirm callback (recovery would carry type=recovery).
+      (/access_token=/.test(hash) && !/type=recovery/.test(hash));
+    if (!isConfirm) { _varsConfirmCallback = null; return null; }
+    // Pull the email we stashed during signup so we can pre-fill the form.
+    // One-shot: clear it so a later refresh doesn't carry stale state.
+    let email = '';
+    try {
+      email = sessionStorage.getItem('varspm_pending_confirm_email') || '';
+      sessionStorage.removeItem('varspm_pending_confirm_email');
+    } catch (_) {}
+    // Strip the auth fragment / query so reloads don't re-trigger this.
+    try { window.history.replaceState({}, '', window.location.pathname); } catch (_) {}
+    _varsConfirmCallback = { email };
+    return _varsConfirmCallback;
+  } catch (_) {
+    _varsConfirmCallback = null;
+    return null;
+  }
+};
+
 const LoginPage = ({ onLogin, syncStatus }) => {
   const { t, setData } = useApp();
   // On the demo deployment every user is their own PMC. We hide the
