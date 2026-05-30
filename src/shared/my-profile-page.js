@@ -17,6 +17,44 @@ const MyProfilePage = ({ setPage }) => {
     location: 'Al Reem Island, Abu Dhabi, UAE',
     language: 'English',
   });
+  // Re-hydrate from the real Supabase auth session on mount — covers users
+  // who signed in before login.js started writing currentUser, and ensures
+  // the email here always matches the actual auth account.
+  useEffect(() => {
+    if (!supabaseClient) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const { data: u } = await supabaseClient.auth.getUser();
+        const user = u && u.user;
+        if (!user || cancelled) return;
+        let fullName = (user.user_metadata && (user.user_metadata.full_name || user.user_metadata.name)) || '';
+        let phone    = user.phone || '';
+        let role     = profileForm.role || '';
+        try {
+          const { data: prof } = await supabaseClient
+            .from('profiles').select('full_name,phone,role').eq('id', user.id).maybeSingle();
+          if (prof) {
+            if (prof.full_name) fullName = prof.full_name;
+            if (prof.phone)     phone    = prof.phone;
+            if (prof.role)      role     = prof.role === 'pmc' ? 'Property Manager' : prof.role;
+          }
+        } catch (_) {}
+        if (!fullName) fullName = (user.email || '').split('@')[0].replace(/[._-]+/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+        if (cancelled) return;
+        setProfileForm(f => ({ ...f, name: fullName, email: user.email || f.email, phone: phone || f.phone, role: role || f.role }));
+        // Also update the shared currentUser so the topbar dropdown reflects
+        // the right name without needing a re-login.
+        if (setData) {
+          setData(prev => ({
+            ...prev,
+            currentUser: { ...prev.currentUser, name: fullName, email: user.email || prev.currentUser?.email, phone: phone || prev.currentUser?.phone, role: role || prev.currentUser?.role },
+          }));
+        }
+      } catch (_) { /* network/RLS — leave the seeded form alone */ }
+    })();
+    return () => { cancelled = true; };
+  }, []);
   const [settingsForm, setSettingsForm] = useState({
     theme:           'Warm Light',
     density:         'Comfortable',
@@ -91,7 +129,6 @@ const MyProfilePage = ({ setPage }) => {
         <div style={{marginBottom:14}}>
           <label style={labelStyle}>{t('pm.emailAddress')}</label>
           <input type="email" value={profileForm.email} disabled style={inputDisabled}/>
-          <p style={{fontSize:11,color:T.muted,marginTop:5}}>Email is managed by Supabase Auth and can't be edited from here.</p>
         </div>
         <div style={{marginBottom:14}}>
           <label style={labelStyle}>{t('pm.phoneNumber')}</label>
@@ -114,37 +151,10 @@ const MyProfilePage = ({ setPage }) => {
         </div>
       </div>
 
-      {/* Preferences */}
-      <div style={card}>
-        <div style={eyebrow}>Preferences</div>
-        <div style={{marginBottom:14}}>
-          <label style={labelStyle}>{t('pm.language')}</label>
-          <select value={profileForm.language} onChange={e => setProfileForm({...profileForm, language: e.target.value})} style={{...inputBase, cursor:'pointer'}}>
-            <option>English</option>
-            <option>Arabic (العربية)</option>
-            <option>Hindi (हिन्दी)</option>
-            <option>Urdu (اردو)</option>
-            <option>Tagalog</option>
-          </select>
-        </div>
-        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12}}>
-          <div>
-            <label style={labelStyle}>{t('pm.theme')}</label>
-            <select value={settingsForm.theme} onChange={e => setSettingsForm({...settingsForm, theme: e.target.value})} style={{...inputBase, cursor:'pointer'}}>
-              <option>Warm Light</option>
-              <option>Dark</option>
-              <option>System</option>
-            </select>
-          </div>
-          <div>
-            <label style={labelStyle}>{t('pm.density')}</label>
-            <select value={settingsForm.density} onChange={e => setSettingsForm({...settingsForm, density: e.target.value})} style={{...inputBase, cursor:'pointer'}}>
-              <option>Comfortable</option>
-              <option>Compact</option>
-            </select>
-          </div>
-        </div>
-      </div>
+      {/* Preferences section (Language / Theme / Density) removed —
+          language switching wasn't wired through to the rest of the app
+          and theme/density were demo-only. Bring back when each setting
+          actually drives something. */}
 
       {/* Regional */}
       <div style={card}>

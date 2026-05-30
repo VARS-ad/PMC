@@ -1,6 +1,6 @@
 // ==================== LOGIN PAGE ====================
 const LoginPage = ({ onLogin, syncStatus }) => {
-  const { t } = useApp();
+  const { t, setData } = useApp();
   const [selectedRole, setSelectedRole] = useState('resident');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -27,8 +27,36 @@ const LoginPage = ({ onLogin, syncStatus }) => {
       try {
         const { data, error: authErr } = await supabaseClient.auth.signInWithPassword({ email, password });
         if (!authErr && data && data.session) {
-          const authRole = data.session.user && data.session.user.app_metadata && data.session.user.app_metadata.role;
+          const u = data.session.user;
+          const authRole = u && u.app_metadata && u.app_metadata.role;
           const mapped = authRole === 'pmc' ? 'manager' : authRole;
+          // Hydrate data.currentUser from the real Supabase session so the
+          // topbar dropdown and My Profile page show the actual signed-in
+          // person — not the legacy "Hassan Al-PM" seed in store.js.
+          if (mapped && setData) {
+            let fullName = (u.user_metadata && (u.user_metadata.full_name || u.user_metadata.name)) || '';
+            let phone    = u.phone || '';
+            let role     = mapped === 'manager' ? 'Property Manager'
+                         : mapped === 'security' ? 'Security'
+                         : mapped === 'resident' ? 'Resident' : (authRole || '');
+            // Best-effort enrich from public.profiles — non-blocking, login
+            // proceeds even if this query fails (RLS / network).
+            try {
+              const { data: prof } = await supabaseClient
+                .from('profiles').select('full_name,phone,role').eq('id', u.id).maybeSingle();
+              if (prof) {
+                if (prof.full_name) fullName = prof.full_name;
+                if (prof.phone)     phone    = prof.phone;
+                if (prof.role)      role     = prof.role === 'pmc' ? 'Property Manager' : prof.role;
+              }
+            } catch (_) {}
+            // Fallback name: derive from email if profile row had nothing.
+            if (!fullName) fullName = (u.email || '').split('@')[0].replace(/[._-]+/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+            setData(prev => ({
+              ...prev,
+              currentUser: { ...prev.currentUser, name: fullName, email: u.email || prev.currentUser?.email, phone: phone || prev.currentUser?.phone, role },
+            }));
+          }
           if (mapped) { onLogin(mapped); return; }
         }
       } catch (err) {
