@@ -138,47 +138,49 @@ const LoginPage = ({ onLogin, syncStatus }) => {
     <div className="login-page" style={{position:'relative'}}>
       <style>{splashCss}</style>
 
-      {/* Brand splash — full-screen, 1.6s static then 0.7s fade out. */}
+      {/* Brand splash — full-screen, 3.0s static then 0.7s fade out.
+          Quiet warm-light palette to match the rest of the app — the
+          slate-on-dark version felt flashy next to the warm beige
+          login card it transitions into. Now reads as a calm intro
+          rather than a marketing impression. */}
       {splashStage !== 'ready' && (
         <div onClick={skipSplash}
           style={{position:'fixed',inset:0,zIndex:50,
-            // Layered background: a warm slate radial centred on the logo,
-            // a soft sand bloom in the upper-left, and a deeper slate fade
-            // toward the bottom-right so the screen has depth instead of
-            // reading as a flat solid colour.
+            // Very soft warm wash — same family as var(--bg-page) (#F4EEE4)
+            // with a subtle centre highlight + sand bloom on the upper-left
+            // so it isn't a dead-flat colour but doesn't grab attention.
             background:
-              'radial-gradient(120% 90% at 50% 35%, #4d5d6a 0%, #3a4853 55%, #2c3740 100%),'
-              + 'radial-gradient(60% 50% at 10% 0%, rgba(219,197,174,0.18), transparent 70%),'
-              + 'radial-gradient(45% 40% at 100% 100%, rgba(19,31,35,0.45), transparent 70%)',
-            backgroundBlendMode:'normal, screen, multiply',
-            display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',textAlign:'center',gap:18,padding:'0 28px',cursor:'pointer',
+              'radial-gradient(120% 90% at 50% 40%, #FAF5EC 0%, #F4EEE4 60%, #E9DECC 100%),'
+              + 'radial-gradient(55% 45% at 12% 0%, rgba(219,197,174,0.35), transparent 70%)',
+            backgroundBlendMode:'normal, multiply',
+            display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',textAlign:'center',gap:16,padding:'0 28px',cursor:'pointer',
             opacity: splashStage === 'transition' ? 0 : 1,
             transition: 'opacity .6s ease',
             pointerEvents: splashStage === 'transition' ? 'none' : 'auto'}}>
-          {/* Logo block — stacked vertically and centred so the wordmark
-              sits directly under the door icon. Cleaner read than the
-              side-by-side row at large sizes. */}
+          {/* Logo block — same lockup as the login card so the splash
+              feels like the form's "calm cousin" rather than a different
+              screen entirely. */}
           <div style={{display:'flex',flexDirection:'column',alignItems:'center',gap:18,animation:'vars-splash-logo-in .8s cubic-bezier(.2,.7,.2,1) both'}}>
-            <svg width="86" height="86" viewBox="0 0 100 100" fill="none" aria-label="VARS" style={{filter:'drop-shadow(0 6px 18px rgba(0,0,0,0.28))'}}>
-              <rect width="100" height="100" rx="8" fill="#ffffff"/>
-              <path d="M33.3 16.7 L50 16.7 L58.1 25.2 L66.7 33.3 L66.7 83.3 L50 83.3 L33.3 66.7 Z" fill="#3E4C59"/>
+            <svg width="72" height="72" viewBox="0 0 100 100" fill="none" aria-label="VARS">
+              <rect width="100" height="100" rx="6" fill="#3E4C59"/>
+              <path d="M33.3 16.7 L50 16.7 L58.1 25.2 L66.7 33.3 L66.7 83.3 L50 83.3 L33.3 66.7 Z" fill="#ffffff"/>
             </svg>
-            <div style={{fontSize:64,fontWeight:500,letterSpacing:'-0.02em',color:'#fff',lineHeight:1,textAlign:'center'}}>VARS</div>
+            <div style={{fontSize:52,fontWeight:500,letterSpacing:'-0.02em',color:'#131F23',lineHeight:1,textAlign:'center'}}>VARS</div>
           </div>
-          {/* Tag line + supporting copy — fully centred under the logo */}
+          {/* Tag line + supporting copy */}
           <div style={{textAlign:'center',maxWidth:480,animation:'vars-splash-tag-in .7s .35s cubic-bezier(.2,.7,.2,1) both'}}>
-            <div style={{fontSize:13,letterSpacing:'0.22em',textTransform:'uppercase',color:'#d4c8c0',fontWeight:500,marginBottom:16,textAlign:'center'}}>Property Management Software</div>
-            <div style={{fontSize:18,color:'#fff',fontWeight:400,letterSpacing:'-0.005em',lineHeight:1.5,textAlign:'center',margin:'0 auto'}}>
-              Welcome — your buildings, residents and ops in one place.
+            <div style={{fontSize:11,letterSpacing:'0.18em',textTransform:'uppercase',color:'var(--text-secondary)',fontWeight:500,marginBottom:14,textAlign:'center'}}>Property Management Software</div>
+            <div style={{fontSize:16,color:'var(--text-dark)',fontWeight:400,letterSpacing:'-0.003em',lineHeight:1.5,textAlign:'center',margin:'0 auto'}}>
+              Welcome - your buildings, residents and ops in one place.
             </div>
           </div>
-          {/* Three loading dots */}
-          <div style={{display:'flex',gap:8,marginTop:22,animation:'vars-splash-tag-in .7s .6s cubic-bezier(.2,.7,.2,1) both'}}>
+          {/* Pulsing dots — slate, quiet */}
+          <div style={{display:'flex',gap:7,marginTop:18,animation:'vars-splash-tag-in .7s .6s cubic-bezier(.2,.7,.2,1) both'}}>
             {[0,1,2].map(i => (
-              <span key={i} style={{width:8,height:8,borderRadius:'50%',background:'#d4c8c0',display:'inline-block',animation:'vars-splash-dot 1.2s ease-in-out '+ (i*0.15) +'s infinite'}}/>
+              <span key={i} style={{width:6,height:6,borderRadius:'50%',background:'#3E4C59',display:'inline-block',opacity:0.45,animation:'vars-splash-dot 1.2s ease-in-out '+ (i*0.15) +'s infinite'}}/>
             ))}
           </div>
-          <div style={{position:'absolute',bottom:24,fontSize:11,color:'rgba(255,255,255,0.5)',letterSpacing:'0.08em',textAlign:'center',width:'100%'}}>Tap anywhere to continue →</div>
+          <div style={{position:'absolute',bottom:24,fontSize:11,color:'var(--text-muted)',letterSpacing:'0.08em',textAlign:'center',width:'100%'}}>Tap anywhere to continue →</div>
         </div>
       )}
 
