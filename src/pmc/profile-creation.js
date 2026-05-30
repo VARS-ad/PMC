@@ -264,7 +264,6 @@ const PC_TEMPLATES = {
   },
   documents:        { label: 'Document database', singlePane: true },
   reminderSettings: { label: 'Reminder Email',   singlePane: true },
-  invoiceDocuments: { label: 'Invoice Docs',     singlePane: true },
 };
 
 function downloadAsXlsx(filename, headers, rows) {
@@ -346,7 +345,7 @@ const ProfileCreationPage = () => {
   const [authChecked, setAuthChecked] = useState(false);
   const [pmcSession, setPmcSession] = useState(null);
   const isReadOnly = !!(PC_TEMPLATES[section] && PC_TEMPLATES[section].readOnly);
-  // Documents / Reminder Email / Invoice Docs use single-pane custom UIs
+  // Documents / Reminder Email use single-pane custom UIs
   // (no Summary / Bulk / Manual sub-tabs).
   const isSinglePane = !!(PC_TEMPLATES[section] && PC_TEMPLATES[section].singlePane);
   const effectiveInner = isReadOnly ? 'summary' : inner;
@@ -414,7 +413,6 @@ const ProfileCreationPage = () => {
 
       {isSinglePane && section === 'documents'        && <DocumentLibraryPage embedded/>}
       {isSinglePane && section === 'reminderSettings' && <ReminderSettingsSection/>}
-      {isSinglePane && section === 'invoiceDocuments' && <InvoiceDocumentsBulkSection/>}
       {!isSinglePane && effectiveInner === 'summary' && <PCSummary section={section}/>}
       {!isSinglePane && effectiveInner === 'bulk'    && <PCBulkUpload section={section}/>}
       {!isSinglePane && effectiveInner === 'manual'  && <PCManualUpload section={section}/>}
@@ -1298,8 +1296,7 @@ const PCBulkUpload = ({ section }) => {
       {section === 'buildings' ? (
         <>
           <div className="card">
-            <div style={{fontSize:12,letterSpacing:'0.1em',textTransform:'uppercase',color:'var(--text-secondary)',marginBottom:8,fontWeight:600}}>1 · Example data</div>
-            <div style={{fontSize:13,color:'var(--text-muted)',marginBottom:18}}>Four property types — each has its own columns and example rows. Use the type your data matches.</div>
+            <div style={{fontSize:12,letterSpacing:'0.1em',textTransform:'uppercase',color:'var(--text-secondary)',marginBottom:18,fontWeight:600}}>1 · Example data</div>
             {Object.entries(BUILDINGS_BY_TYPE).map(([typeKey, t]) => (
               <div key={typeKey} style={{marginBottom:22,paddingBottom:18,borderBottom:'1px solid var(--border-light)'}}>
                 <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:10,gap:14,flexWrap:'wrap'}}>
@@ -1315,9 +1312,11 @@ const PCBulkUpload = ({ section }) => {
                     <tbody>{t.examples.map((row,i) => (<tr key={i}>{row.map((v,j) => <td key={j}>{v == null || v === '' ? '—' : v}</td>)}</tr>))}</tbody>
                   </table>
                 </div>
-                <ul style={{fontSize:12,color:'var(--text-secondary)',paddingLeft:22,marginTop:12,marginBottom:0,lineHeight:1.6}}>
-                  {t.rules.map((r,i) => <li key={i}>{r}</li>)}
-                </ul>
+                {typeKey === 'Residential' && (
+                  <div style={{fontSize:12,color:'var(--text-secondary)',marginTop:10,lineHeight:1.5}}>
+                    One row per unit (Floor and Unit required); OWNER columns describe the owner — repeat the building name on every row; RESIDENT columns describe the current occupant; leave blank for vacant units.
+                  </div>
+                )}
               </div>
             ))}
             <div style={{fontSize:12,color:'var(--text-muted)',fontStyle:'italic'}}>Use the per-type upload pickers in step 2 below so each file is checked against the right column set.</div>
@@ -1326,17 +1325,13 @@ const PCBulkUpload = ({ section }) => {
       ) : (
         <>
           <div className="card">
-            <div style={{fontSize:12,letterSpacing:'0.1em',textTransform:'uppercase',color:'var(--text-secondary)',marginBottom:8,fontWeight:600}}>1 · Example data</div>
-            <div style={{fontSize:13,color:'var(--text-muted)',marginBottom:14}}>Pre-populated rows you'll replace with your real data.</div>
+            <div style={{fontSize:12,letterSpacing:'0.1em',textTransform:'uppercase',color:'var(--text-secondary)',marginBottom:14,fontWeight:600}}>1 · Example data</div>
             <div className="data-table-scroll">
               <table className="data-table" style={{fontSize:12}}>
                 <thead><tr>{cfg.headers.map(h => <th key={h}>{h}</th>)}</tr></thead>
                 <tbody>{cfg.examples.map((row,i) => (<tr key={i}>{row.map((v,j) => <td key={j}>{v == null || v === '' ? '—' : v}</td>)}</tr>))}</tbody>
               </table>
             </div>
-            <ul style={{fontSize:13,color:'var(--text-secondary)',paddingLeft:22,marginTop:16,marginBottom:0,lineHeight:1.75}}>
-              {cfg.rules.map((r,i) => <li key={i}>{r}</li>)}
-            </ul>
           </div>
 
           <div className="card">
@@ -3176,29 +3171,55 @@ const ContractDetailModal = ({ contract, onClose }) => {
 const DOW_LIST = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
 
 // ---- Digest content categories ----
-// The same six-category selection drives THREE surfaces:
+// The same five-category selection drives THREE surfaces:
 //   1. The contracts-reminders composer above (filters the visible list)
 //   2. The in-app bell (topbar reads `reminder_settings.digest_categories`)
 //   3. The reminders-digest Edge Function (PDF + email body — follow-up)
-// Defaults to all six ON; persisted to reminder_settings.digest_categories.
+// Defaults to all five ON; persisted to reminder_settings.digest_categories.
+// Each category lists EXACTLY the bullets that show up in the email + PDF.
 const DIGEST_CATEGORIES = [
-  { id: 'money',      icon: '$', label: 'Money',
-    desc: 'Overdue invoices + Upcoming 30 days.' },
-  { id: 'leases',     icon: '⌂', label: 'Leases',
-    desc: 'Leases expiring within 60 days.' },
-  { id: 'srs',        icon: '!', label: 'Service requests',
-    desc: 'Urgent open + open > 7 days.' },
-  { id: 'contracts',  icon: '§', label: 'Maintenance contracts',
-    desc: 'Expiring within 90 days + outstanding vendor invoices.' },
-  { id: 'ops',        icon: '◷', label: 'Today’s ops',
-    desc: 'Visitors expected today, move-in/out, guard shift handovers.' },
-  { id: 'compliance', icon: '✓', label: 'Compliance certificates',
-    desc: 'Expiring within 90 days.' },
+  { id: 'payments',  label: 'Payments', items: [
+    'Total amount overdue (resident invoices past due)',
+    'Total amount due in the next 30 days',
+    'Number of open invoices + their total amount',
+    'Leases expiring in the next 30 days',
+  ]},
+  { id: 'leases',    label: 'Leases', items: [
+    'Leases expiring within 60 days',
+  ]},
+  { id: 'srs',       label: 'Service requests', items: [
+    'Open service requests right now (count)',
+    'Open service requests with no update for 2+ days',
+  ]},
+  { id: 'contracts', label: 'Maintenance contracts', items: [
+    'Maintenance contracts expiring within 90 days',
+    'Outstanding maintenance / vendor invoice amount',
+  ]},
+  { id: 'ops',       label: 'Today’s ops', items: [
+    'Visitors expected today',
+    'Move-in / move-out scheduled',
+    'Guard shift handovers',
+  ]},
 ];
 const DIGEST_DEFAULT = DIGEST_CATEGORIES.map(c => c.id);
 
+// Old → new id remap for previously-saved reminder_settings.digest_categories.
+// 'money' was renamed to 'payments'; 'compliance' was dropped entirely.
+const _DIGEST_LEGACY_REMAP = { money: 'payments' };
+const _DIGEST_VALID = new Set(DIGEST_DEFAULT);
+const normalizeDigestCategories = (arr) => {
+  if (!Array.isArray(arr) || arr.length === 0) return [...DIGEST_DEFAULT];
+  const out = [];
+  for (const raw of arr) {
+    const id = _DIGEST_LEGACY_REMAP[raw] || raw;
+    if (_DIGEST_VALID.has(id) && !out.includes(id)) out.push(id);
+  }
+  // Preserve canonical ordering — easier to scan in the DB.
+  return DIGEST_DEFAULT.filter(d => out.includes(d));
+};
+
 const DigestCategorySelector = ({ value, onChange, saving }) => {
-  const selected = Array.isArray(value) && value.length > 0 ? value : DIGEST_DEFAULT;
+  const selected = normalizeDigestCategories(value);
   const toggle = (id) => {
     if (saving) return;
     const has = selected.includes(id);
@@ -3207,19 +3228,18 @@ const DigestCategorySelector = ({ value, onChange, saving }) => {
     onChange(DIGEST_DEFAULT.filter(d => next.includes(d)));
   };
   return (
-    <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit, minmax(220px, 1fr))',gap:10}}>
+    <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit, minmax(260px, 1fr))',gap:10}}>
       {DIGEST_CATEGORIES.map(c => {
         const on = selected.includes(c.id);
         return (
           <div key={c.id} onClick={() => toggle(c.id)}
-            style={{padding:'12px 14px',border:'1px solid ' + (on ? '#3E4C59' : 'var(--border-light)'),borderRadius:8,background: on ? '#f6f9f3' : '#fff',cursor: saving ? 'default' : 'pointer',display:'flex',gap:10,alignItems:'flex-start',transition:'background .15s,border-color .15s',opacity: saving ? 0.7 : 1}}>
+            style={{padding:'14px 16px',border:'1px solid ' + (on ? '#3E4C59' : 'var(--border-light)'),borderRadius:8,background: on ? '#f6f9f3' : '#fff',cursor: saving ? 'default' : 'pointer',display:'flex',gap:10,alignItems:'flex-start',transition:'background .15s,border-color .15s',opacity: saving ? 0.7 : 1}}>
             <input type="checkbox" checked={on} readOnly style={{marginTop:3,width:14,height:14,accentColor:'#3E4C59',flexShrink:0}}/>
             <div style={{minWidth:0,flex:1}}>
-              <div style={{fontSize:13,fontWeight:600,color:'var(--text-dark)',display:'flex',alignItems:'center',gap:6}}>
-                <span style={{display:'inline-flex',alignItems:'center',justifyContent:'center',width:18,height:18,borderRadius:4,background:'#E6EAE9',color:'#3E4C59',fontSize:11,fontWeight:700,fontFamily:'inherit'}}>{c.icon}</span>
-                {c.label}
-              </div>
-              <div style={{fontSize:11,color:'var(--text-muted)',marginTop:4,lineHeight:1.4}}>{c.desc}</div>
+              <div style={{fontSize:13,fontWeight:600,color:'var(--text-dark)'}}>{c.label}</div>
+              <ul style={{fontSize:12,color:'var(--text-secondary)',margin:'8px 0 0',paddingLeft:18,lineHeight:1.55}}>
+                {c.items.map((line, i) => <li key={i}>{line}</li>)}
+              </ul>
             </div>
           </div>
         );
@@ -3252,6 +3272,7 @@ const EmbeddedRemindersComposer = ({ digestCategories }) => {
   const [leadFilter, setLeadFilter]     = useState('all');
   const [dismissTarget, setDismissTarget] = useState(null);
   const [dismissNote, setDismissNote]   = useState('');
+  const [expanded, setExpanded]         = useState(false);
 
   const reload = async () => {
     setError(null);
@@ -3322,15 +3343,36 @@ const EmbeddedRemindersComposer = ({ digestCategories }) => {
   const tb = (t) => (typeof _typeBadge === 'function') ? _typeBadge(t) : { label: t, bg:'#E6EAE9', fg:'#61707D' };
   const lb = (l) => (typeof _leadBadge === 'function') ? _leadBadge(l) : { label: 'Window', bg:'#E6EAE9', fg:'#61707D' };
 
+  const totalCount   = reminders.length;
+  const overdueCount = reminders.filter(r => r.days_until < 0).length;
+
   return (
     <div className="card" style={{marginBottom:18}}>
-      <div style={{marginBottom:14}}>
-        <div style={{fontSize:14,fontWeight:600,color:'var(--text-dark)'}}>Open contract reminders</div>
-        <div style={{fontSize:12,color:'var(--text-muted)',marginTop:4}}>
-          Leases, vendor contracts and generic contracts expiring within the next 90 days. Mark handled once renewed or actioned.
+      <div
+        onClick={() => setExpanded(v => !v)}
+        style={{display:'flex',alignItems:'center',gap:12,cursor:'pointer',userSelect:'none',marginBottom: expanded ? 14 : 0}}
+      >
+        <div style={{flex:1}}>
+          <div style={{fontSize:14,fontWeight:600,color:'var(--text-dark)',display:'flex',alignItems:'center',gap:10}}>
+            Open contract reminders
+            {leases !== null && totalCount > 0 && (
+              <span style={{padding:'2px 8px',borderRadius:10,fontSize:11,fontWeight:500,background:'var(--bg-surface)',color:'var(--text-secondary)',border:'1px solid var(--border-light)'}}>
+                {totalCount}
+                {overdueCount > 0 && <span style={{color:'#8b4a42',marginLeft:6}}>· {overdueCount} overdue</span>}
+              </span>
+            )}
+          </div>
+          <div style={{fontSize:12,color:'var(--text-muted)',marginTop:4}}>
+            Leases, vendor contracts and generic contracts expiring within the next 90 days. Mark handled once renewed or actioned.
+          </div>
         </div>
+        <span style={{fontSize:11,color:'var(--text-muted)',whiteSpace:'nowrap'}}>
+          {expanded ? 'Hide ▴' : 'Show ▾'}
+        </span>
       </div>
 
+      {expanded && (
+      <>
       <div style={{display:'flex',gap:14,flexWrap:'wrap',alignItems:'flex-end',marginBottom:14}}>
         <div style={{flex:'1 1 160px'}}>
           <label style={{fontSize:10,letterSpacing:'0.06em',textTransform:'uppercase',color:'var(--text-secondary)',marginBottom:6,display:'block',fontWeight:500}}>Type</label>
@@ -3402,6 +3444,8 @@ const EmbeddedRemindersComposer = ({ digestCategories }) => {
           Showing first 25 of {filtered.length}. Open the standalone Reminders view for the full list.
         </div>
       )}
+      </>
+      )}
 
       {dismissTarget && (
         <div className="modal-overlay" onClick={() => setDismissTarget(null)}>
@@ -3447,12 +3491,15 @@ const ReminderSettingsSection = () => {
     if (!supabaseClient) return;
     const { data, error: e } = await supabaseClient.from('reminder_settings').select('*').eq('id', 1).maybeSingle();
     if (e) setError(e.message);
-    setSettings(data || {
-      id: 1, email_enabled: false, email_recipients: [],
-      digest_cadence: 'daily', digest_days_of_week: [...DOW_LIST],
-      digest_time_local: '09:00', digest_timezone: 'Asia/Dubai',
-      digest_categories: [...DIGEST_DEFAULT],
-    });
+    const normalised = data
+      ? { ...data, digest_categories: normalizeDigestCategories(data.digest_categories) }
+      : {
+          id: 1, email_enabled: false, email_recipients: [],
+          digest_cadence: 'daily', digest_days_of_week: [...DOW_LIST],
+          digest_time_local: '09:00', digest_timezone: 'Asia/Dubai',
+          digest_categories: [...DIGEST_DEFAULT],
+        };
+    setSettings(normalised);
   };
   useEffect(() => { load(); }, []);
   useEffect(() => () => { if (previewSrc) URL.revokeObjectURL(previewSrc); }, [previewSrc]);
@@ -3468,7 +3515,7 @@ const ReminderSettingsSection = () => {
       digest_days_of_week: next.digest_days_of_week,
       digest_time_local:   next.digest_time_local,
       digest_timezone:     next.digest_timezone,
-      digest_categories:   next.digest_categories || DIGEST_DEFAULT,
+      digest_categories:   normalizeDigestCategories(next.digest_categories),
       updated_at:          new Date().toISOString(),
     }).eq('id', 1);
     if (e) setError(e.message);
@@ -3710,311 +3757,6 @@ const ReminderSettingsSection = () => {
         </div>
       </div>
     </div>
-    </div>
-  );
-};
-
-// ==================== INVOICE DOCUMENTS — BULK UPLOAD ====================
-// Drop a folder of PDFs / images named {invoice_number}_{kind}.{ext}
-// and the page parses each filename, batch-looks-up the matching invoice,
-// uploads to the right Storage bucket, and inserts metadata. Works for
-// two targets:
-//   • Resident invoices  → invoices + invoice_attachments + invoice-attachments
-//   • Contractor invoices → vendor_payments + vendor_documents + maintenance-documents
-// Both targets share the same filename convention; the "kind" hint
-// (payment / receipt / proof) maps to the right DB enum per target.
-
-// Generic parser — returns { invoice_number, hint } or null. The hint is
-// resolved into a concrete kind by the active target's kindMap.
-function parseInvoiceDocFilename(name) {
-  const dot  = name.lastIndexOf('.');
-  const base = dot > 0 ? name.slice(0, dot) : name;
-  const u    = base.lastIndexOf('_');
-  if (u <= 0) return null;
-  const invoice_number = base.slice(0, u).trim();
-  const hint           = base.slice(u + 1).trim().toLowerCase();
-  if (!invoice_number || !hint) return null;
-  return { invoice_number, hint };
-}
-
-const INVOICE_BULK_TARGETS = {
-  resident: {
-    label:        'Resident invoices',
-    lookupTable:  'invoices',
-    lookupSelect: 'id,invoice_number',
-    metaTable:    'invoice_attachments',
-    metaFkColumn: 'invoice_id',
-    bucket:       'invoice-attachments',
-    kindMap: {
-      invoice: 'invoice', bill: 'invoice',
-      payment: 'payment_proof', payment_proof: 'payment_proof', proof: 'payment_proof', receipt: 'payment_proof',
-    },
-    storagePath: (parent, kind, file) => parent.id + '/' + kind + '/' + Date.now() + '-' + file.name.replace(/[^a-zA-Z0-9._-]/g, '_'),
-    metaRow:     (parent, kind, path, file) => ({
-      invoice_id:   parent.id,
-      kind,
-      storage_path: path,
-      file_name:    file.name,
-      mime_type:    file.type || null,
-      size_bytes:   file.size || null,
-    }),
-    replaceExisting: false,
-    slotHints: ['invoice (or bill)', 'payment_proof (or payment, proof, receipt)'],
-  },
-  contractor: {
-    label:        'Contractor invoices',
-    lookupTable:  'vendor_payments',
-    lookupSelect: 'id,invoice_number,vendor_id',
-    metaTable:    'vendor_documents',
-    metaFkColumn: 'payment_id',
-    bucket:       'maintenance-documents',
-    kindMap: {
-      invoice: 'invoice', bill: 'invoice',
-      payment: 'payment_receipt', payment_receipt: 'payment_receipt', proof: 'payment_receipt', receipt: 'payment_receipt',
-    },
-    storagePath: (parent, kind, file) => parent.vendor_id + '/payment-' + parent.id + '/' + kind + '/' + Date.now() + '-' + file.name.replace(/[^a-zA-Z0-9._-]/g, '_'),
-    metaRow:     (parent, kind, path, file) => ({
-      vendor_id:    parent.vendor_id,
-      payment_id:   parent.id,
-      kind,
-      storage_path: path,
-      filename:     file.name,
-    }),
-    replaceExisting: false,
-    slotHints: ['invoice (or bill)', 'payment_receipt (or payment, proof, receipt)'],
-  },
-};
-
-const InvoiceDocumentsBulkSection = () => {
-  const [targetKey, setTargetKey] = useState('resident');
-  const [files,     setFiles]     = useState([]);
-  const [busy,      setBusy]      = useState(false);
-  const [results,   setResults]   = useState(null);
-  const inputRef = useRef(null);
-  const target = INVOICE_BULK_TARGETS[targetKey];
-
-  const reset = () => { setFiles([]); setResults(null); if (inputRef.current) inputRef.current.value = ''; };
-
-  const switchTarget = (key) => { setTargetKey(key); reset(); };
-
-  const handlePick = async (fileList) => {
-    setResults(null);
-    const arr = Array.from(fileList || []);
-    if (arr.length === 0) { setFiles([]); return; }
-
-    // 1. Parse filenames + resolve hint → DB kind for this target.
-    const parsedRows = arr.map(file => {
-      const parsed = parseInvoiceDocFilename(file.name);
-      if (!parsed) return { file, parsed: null, kind: null, status: 'skip-unparseable', message: 'Filename must be {invoice_number}_{kind}.pdf' };
-      const kind = target.kindMap[parsed.hint] || null;
-      if (!kind) return { file, parsed, kind: null, status: 'skip-unparseable', message: 'Unknown kind "' + parsed.hint + '" for ' + target.label.toLowerCase() };
-      return { file, parsed, kind, status: 'parsed', message: null };
-    });
-
-    // 2. Batch-lookup parents by invoice_number.
-    const numbers = Array.from(new Set(parsedRows.filter(r => r.kind).map(r => r.parsed.invoice_number)));
-    let parentByNumber = {};
-    if (numbers.length > 0 && supabaseClient) {
-      const { data, error } = await supabaseClient
-        .from(target.lookupTable)
-        .select(target.lookupSelect)
-        .in('invoice_number', numbers);
-      if (error) {
-        setFiles(parsedRows.map(r => ({ ...r, status: 'error', message: 'Lookup failed: ' + error.message })));
-        return;
-      }
-      (data || []).forEach(row => { parentByNumber[row.invoice_number] = row; });
-    }
-
-    // 3. Annotate each row with the matched parent.
-    const withMatches = parsedRows.map(r => {
-      if (!r.kind) return r;
-      const parent = parentByNumber[r.parsed.invoice_number];
-      if (!parent) return { ...r, status: 'skip-no-invoice', message: 'No ' + target.lookupTable + ' with number ' + r.parsed.invoice_number };
-      return { ...r, status: 'ready', parent, message: 'Will upload to ' + r.kind + ' slot' };
-    });
-    setFiles(withMatches);
-  };
-
-  const handleUpload = async () => {
-    if (!supabaseClient) { alert('Supabase client not configured.'); return; }
-    const ready = files.filter(r => r.status === 'ready');
-    if (ready.length === 0) { alert('No files ready to upload.'); return; }
-    setBusy(true);
-
-    const rows = [];
-    for (let i = 0; i < ready.length; i++) {
-      const r = ready[i];
-      const { file, parsed, kind, parent } = r;
-      try {
-        // a) If this target enforces one-per-slot, delete the existing one first.
-        let replaced = false;
-        if (target.replaceExisting) {
-          const { data: existing } = await supabaseClient
-            .from(target.metaTable)
-            .select('id,storage_path')
-            .eq(target.metaFkColumn, parent.id)
-            .eq('kind', kind)
-            .maybeSingle();
-          if (existing) {
-            await supabaseClient.storage.from(target.bucket).remove([existing.storage_path]);
-            await supabaseClient.from(target.metaTable).delete().eq('id', existing.id);
-            replaced = true;
-          }
-        }
-        // b) Upload object.
-        const path = target.storagePath(parent, kind, file);
-        const { error: upErr } = await supabaseClient.storage
-          .from(target.bucket)
-          .upload(path, file, { contentType: file.type || undefined });
-        if (upErr) throw new Error(upErr.message);
-        // c) Insert metadata row.
-        const { error: insErr } = await supabaseClient.from(target.metaTable).insert(target.metaRow(parent, kind, path, file));
-        if (insErr) throw new Error(insErr.message);
-        rows.push({ name: file.name, invoice_number: parsed.invoice_number, kind, ok: true, replaced });
-      } catch (e) {
-        rows.push({ name: file.name, invoice_number: parsed.invoice_number, kind, ok: false, error: e.message || String(e) });
-      }
-    }
-
-    const ok       = rows.filter(r => r.ok).length;
-    const replaced = rows.filter(r => r.ok && r.replaced).length;
-    const skipped  = files.filter(r => r.status !== 'ready').length;
-    const errored  = rows.filter(r => !r.ok).length;
-    setResults({ ok, replaced, skipped, errored, rows });
-    setBusy(false);
-  };
-
-  const statusPill = (status) => {
-    const colours = {
-      ready:             { bg:'#e6efe1', fg:'#5a6b4f', label:'Ready' },
-      'skip-unparseable':{ bg:'#fdf2dc', fg:'#7a5a1f', label:'Filename unrecognized' },
-      'skip-no-invoice': { bg:'#fdf2f1', fg:'#8b4a42', label:'No matching invoice' },
-      error:             { bg:'#fdf2f1', fg:'#8b4a42', label:'Error' },
-      parsed:            { bg:'#E6EAE9', fg:'#61707D', label:'Parsing…' },
-    };
-    const c = colours[status] || colours.parsed;
-    return <span style={{padding:'2px 8px',borderRadius:4,fontSize:10,fontWeight:500,background:c.bg,color:c.fg,whiteSpace:'nowrap'}}>{c.label}</span>;
-  };
-
-  const readyCount     = files.filter(r => r.status === 'ready').length;
-  const unparseable    = files.filter(r => r.status === 'skip-unparseable').length;
-  const noInvoice      = files.filter(r => r.status === 'skip-no-invoice').length;
-
-  const examplesFor = (key) => key === 'resident'
-    ? 'RNT-2026-00431_invoice.pdf, RNT-2026-00431_payment.pdf, INV-MD-202605-cc08f0_receipt.jpg'
-    : 'INV-VENDOR-001_invoice.pdf, INV-VENDOR-001_receipt.pdf, BILL-2025-09_payment.jpg';
-
-  return (
-    <div className="card">
-      <div style={{fontSize:13,fontWeight:600,marginBottom:6}}>Bulk upload invoice documents</div>
-      <div style={{fontSize:12,color:'var(--text-secondary)',marginBottom:14}}>
-        Backfill historical invoice files in one batch. The system reads each filename, matches it to an existing invoice, and uploads the file into the matching slot.
-        {target.replaceExisting
-          ? ' Re-uploading the same slot replaces the previous file.'
-          : ' Multiple files can land in the same slot (no replace).'}
-      </div>
-
-      <div style={{display:'flex',gap:8,marginBottom:16}}>
-        {Object.entries(INVOICE_BULK_TARGETS).map(([key, t]) => (
-          <div key={key}
-            onClick={() => switchTarget(key)}
-            style={{padding:'7px 14px',cursor:'pointer',fontSize:12,fontWeight:targetKey===key?500:400,color:targetKey===key?'var(--text-dark)':'var(--text-secondary)',border: targetKey===key ? '1.5px solid var(--bg-warm-dark)' : '1px solid var(--border-light)',borderRadius:8,background:targetKey===key?'var(--bg-surface)':'#fff'}}>
-            {t.label}
-          </div>
-        ))}
-      </div>
-
-      <div style={{padding:14,background:'var(--bg-surface)',border:'1px solid var(--border-light)',borderRadius:8,marginBottom:18}}>
-        <div style={{fontSize:12,fontWeight:600,marginBottom:8}}>Filename convention</div>
-        <div style={{fontSize:12,color:'var(--text-secondary)',marginBottom:10}}>
-          Each file must be named <code style={{padding:'1px 6px',background:'#fff',borderRadius:4,border:'1px solid var(--border-light)'}}>{'{invoice_number}_{kind}.{ext}'}</code>. For <strong>{target.label.toLowerCase()}</strong>, kind is one of:
-        </div>
-        <ul style={{fontSize:12,color:'var(--text-secondary)',margin:0,paddingLeft:18,lineHeight:1.7}}>
-          {target.slotHints.map((h, i) => <li key={i}><strong>{h.split(' (')[0]}</strong>{h.includes('(') ? ' (' + h.split('(')[1] : ''}</li>)}
-        </ul>
-        <div style={{fontSize:12,color:'var(--text-secondary)',marginTop:10}}>
-          Examples: <code>{examplesFor(targetKey)}</code>
-        </div>
-      </div>
-
-      <div style={{display:'flex',gap:10,alignItems:'center',marginBottom:14}}>
-        <input
-          ref={inputRef}
-          type="file"
-          multiple
-          accept=".pdf,image/*"
-          style={{display:'none'}}
-          onChange={e => handlePick(e.target.files)}
-        />
-        <button className="btn" onClick={() => inputRef.current && inputRef.current.click()} disabled={busy}>
-          Choose files…
-        </button>
-        {files.length > 0 && (
-          <button className="btn" onClick={reset} disabled={busy} style={{color:'var(--text-secondary)'}}>Clear</button>
-        )}
-        {files.length > 0 && (
-          <div style={{fontSize:12,color:'var(--text-muted)'}}>
-            {files.length} file{files.length===1?'':'s'} picked
-            {readyCount     > 0 && ' · ' + readyCount + ' ready'}
-            {unparseable    > 0 && ' · ' + unparseable + ' unrecognized'}
-            {noInvoice      > 0 && ' · ' + noInvoice + ' unmatched'}
-          </div>
-        )}
-      </div>
-
-      {files.length > 0 && (
-        <div className="data-table-scroll" style={{marginBottom:14,maxHeight:320,overflowY:'auto',border:'1px solid var(--border-light)',borderRadius:8}}>
-          <table className="data-table" style={{fontSize:12}}>
-            <thead>
-              <tr>
-                <th>File</th>
-                <th>Invoice #</th>
-                <th>Slot</th>
-                <th>Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              {files.map((r, i) => (
-                <tr key={i}>
-                  <td style={{wordBreak:'break-all'}}>{r.file.name}</td>
-                  <td>{r.parsed ? r.parsed.invoice_number : '—'}</td>
-                  <td>{r.kind || '—'}</td>
-                  <td>
-                    {statusPill(r.status)}
-                    {r.message && <div style={{fontSize:10,color:'var(--text-muted)',marginTop:2}}>{r.message}</div>}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
-
-      {readyCount > 0 && !results && (
-        <button className="btn btn-primary" disabled={busy} onClick={handleUpload}>
-          {busy ? 'Uploading…' : 'Upload ' + readyCount + ' file' + (readyCount===1?'':'s')}
-        </button>
-      )}
-
-      {results && (
-        <div style={{padding:14,background:'var(--bg-surface)',border:'1px solid var(--border-light)',borderRadius:8,marginTop:6}}>
-          <div style={{fontSize:13,fontWeight:600,marginBottom:8}}>Done</div>
-          <div style={{fontSize:12,display:'flex',gap:18,flexWrap:'wrap',marginBottom:10}}>
-            <span style={{color:'#5a6b4f',fontWeight:500}}>✓ {results.ok} uploaded{results.replaced > 0 ? ' (' + results.replaced + ' replaced existing)' : ''}</span>
-            {results.errored > 0 && <span style={{color:'#8b4a42',fontWeight:500}}>✗ {results.errored} failed</span>}
-            {results.skipped > 0 && <span style={{color:'#7a5a1f'}}>{results.skipped} skipped (see table above)</span>}
-          </div>
-          {results.errored > 0 && (
-            <div style={{fontSize:11,color:'var(--text-secondary)',maxHeight:140,overflowY:'auto'}}>
-              {results.rows.filter(r => !r.ok).map((r, i) => (
-                <div key={i} style={{marginBottom:4}}><strong>{r.name}</strong> — {r.error}</div>
-              ))}
-            </div>
-          )}
-          <button className="btn btn-sm" style={{marginTop:10}} onClick={reset}>Upload another batch</button>
-        </div>
-      )}
     </div>
   );
 };

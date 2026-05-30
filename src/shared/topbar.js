@@ -117,13 +117,24 @@ const TopBar = ({ onCreateClick, onMenuToggle, onLogout, onNavigate }) => {
   // those items everywhere. Default to all six ON so the bell behaves the
   // same as before for users who haven't visited the new settings yet.
   // Category → bell-group mapping:
-  //   money     → invoices
+  //   payments  → invoices
   //   leases    → reminders where source_type === 'lease'
   //   srs       → srs
   //   contracts → reminders where source_type === 'vendor' OR 'contract'
   //   ops       → visits (visitors expected today + move-ins/outs + shift handovers)
-  //   compliance→ (no current source — included for forward compat)
-  const TOPBAR_DIGEST_DEFAULT = ['money','leases','srs','contracts','ops','compliance'];
+  const TOPBAR_DIGEST_DEFAULT = ['payments','leases','srs','contracts','ops'];
+  // Legacy ids saved in reminder_settings.digest_categories before the rename.
+  const _TOPBAR_LEGACY = { money: 'payments' };
+  const _TOPBAR_VALID  = new Set(TOPBAR_DIGEST_DEFAULT);
+  const _normalizeCats = (arr) => {
+    if (!Array.isArray(arr) || arr.length === 0) return TOPBAR_DIGEST_DEFAULT;
+    const out = [];
+    for (const raw of arr) {
+      const id = _TOPBAR_LEGACY[raw] || raw;
+      if (_TOPBAR_VALID.has(id) && !out.includes(id)) out.push(id);
+    }
+    return out.length > 0 ? out : TOPBAR_DIGEST_DEFAULT;
+  };
   const [digestCats, setDigestCats] = useState(TOPBAR_DIGEST_DEFAULT);
   // Persisted "last marked-as-read" timestamp. When user clicks the
   // "Mark all read" link we store now(); the bell's red dot only shows
@@ -145,7 +156,7 @@ const TopBar = ({ onCreateClick, onMenuToggle, onLogout, onNavigate }) => {
         // the same toggles configured in Database → Reminder Email.
         const { data: rs } = await supabaseClient.from('reminder_settings').select('digest_categories').eq('id', 1).maybeSingle();
         if (mounted && rs && Array.isArray(rs.digest_categories) && rs.digest_categories.length > 0) {
-          setDigestCats(rs.digest_categories);
+          setDigestCats(_normalizeCats(rs.digest_categories));
         }
         const filterB = selectedProperties.length > 0 ? selectedProperties : null;
         const { data: units } = await supabaseClient.from('units').select('id,building_id,unit_number');
@@ -195,7 +206,7 @@ const TopBar = ({ onCreateClick, onMenuToggle, onLogout, onNavigate }) => {
   const _activeCats = digestCats || TOPBAR_DIGEST_DEFAULT;
   const visibleNotifs = {
     srs:       _activeCats.includes('srs')   ? notifs.srs      : [],
-    invoices:  _activeCats.includes('money') ? notifs.invoices : [],
+    invoices:  _activeCats.includes('payments') ? notifs.invoices : [],
     visits:    _activeCats.includes('ops')   ? notifs.visits   : [],
     reminders: notifs.reminders.filter(r => {
       if (r.source_type === 'lease')    return _activeCats.includes('leases');
