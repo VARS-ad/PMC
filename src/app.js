@@ -36,6 +36,10 @@ const App = () => {
   const [customStart, setCustomStart] = useState('');
   const [customEnd, setCustomEnd] = useState('');
   const [toast, setToast] = useState(null);
+  // Personalised welcome splash shown right after a successful login.
+  // Mirrors the pre-login intro: ~1.6s static then ~0.6s fade. Component
+  // owns its own teardown so the parent just sets `showWelcome` to true.
+  const [showWelcome, setShowWelcome] = useState(false);
   const [language, setLanguageState] = useState(getInitialLanguage);
   // Apply RTL/LTR to <html> + <body> whenever language changes
   React.useEffect(() => { applyDirection(language); }, [language]);
@@ -262,6 +266,7 @@ const App = () => {
       <LoginPage onLogin={(selectedRole) => {
         try { localStorage.setItem('varspm_role', selectedRole); } catch(e) {}
         setRole(selectedRole);
+        setShowWelcome(true);
       }} syncStatus={syncStatus}/>
     </AppContext.Provider>
   );
@@ -328,6 +333,7 @@ const App = () => {
       </div>
       <SyncDot/>
       {toast && <div className="toast">{toast}</div>}
+      {showWelcome && <PostLoginWelcome roleLabel="PMC profile" userName={data.currentUser?.name} onDone={() => setShowWelcome(false)}/>}
     </AppContext.Provider>
   );
 };
