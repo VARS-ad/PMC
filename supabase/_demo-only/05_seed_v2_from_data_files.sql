@@ -502,6 +502,45 @@ BEGIN
   END;
 
   -- =========================================================================
+  -- 9b. Contracts — insurance, maintenance master, management, finance,
+  --     bank loan, fit-out, etc. Each tied to a building (or NULL for
+  --     portfolio-wide).
+  -- =========================================================================
+  DECLARE
+    contracts_data record;
+    contract_id uuid;
+  BEGIN
+    FOR contracts_data IN
+      SELECT * FROM (VALUES
+        ('Aljil Tower - Property Insurance',          'AXA Gulf Insurance',          'Insurance',        b_aljil,   current_date + 180,  'Comprehensive building cover including third-party liability.'),
+        ('Skyline Heights - Property Insurance',      'Oman Insurance Company',      'Insurance',        b_skyline, current_date + 240,  'Standard fire + flood + earthquake cover.'),
+        ('Al Qurm View - Property Insurance',         'AXA Gulf Insurance',          'Insurance',        b_qurm,    current_date + 90,   'Renewal due in 3 months.'),
+        ('Marina Bay - Commercial Insurance',         'Sukoon Insurance',            'Insurance',        b_marina,  current_date + 365,  'Combined commercial + landlord cover.'),
+        ('Boulevard Plaza - Commercial Insurance',    'Sukoon Insurance',            'Insurance',        b_boulev,  current_date + 365,  'Combined commercial + landlord cover.'),
+        ('Palm Frond M-23 - Villa Insurance',         'Tokio Marine Middle East',    'Insurance',        b_palm,    current_date + 200,  'Signature villa cover including private pool.'),
+        ('Aljil Tower - Maintenance Master',          'AquaFix Plumbing LLC',        'Maintenance',      b_aljil,   current_date + 330,  'Annual plumbing maintenance contract.'),
+        ('Skyline Heights - Cleaning Master',         'CrystalClean Co.',            'Maintenance',      b_skyline, current_date + 270,  'Daily cleaning of lobbies, corridors, parking.'),
+        ('Marina Bay - HVAC Master',                  'CoolBreeze HVAC',             'Maintenance',      b_marina,  current_date + 300,  'Quarterly HVAC servicing + emergency callouts.'),
+        ('Aljil Tower - Lift Maintenance',            'AscendLift Maintenance',      'Maintenance',      b_aljil,   current_date + 330,  'Annual lift maintenance with monthly inspections.'),
+        ('Property Management - Master Agreement',    'VARS PM',                     'Management',       NULL,      current_date + 450,  'Master agreement for property management services across portfolio.'),
+        ('Aljil Tower - Bank Loan',                   'Emirates NBD',                'Finance',          b_aljil,   current_date + 1800, 'Mortgage / loan facility, 5-year term.'),
+        ('Skyline Heights - Bank Loan',               'First Abu Dhabi Bank',        'Finance',          b_skyline, current_date + 1500, 'Mortgage facility.'),
+        ('Boulevard Plaza - Bank Loan',               'HSBC Middle East',            'Finance',          b_boulev,  current_date + 2200, 'Commercial mortgage facility.'),
+        ('Aljil Tower - Security Services',           'Shield Security Services',    'Security',         b_aljil,   current_date + 365,  '24/7 manned security + CCTV monitoring.'),
+        ('Marina Bay - Security Services',            'Shield Security Services',    'Security',         b_marina,  current_date + 365,  'Building security + lift attendant.'),
+        ('Boulevard Plaza - Security Services',       'Shield Security Services',    'Security',         b_boulev,  current_date + 365,  'Lobby security + CCTV.'),
+        ('Portfolio - Pest Control',                  'PestGuard UAE',               'Maintenance',      NULL,      current_date + 280,  'Quarterly pest control across all properties.'),
+        ('Portfolio - Garden & Landscape',            'GreenLeaf Gardening',         'Maintenance',      NULL,      current_date + 240,  'Bi-weekly garden maintenance for villas + common landscaping.'),
+        ('Aljil Tower - Fit-Out Lease (Cafe)',        'Bloom Cafe FZ-LLC',           'Lease',            b_aljil,   current_date + 540,  'Ground-floor cafe lease, 3-year term.')
+      ) AS c(nm, party, ctype, bid, end_dt, nt)
+    LOOP
+      contract_id := gen_random_uuid();
+      INSERT INTO public.contracts (id, name, counterparty, contract_type, end_date, building_id, notes, owner_id)
+        VALUES (contract_id, contracts_data.nm, contracts_data.party, contracts_data.ctype, contracts_data.end_dt, contracts_data.bid, contracts_data.nt, p_uid);
+    END LOOP;
+  END;
+
+  -- =========================================================================
   -- 10. Reminder + app_state (composite PK)
   -- =========================================================================
   INSERT INTO public.reminder_settings (id, email_enabled, email_recipients, owner_id)
