@@ -453,14 +453,7 @@ const TopBar = ({ onCreateClick, onMenuToggle, onLogout, onNavigate }) => {
                 <div style={{fontSize:16,fontWeight:600,color:'#131F23',lineHeight:1.2,wordBreak:'break-word'}}>{userName}</div>
                 {userRole && <div style={{fontSize:12,color:'#61707D',marginTop:4,textTransform:'capitalize'}}>{userRole}</div>}
               </div>
-              <div style={{padding:'8px 12px'}}>
-                <div onClick={()=>{setShowPmProfile(false); if (onNavigate) onNavigate('profile');}} style={{display:'flex',alignItems:'center',gap:10,padding:'10px 4px',cursor:'pointer',fontSize:13,color:'#131F23'}}>
-                  <div style={{width:30,height:30,borderRadius:'50%',background:'#E6EAE9',display:'flex',alignItems:'center',justifyContent:'center'}}><Icon name="user" size={14}/></div>
-                  {t('pm.myProfile')}
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#ccc" strokeWidth="2" style={{marginLeft:'auto'}}><polyline points="9 18 15 12 9 6"/></svg>
-                </div>
-              </div>
-              <div style={{padding:'4px 12px 12px',borderTop:'1px solid #f0f0f0'}}>
+              <div style={{padding:'8px 12px 12px'}}>
                 <div onClick={()=>{setShowPmProfile(false);onLogout();}} style={{display:'flex',alignItems:'center',gap:10,padding:'10px 4px',cursor:'pointer',fontSize:13,color:'#131F23'}}>
                   {/* Logout icon matched to the My Profile chip — same neutral
                       container, same #61707D stroke as the user icon. No red

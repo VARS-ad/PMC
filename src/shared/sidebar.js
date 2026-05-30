@@ -26,7 +26,8 @@ const Sidebar = ({ page, setPage, isOpen, onClose, onLogout }) => {
       { id: 'guards',          label: t('nav.guards'),        icon: 'guards' },
     ]},
     { label: 'Settings', items: [
-      { id: 'profileCreation', label: 'Database',              icon: 'reports' },
+      { id: 'profileCreation', label: 'Setup & Data',          icon: 'reports' },
+      { id: 'profile',         label: 'My Profile',            icon: 'user' },
     ]},
   ];
 

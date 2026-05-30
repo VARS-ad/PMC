@@ -279,6 +279,7 @@ const App = () => {
         setRole(selectedRole);
         setShowWelcome(true);
       }} syncStatus={syncStatus}/>
+      <GlobalOverlays showToast={showToast}/>
     </AppContext.Provider>
   );
 
@@ -292,6 +293,7 @@ const App = () => {
     return (
       <AppContext.Provider value={{ data, setData, showToast, language, setLanguage, t, selectedProperties, setSelectedProperties, timeRange, setTimeRange, customStart, setCustomStart, customEnd, setCustomEnd }}>
         <ResidentApp onLogout={handleLogout}/>
+        <GlobalOverlays showToast={showToast}/>
         {toast && <div className="toast">{toast}</div>}
       </AppContext.Provider>
     );
@@ -303,6 +305,7 @@ const App = () => {
       <AppContext.Provider value={{ data, setData, showToast, language, setLanguage, t, selectedProperties, setSelectedProperties, timeRange, setTimeRange, customStart, setCustomStart, customEnd, setCustomEnd }}>
         <SecurityApp onLogout={handleLogout}/>
         <SyncDot/>
+        <GlobalOverlays showToast={showToast}/>
         {toast && <div className="toast">{toast}</div>}
       </AppContext.Provider>
     );
@@ -340,6 +343,7 @@ const App = () => {
         <MobileBottomNav page={page} setPage={setPage}/>
       </div>
       <SyncDot/>
+      <GlobalOverlays showToast={showToast}/>
       {toast && <div className="toast">{toast}</div>}
       {showWelcome && <PostLoginWelcome roleLabel="PMC profile" userName={data.currentUser?.name} onDone={() => setShowWelcome(false)}/>}
     </AppContext.Provider>

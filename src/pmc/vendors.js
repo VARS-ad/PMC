@@ -1015,9 +1015,28 @@ const PMCVendorsPage = ({ setPage }) => {
 
         {vendors === null ? (
           <div style={{padding: 24, color: 'var(--text-muted)', fontSize: 13}}>{t('vendors.loading')}</div>
+        ) : vendors.length === 0 ? (
+          <div style={{maxWidth:520,margin:'24px auto',padding:32,background:'#fff',border:'1px solid var(--border-light)',borderRadius:8,textAlign:'center'}}>
+            <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#a07d3c" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{margin:'0 auto 14px',display:'block'}}>
+              <path d="M3 21h18"/>
+              <path d="M5 21V7l7-4 7 4v14"/>
+              <path d="M9 21v-6h6v6"/>
+              <path d="M10 10h.01"/>
+              <path d="M14 10h.01"/>
+            </svg>
+            <div style={{fontSize:16,fontWeight:600,color:'var(--text-dark)',marginBottom:8}}>No maintenance companies on file yet</div>
+            <div style={{fontSize:13,color:'var(--text-muted)',lineHeight:1.55,marginBottom:18}}>Use Setup &amp; Data → Vendors to add your first.</div>
+            <button
+              className="btn btn-primary"
+              onClick={() => {
+                try { window._profileCreationInitialSection = 'vendors'; } catch (_) {}
+                if (setPage) setPage('profileCreation');
+              }}
+            >Add vendor</button>
+          </div>
         ) : filtered.length === 0 ? (
           <div style={{padding: 40, color: 'var(--text-muted)', fontSize: 13, textAlign: 'center'}}>
-            {vendors.length === 0 ? t('vendors.empty.none') : t('vendors.empty.noMatch')}
+            {t('vendors.empty.noMatch')}
           </div>
         ) : (
           <table className="data-table">

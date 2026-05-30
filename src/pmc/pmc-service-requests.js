@@ -322,6 +322,18 @@ const PMCServiceRequestsPage = () => {
         {error && <div style={{padding:10,background:'#fdf2f1',color:'#8b4a42',borderRadius:6,fontSize:12,marginBottom:14}}>{error}</div>}
         {rows === null ? (
           <div style={{padding:24,color:'var(--text-muted)',fontSize:13}}>Loading…</div>
+        ) : rows.length === 0 ? (
+          <div style={{maxWidth:520,margin:'24px auto',padding:32,background:'#fff',border:'1px solid var(--border-light)',borderRadius:8,textAlign:'center'}}>
+            <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#a07d3c" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{margin:'0 auto 14px',display:'block'}}>
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+              <polyline points="14 2 14 8 20 8"/>
+              <line x1="9" y1="13" x2="15" y2="13"/>
+              <line x1="9" y1="17" x2="13" y2="17"/>
+            </svg>
+            <div style={{fontSize:16,fontWeight:600,color:'var(--text-dark)',marginBottom:8}}>No service requests yet</div>
+            <div style={{fontSize:13,color:'var(--text-muted)',lineHeight:1.55,marginBottom:18}}>They appear here once tenants log issues or you add them manually.</div>
+            <button className="btn btn-primary" onClick={() => setShowCreate(true)}>Add request</button>
+          </div>
         ) : filtered.length === 0 ? (
           <div style={{padding:32,color:'var(--text-muted)',fontSize:13,textAlign:'center'}}>No service requests match these filters.</div>
         ) : (
