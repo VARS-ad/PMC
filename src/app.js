@@ -81,26 +81,33 @@ const App = () => {
       // The next foreground poll (or tab refocus) picks up any changes.
       if (!isInitial && typeof document !== 'undefined' && document.hidden) return;
       try {
+        // .maybeSingle() instead of .single() so an empty result is row=null
+        // rather than a PGRST116 / 406 error. With per-user RLS on the demo
+        // project, an unauthenticated visitor sees zero rows and we don't
+        // want the console flooded with red 406s.
         const { data: row, error } = await supabaseClient
           .from('app_state')
           .select('data, updated_at')
           .eq('id', 'main')
-          .single();
+          .maybeSingle();
         if (error) {
-          if (isInitial && error.code === 'PGRST116') {
-            // No row exists yet — create one with initial data
-            console.log('No data row — creating initial');
-            await supabaseClient.from('app_state').upsert({ id: 'main', data: initialData, updated_at: new Date().toISOString() });
-            setSyncStatus('online');
-            // CRITICAL: enable writes so pre-approvals get saved to cloud
-            initialLoadDoneRef.current = true;
-            console.log('Initial row created — cloud writes enabled');
-            return;
-          }
           console.log('Supabase query error:', error.code, error.message);
           if (isInitial) {
             setSyncStatus('offline');
             initialLoadDoneRef.current = true; // allow writes even if cloud errored
+          }
+          return;
+        }
+        if (!row) {
+          // No row exists yet for this user. On the working project that
+          // meant "first run, create the seed"; on the demo project it
+          // mostly means "not signed in yet". Try the seed upsert anyway
+          // — RLS will reject it silently when unauthenticated, which is
+          // fine.
+          if (isInitial) {
+            await supabaseClient.from('app_state').upsert({ id: 'main', data: initialData, updated_at: new Date().toISOString() });
+            setSyncStatus('online');
+            initialLoadDoneRef.current = true;
           }
           return;
         }
