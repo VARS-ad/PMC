@@ -697,15 +697,12 @@ const PMCReportsPage = () => {
         <div>
           <h1>Reports</h1>
           <div className="subtitle">Portfolio, financial &amp; operational insights for the selected period</div>
-          <div style={{fontSize:12,color:'var(--text-muted)',marginTop:4}}>Portfolio, Financial, Residents, Service Ops, Vendors, Visitors &amp; Guards, Compliance — same dataset, sliced 7 ways.</div>
         </div>
         <div style={{display:'flex',gap:10,alignItems:'center',flexWrap:'wrap'}}>
           <TimeRangePicker/>
-          {/* Both buttons open the same Download Data modal — the bundled
-              "Full Portfolio Report (PDF)" is the first option and the
-              per-section spreadsheets follow. Labels split for clarity. */}
-          <button className="btn btn-primary" onClick={() => setShowDownload(true)} disabled={!stats}>Branded PDF (all sections)</button>
-          <button className="btn" onClick={() => setShowDownload(true)} disabled={!stats}>Spreadsheet (this section)</button>
+          {/* Single Download Data button — the modal lets the user pick
+              between the branded full report and per-section spreadsheets. */}
+          <button className="btn btn-primary" onClick={() => setShowDownload(true)} disabled={!stats}>Download Data</button>
         </div>
       </div>
 
