@@ -381,26 +381,44 @@ BEGIN
     END LOOP;
   END;
 
-  -- 6c. Vendor documents — one signed contract per vendor. Storage path
-  -- points at a placeholder slot; the UI falls back to a stock thumbnail
-  -- when the object is missing (so the row still opens). Lets the
-  -- maintenance modal show non-zero Documents count.
+  -- 6c. Vendor documents — multiple per vendor across all 4 kinds
+  --     (contract, invoice, payment_receipt, other). Storage paths point
+  --     at placeholder slots; UI falls back to stock thumbnail when the
+  --     object is missing (so the row still opens). Lets the maintenance
+  --     company modal show real Document counts + the docs tab is full.
   DECLARE
     v_rec record;
+    safe_name text;
   BEGIN
     FOR v_rec IN
-      SELECT id, name FROM public.vendors WHERE owner_id = p_uid
+      SELECT id, name, service_category FROM public.vendors WHERE owner_id = p_uid
     LOOP
-      INSERT INTO public.vendor_documents (vendor_id, kind, filename, storage_path, owner_id)
-      VALUES
-        (v_rec.id, 'contract',
-         replace(v_rec.name, ' ', '_') || '_Service_Agreement.pdf',
-         v_rec.id::text || '/contract-placeholder.pdf',
-         p_uid),
-        (v_rec.id, 'invoice',
-         replace(v_rec.name, ' ', '_') || '_Latest_Invoice.pdf',
-         v_rec.id::text || '/invoice-placeholder.pdf',
-         p_uid);
+      safe_name := regexp_replace(v_rec.name, '[^a-zA-Z0-9]+', '_', 'g');
+      INSERT INTO public.vendor_documents (vendor_id, kind, filename, storage_path, owner_id) VALUES
+        -- Contract bundle
+        (v_rec.id, 'contract', safe_name || '_Service_Agreement_2026.pdf',
+         v_rec.id::text || '/contract-agreement.pdf', p_uid),
+        (v_rec.id, 'contract', safe_name || '_NDA_Signed.pdf',
+         v_rec.id::text || '/contract-nda.pdf', p_uid),
+        -- Compliance docs as "other"
+        (v_rec.id, 'other',    safe_name || '_Trade_License.pdf',
+         v_rec.id::text || '/trade-license.pdf', p_uid),
+        (v_rec.id, 'other',    safe_name || '_TRN_Certificate.pdf',
+         v_rec.id::text || '/trn-certificate.pdf', p_uid),
+        (v_rec.id, 'other',    safe_name || '_Insurance_Certificate.pdf',
+         v_rec.id::text || '/insurance-cert.pdf', p_uid),
+        -- Recent invoices
+        (v_rec.id, 'invoice',  safe_name || '_Invoice_' || to_char(current_date - 5,  'YYYYMM') || '.pdf',
+         v_rec.id::text || '/invoice-' || to_char(current_date - 5,  'YYYYMM') || '.pdf', p_uid),
+        (v_rec.id, 'invoice',  safe_name || '_Invoice_' || to_char(current_date - 35, 'YYYYMM') || '.pdf',
+         v_rec.id::text || '/invoice-' || to_char(current_date - 35, 'YYYYMM') || '.pdf', p_uid),
+        (v_rec.id, 'invoice',  safe_name || '_Invoice_' || to_char(current_date - 65, 'YYYYMM') || '.pdf',
+         v_rec.id::text || '/invoice-' || to_char(current_date - 65, 'YYYYMM') || '.pdf', p_uid),
+        -- Payment receipts (for paid invoices)
+        (v_rec.id, 'payment_receipt', safe_name || '_Receipt_' || to_char(current_date - 30, 'YYYYMM') || '.pdf',
+         v_rec.id::text || '/receipt-' || to_char(current_date - 30, 'YYYYMM') || '.pdf', p_uid),
+        (v_rec.id, 'payment_receipt', safe_name || '_Receipt_' || to_char(current_date - 60, 'YYYYMM') || '.pdf',
+         v_rec.id::text || '/receipt-' || to_char(current_date - 60, 'YYYYMM') || '.pdf', p_uid);
     END LOOP;
   END;
 
@@ -540,29 +558,46 @@ BEGIN
   END;
 
   -- =========================================================================
-  -- 8. Visits — 60 spread across last 14 days + next 5 days
+  -- 8. Visits — ~180 spread across last 30 days + next 14 days
+  --    Each gets a time of day so Visitor Flow charts have texture across
+  --    morning / afternoon / evening, not just one bar per day.
   -- =========================================================================
   DECLARE
     pool_size int;
     i int;
     vd date;
     vs text;
+    vt time;
+    hr int;
+    purpose_pool text[] := ARRAY[
+      'Friends over for dinner','Family visit','Maintenance call-out','Package delivery',
+      'Grocery delivery','Cleaning service','AC servicing','Plumbing repair',
+      'Lift inspection','Property viewing','Real-estate broker','Insurance assessor',
+      'Furniture delivery','New tenant viewing','Move-in support','Move-out support',
+      'IT installation','Pest control','Window cleaning','Pool service'
+    ];
   BEGIN
     pool_size := array_length(v_unit_pool, 1);
     IF pool_size IS NULL OR pool_size = 0 THEN pool_size := 1; END IF;
-    FOR i IN 1..60 LOOP
-      vd := current_date - 14 + (i % 19);   -- -14 .. +5
+    FOR i IN 1..180 LOOP
+      vd := current_date - 30 + (i % 45);   -- -30 .. +14
+      hr := 8 + ((i * 3) % 13);              -- 8..20
+      vt := make_time(hr, ((i * 7) % 6) * 10, 0);
       IF vd > current_date THEN
         vs := 'Pre-Approved';
       ELSIF vd = current_date THEN
-        vs := CASE i % 3 WHEN 0 THEN 'On-Premise' WHEN 1 THEN 'Pre-Approved' ELSE 'Checked-Out' END;
-      ELSE
+        vs := CASE i % 4 WHEN 0 THEN 'On-Premise' WHEN 1 THEN 'Pre-Approved' WHEN 2 THEN 'Checked-Out' ELSE 'On-Premise' END;
+      ELSIF vd >= current_date - 1 THEN
         vs := 'Checked-Out';
+      ELSE
+        vs := CASE i % 10 WHEN 0 THEN 'No-Show' WHEN 1 THEN 'Cancelled' ELSE 'Checked-Out' END;
       END IF;
-      INSERT INTO public.visits (visitor_name, type, status, visit_date, unit_id, owner_id) VALUES
+      INSERT INTO public.visits (visitor_name, visitor_phone, type, status, visit_date, visit_time, purpose, unit_id, owner_id) VALUES
         (visit_names[1 + (i % array_length(visit_names,1))],
+         '+971 5' || ((i * 13) % 9 + 1) || ' ' || lpad(((i * 211) % 1000)::text, 3, '0') || ' ' || lpad(((i * 9007) % 10000)::text, 4, '0'),
          visit_types[1 + (i % array_length(visit_types,1))],
-         vs, vd,
+         vs, vd, vt,
+         purpose_pool[1 + (i % array_length(purpose_pool,1))],
          v_unit_pool[1 + ((i * 7) % pool_size)],
          p_uid);
     END LOOP;
@@ -595,9 +630,10 @@ BEGIN
   END;
 
   -- =========================================================================
-  -- 9b. Contracts — insurance, maintenance master, management, finance,
-  --     bank loan, fit-out, etc. Each tied to a building (or NULL for
-  --     portfolio-wide).
+  -- 9b. Contracts (~50) — insurance, maintenance, cleaning, lift, HVAC,
+  --     security, telecom, utility, fit-out, valuation, audit, finance.
+  --     Spread end-dates so the "Expiring 60 days" / "Expiring 90 days"
+  --     watchlists have real entries to surface.
   -- =========================================================================
   DECLARE
     contracts_data record;
@@ -605,31 +641,125 @@ BEGIN
   BEGIN
     FOR contracts_data IN
       SELECT * FROM (VALUES
+        -- ---------- Insurance ----------
         ('Aljil Tower - Property Insurance',          'AXA Gulf Insurance',          'Insurance',        b_aljil,   current_date + 180,  'Comprehensive building cover including third-party liability.'),
         ('Skyline Heights - Property Insurance',      'Oman Insurance Company',      'Insurance',        b_skyline, current_date + 240,  'Standard fire + flood + earthquake cover.'),
-        ('Al Qurm View - Property Insurance',         'AXA Gulf Insurance',          'Insurance',        b_qurm,    current_date + 90,   'Renewal due in 3 months.'),
+        ('Al Qurm View - Property Insurance',         'AXA Gulf Insurance',          'Insurance',        b_qurm,    current_date + 28,   'Renewal due within 30 days - quote pending.'),
         ('Marina Bay - Commercial Insurance',         'Sukoon Insurance',            'Insurance',        b_marina,  current_date + 365,  'Combined commercial + landlord cover.'),
         ('Boulevard Plaza - Commercial Insurance',    'Sukoon Insurance',            'Insurance',        b_boulev,  current_date + 365,  'Combined commercial + landlord cover.'),
-        ('Palm Frond M-23 - Villa Insurance',         'Tokio Marine Middle East',    'Insurance',        b_palm,    current_date + 200,  'Signature villa cover including private pool.'),
-        ('Aljil Tower - Maintenance Master',          'AquaFix Plumbing LLC',        'Maintenance',      b_aljil,   current_date + 330,  'Annual plumbing maintenance contract.'),
+        ('Palm Frond M-23 - Villa Insurance',         'Tokio Marine Middle East',    'Insurance',        b_palm,    current_date + 50,   'Signature villa cover including private pool.'),
+        ('Emirates Hills V-14 - Villa Insurance',     'AXA Gulf Insurance',          'Insurance',        b_hills,   current_date + 410,  'High-value villa cover.'),
+        ('Coral Bay Villa - Villa Insurance',         'Tokio Marine Middle East',    'Insurance',        b_coral,   current_date + 215,  'Beachfront villa cover.'),
+        -- ---------- Maintenance ----------
+        ('Aljil Tower - Plumbing Master',             'AquaFix Plumbing LLC',        'Maintenance',      b_aljil,   current_date + 330,  'Annual plumbing maintenance contract.'),
         ('Skyline Heights - Cleaning Master',         'CrystalClean Co.',            'Maintenance',      b_skyline, current_date + 270,  'Daily cleaning of lobbies, corridors, parking.'),
         ('Marina Bay - HVAC Master',                  'CoolBreeze HVAC',             'Maintenance',      b_marina,  current_date + 300,  'Quarterly HVAC servicing + emergency callouts.'),
+        ('Boulevard Plaza - Cleaning Master',         'CrystalClean Co.',            'Maintenance',      b_boulev,  current_date + 90,   'Daily commercial cleaning. Renewal due in 90 days.'),
         ('Aljil Tower - Lift Maintenance',            'AscendLift Maintenance',      'Maintenance',      b_aljil,   current_date + 330,  'Annual lift maintenance with monthly inspections.'),
-        ('Property Management - Master Agreement',    'VARS PM',                     'Management',       NULL,      current_date + 450,  'Master agreement for property management services across portfolio.'),
-        ('Aljil Tower - Bank Loan',                   'Emirates NBD',                'Finance',          b_aljil,   current_date + 1800, 'Mortgage / loan facility, 5-year term.'),
-        ('Skyline Heights - Bank Loan',               'First Abu Dhabi Bank',        'Finance',          b_skyline, current_date + 1500, 'Mortgage facility.'),
-        ('Boulevard Plaza - Bank Loan',               'HSBC Middle East',            'Finance',          b_boulev,  current_date + 2200, 'Commercial mortgage facility.'),
+        ('Marina Bay - Lift Maintenance',             'AscendLift Maintenance',      'Maintenance',      b_marina,  current_date + 180,  'Lift + travelator maintenance.'),
+        ('Al Qurm View - Lift Maintenance',           'AscendLift Maintenance',      'Maintenance',      b_qurm,    current_date + 410,  'Three-lift maintenance contract.'),
+        ('Portfolio - Pest Control',                  'PestGuard UAE',               'Maintenance',      NULL,      current_date + 280,  'Quarterly pest control across all properties.'),
+        ('Portfolio - Garden & Landscape',            'GreenLeaf Gardening',         'Maintenance',      NULL,      current_date + 240,  'Bi-weekly garden maintenance for villas + common landscaping.'),
+        ('Aljil Tower - General Handyman',            'Handy Pros General',          'Maintenance',      b_aljil,   current_date - 30,   'EXPIRED. Awaiting replacement vendor.'),
+        ('Palm Frond M-23 - Pool Maintenance',        'CrystalClean Co.',            'Maintenance',      b_palm,    current_date + 145,  'Weekly pool servicing + chemical balance.'),
+        ('Coral Bay Villa - Pool Maintenance',        'CrystalClean Co.',            'Maintenance',      b_coral,   current_date + 145,  'Weekly pool servicing.'),
+        -- ---------- Security ----------
         ('Aljil Tower - Security Services',           'Shield Security Services',    'Security',         b_aljil,   current_date + 365,  '24/7 manned security + CCTV monitoring.'),
         ('Marina Bay - Security Services',            'Shield Security Services',    'Security',         b_marina,  current_date + 365,  'Building security + lift attendant.'),
         ('Boulevard Plaza - Security Services',       'Shield Security Services',    'Security',         b_boulev,  current_date + 365,  'Lobby security + CCTV.'),
-        ('Portfolio - Pest Control',                  'PestGuard UAE',               'Maintenance',      NULL,      current_date + 280,  'Quarterly pest control across all properties.'),
-        ('Portfolio - Garden & Landscape',            'GreenLeaf Gardening',         'Maintenance',      NULL,      current_date + 240,  'Bi-weekly garden maintenance for villas + common landscaping.'),
-        ('Aljil Tower - Fit-Out Lease (Cafe)',        'Bloom Cafe FZ-LLC',           'Lease',            b_aljil,   current_date + 540,  'Ground-floor cafe lease, 3-year term.')
+        ('Skyline Heights - Security Services',       'Shield Security Services',    'Security',         b_skyline, current_date + 75,   'Renewal due in 75 days.'),
+        ('Palm Frond M-23 - Alarm Monitoring',        'Shield Security Services',    'Security',         b_palm,    current_date + 320,  'Burglar alarm + panic button monitoring.'),
+        -- ---------- Utilities ----------
+        ('Aljil Tower - DEWA Master',                 'DEWA',                        'Utility',          b_aljil,   current_date + 730,  'Master DEWA account for common areas.'),
+        ('Skyline Heights - DEWA Master',             'DEWA',                        'Utility',          b_skyline, current_date + 730,  'Master DEWA account for common areas.'),
+        ('Al Qurm View - ADDC Master',                'ADDC',                        'Utility',          b_qurm,    current_date + 730,  'Master ADDC account for common areas.'),
+        ('Marina Bay - DEWA Master',                  'DEWA',                        'Utility',          b_marina,  current_date + 730,  'Master DEWA account incl. district cooling.'),
+        ('Boulevard Plaza - District Cooling',        'Empower',                     'Utility',          b_boulev,  current_date + 450,  'District cooling contract.'),
+        -- ---------- Telecom ----------
+        ('Aljil Tower - Telecom (Common)',            'du',                          'Utility',          b_aljil,   current_date + 200,  'Lobby Wi-Fi + intercom + lift phone lines.'),
+        ('Marina Bay - Telecom (Common)',             'Etisalat',                    'Utility',          b_marina,  current_date + 200,  'Lobby Wi-Fi + CCTV bandwidth.'),
+        ('Boulevard Plaza - Fibre (Common)',          'Etisalat',                    'Utility',          b_boulev,  current_date + 360,  'Tenant fibre backbone.'),
+        -- ---------- Management / Compliance ----------
+        ('Property Management - Master Agreement',    'VARS PM',                     'Management',       NULL,      current_date + 450,  'Master agreement for property management services across portfolio.'),
+        ('Portfolio - Audit Services',                'Crowe Mak Ghazali',           'Management',       NULL,      current_date + 300,  'Annual audit of consolidated portfolio accounts.'),
+        ('Portfolio - Tax Filing (Corporate Tax)',    'PwC Middle East',             'Management',       NULL,      current_date + 300,  'Corporate Tax registration + annual filing.'),
+        ('Portfolio - Trade License Renewal',         'DED Dubai',                   'Management',       NULL,      current_date + 100,  'Annual trade license renewal.'),
+        ('Aljil Tower - Ejari Registrations',         'RERA / Ejari',                'Management',       b_aljil,   current_date + 360,  'Annual Ejari portal subscription + lease filings.'),
+        ('Marina Bay - Trakheesi Permits',            'DLD Dubai',                   'Management',       b_marina,  current_date + 360,  'Trakheesi permits for commercial leases.'),
+        -- ---------- Finance ----------
+        ('Aljil Tower - Bank Loan',                   'Emirates NBD',                'Finance',          b_aljil,   current_date + 1800, 'Mortgage / loan facility, 5-year term.'),
+        ('Skyline Heights - Bank Loan',               'First Abu Dhabi Bank',        'Finance',          b_skyline, current_date + 1500, 'Mortgage facility.'),
+        ('Boulevard Plaza - Bank Loan',               'HSBC Middle East',            'Finance',          b_boulev,  current_date + 2200, 'Commercial mortgage facility.'),
+        ('Marina Bay - Bank Loan',                    'Mashreq Bank',                'Finance',          b_marina,  current_date + 2000, 'Commercial mortgage.'),
+        ('Palm Frond M-23 - Bank Loan',               'Emirates NBD',                'Finance',          b_palm,    current_date + 2400, 'Private banking mortgage.'),
+        ('Portfolio - Valuation Services',            'Knight Frank',                'Finance',          NULL,      current_date + 365,  'Annual independent property valuation.'),
+        -- ---------- Lease / Fit-out ----------
+        ('Aljil Tower - Fit-Out Lease (Cafe)',        'Bloom Cafe FZ-LLC',           'Lease',            b_aljil,   current_date + 540,  'Ground-floor cafe lease, 3-year term.'),
+        ('Boulevard Plaza - Anchor Tenant',           'Lulu Group Retail',           'Lease',            b_boulev,  current_date + 1100, 'Anchor tenant - retail, 5-year term.'),
+        ('Marina Bay - Office Tenant (Block A)',      'Tasheel Business Services',   'Lease',            b_marina,  current_date + 540,  'Floor-3 office lease.'),
+        ('Marina Bay - Office Tenant (Block B)',      'Aurora Consulting FZE',       'Lease',            b_marina,  current_date + 720,  'Two-floor office lease.')
       ) AS c(nm, party, ctype, bid, end_dt, nt)
     LOOP
       contract_id := gen_random_uuid();
       INSERT INTO public.contracts (id, name, counterparty, contract_type, end_date, building_id, notes, owner_id)
         VALUES (contract_id, contracts_data.nm, contracts_data.party, contracts_data.ctype, contracts_data.end_dt, contracts_data.bid, contracts_data.nt, p_uid);
+    END LOOP;
+  END;
+
+  -- =========================================================================
+  -- 9c. Amenity bookings — pool, gym, BBQ area, function room, padel court
+  --     across the residential buildings. Spread across the last 30 days
+  --     and the next 14 days so the calendar / activity feed have shape.
+  -- =========================================================================
+  DECLARE
+    amenity_pool text[] := ARRAY[
+      'Swimming Pool','Gym','Function Room','BBQ Area','Padel Court',
+      'Kids Play Area','Sauna','Tennis Court','Rooftop Lounge','Meeting Room'
+    ];
+    residential_buildings uuid[] := ARRAY[b_aljil, b_skyline, b_qurm, b_marina];
+    pool_size int;
+    bldg_count int;
+    res_pool_size int;
+    i int;
+    bd date;
+    st_hr int;
+    en_hr int;
+    bld uuid;
+    stat text;
+  BEGIN
+    pool_size := array_length(v_unit_pool, 1);
+    IF pool_size IS NULL OR pool_size = 0 THEN pool_size := 1; END IF;
+    res_pool_size := array_length(v_resident_pool, 1);
+    IF res_pool_size IS NULL OR res_pool_size = 0 THEN res_pool_size := 1; END IF;
+    bldg_count := array_length(residential_buildings, 1);
+
+    FOR i IN 1..80 LOOP
+      bd := current_date - 30 + (i % 45);
+      st_hr := 8 + ((i * 5) % 12);
+      en_hr := LEAST(st_hr + 1 + (i % 3), 22);
+      bld := residential_buildings[1 + ((i * 3) % bldg_count)];
+      IF bd > current_date THEN
+        stat := 'Confirmed';
+      ELSIF bd = current_date THEN
+        stat := CASE i % 3 WHEN 0 THEN 'Confirmed' WHEN 1 THEN 'Confirmed' ELSE 'Pending' END;
+      ELSE
+        stat := CASE i % 8 WHEN 0 THEN 'Cancelled' ELSE 'Completed' END;
+      END IF;
+      INSERT INTO public.amenity_bookings (
+        building_id, unit_id, resident_profile_id,
+        amenity_name, booking_date, start_time, end_time, guests, status, owner_id
+      ) VALUES (
+        bld,
+        v_unit_pool[1 + ((i * 11) % pool_size)],
+        v_resident_pool[1 + ((i * 17) % res_pool_size)],
+        amenity_pool[1 + (i % array_length(amenity_pool,1))],
+        bd,
+        make_time(st_hr, 0, 0),
+        make_time(en_hr, 0, 0),
+        CASE WHEN i % 3 = 0 THEN 2 + (i % 6) ELSE 0 END,
+        stat,
+        p_uid
+      );
     END LOOP;
   END;
 

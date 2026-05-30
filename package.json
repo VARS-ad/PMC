@@ -8,8 +8,7 @@
     "build":      "node build.mjs",
     "build:demo": "node build.mjs --target=demo",
     "dev":        "node build.mjs --watch",
-    "dev:demo":   "node build.mjs --target=demo --watch",
-    "snapshot":   "node tools/snapshot-working-to-seed.mjs"
+    "dev:demo":   "node build.mjs --target=demo --watch"
   },
   "devDependencies": {
     "esbuild": "^0.25.0"
