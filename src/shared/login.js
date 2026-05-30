@@ -330,20 +330,21 @@ const LoginPage = ({ onLogin, syncStatus }) => {
           <p style={{fontSize:10,letterSpacing:'0.16em',textTransform:'uppercase',color:'var(--text-secondary)',margin:'14px 0 0',fontWeight:400,textAlign:'center'}}>{t('login.subtitle')}</p>
         </div>
 
-        {/* Demo: a quiet outlined "Create a free demo account" pill above
-            the form. Same palette as the form fields — same border colour,
-            white background, slate text. Click to flip to signup mode. */}
+        {/* Demo: parallel CTAs — "Create a free demo account" (warm sand,
+            new visitors) above and the Sign In form below (slate, returning
+            users). Two different colour treatments so the choice is
+            unmistakable. */}
         {IS_DEMO && mode === 'signin' && (
           <div onClick={() => { setMode('signup'); safeSetError(null); }}
             style={{
               display:'flex',alignItems:'center',justifyContent:'center',gap:8,
-              padding:'12px 14px',marginBottom:22,cursor:'pointer',
-              background:'#fff',border:'1px solid var(--border-light)',borderRadius:8,
-              transition:'border-color .15s, background .15s',
+              padding:'13px 14px',marginBottom:22,cursor:'pointer',
+              background:'#DBC5AE',border:'1px solid #c8af90',borderRadius:8,
+              transition:'background .15s, border-color .15s, transform .15s',
             }}
-            onMouseEnter={e => { e.currentTarget.style.borderColor='var(--bg-warm-dark)'; e.currentTarget.style.background='var(--bg-surface)'; }}
-            onMouseLeave={e => { e.currentTarget.style.borderColor='var(--border-light)'; e.currentTarget.style.background='#fff'; }}>
-            <span style={{fontSize:13,fontWeight:500,color:'var(--text-dark)',letterSpacing:'-0.005em'}}>
+            onMouseEnter={e => { e.currentTarget.style.background='#cfb89d'; e.currentTarget.style.borderColor='#b29575'; }}
+            onMouseLeave={e => { e.currentTarget.style.background='#DBC5AE'; e.currentTarget.style.borderColor='#c8af90'; }}>
+            <span style={{fontSize:13,fontWeight:600,color:'#3E4C59',letterSpacing:'-0.005em'}}>
               Create a free demo account
             </span>
           </div>
