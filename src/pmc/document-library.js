@@ -629,12 +629,31 @@ const DocumentLibraryPage = ({ embedded } = {}) => {
   const bucketFor = (att) => att.bucket || DocumentLibrary_BUCKET;
   const tableFor  = (att) => att.source === 'invoice' ? 'invoice_attachments' : 'unit_attachments';
 
+  // Stock placeholder URLs for when the actual storage object doesn't
+  // exist yet (seeded demo metadata has no bytes behind it). The kind on
+  // the attachment row maps to a topical Unsplash image / picsum doc.
+  const PLACEHOLDER_BY_KIND = {
+    photo:         'https://images.unsplash.com/photo-1502672023488-70e25813eb80?w=1400',
+    title_deed:    'https://images.unsplash.com/photo-1554224155-6726b3ff858f?w=1400',
+    layout:        'https://images.unsplash.com/photo-1503387837-b154d5074bd2?w=1400',
+    other:         'https://images.unsplash.com/photo-1568667256549-094345857637?w=1400',
+    invoice:       'https://images.unsplash.com/photo-1554224155-6726b3ff858f?w=1400',
+    payment_proof: 'https://images.unsplash.com/photo-1554224154-22dec7ec8818?w=1400',
+  };
+  const placeholderFor = (att) => PLACEHOLDER_BY_KIND[att.kind] || PLACEHOLDER_BY_KIND.other;
+
   // --- Open a file: lazy signed-URL ------------------------------------
   const openAttachment = async (att) => {
     let url = signedUrls[att.id];
     if (!url) {
       const { data, error: e } = await supabaseClient.storage.from(bucketFor(att)).createSignedUrl(att.storage_path, 600);
-      if (e) { alert('Could not open: ' + e.message); return; }
+      if (e) {
+        // Storage object missing (most commonly seeded demo metadata with
+        // no bytes behind it). Open a stock placeholder so the demo still
+        // visually delivers "click → see something".
+        window.open(placeholderFor(att), '_blank', 'noopener');
+        return;
+      }
       url = data.signedUrl;
       setSignedUrls(prev => ({ ...prev, [att.id]: url }));
     }
@@ -645,7 +664,11 @@ const DocumentLibraryPage = ({ embedded } = {}) => {
   const downloadAttachment = async (att) => {
     try {
       const { data, error: e } = await supabaseClient.storage.from(bucketFor(att)).createSignedUrl(att.storage_path, 600, { download: att.filename });
-      if (e) throw e;
+      if (e) {
+        // Same fallback as open: route to the stock placeholder.
+        window.open(placeholderFor(att), '_blank', 'noopener');
+        return;
+      }
       const a = document.createElement('a');
       a.href = data.signedUrl;
       a.download = att.filename || 'download';

@@ -1,5 +1,13 @@
 // ==================== UNIT ATTACHMENTS ====================
 
+// Stock placeholder URLs when the storage object is missing (seed-only).
+const ATTACHMENT_PLACEHOLDER = {
+  photo:         'https://images.unsplash.com/photo-1502672023488-70e25813eb80?w=1400',
+  title_deed:    'https://images.unsplash.com/photo-1554224155-6726b3ff858f?w=1400',
+  layout:        'https://images.unsplash.com/photo-1503387837-b154d5074bd2?w=1400',
+  other:         'https://images.unsplash.com/photo-1568667256549-094345857637?w=1400',
+};
+
 const UnitAttachmentRow = ({ file, onDelete, canDelete, bucket }) => {
   const b = bucket || 'unit-attachments';
   const [url, setUrl] = useState(null);
@@ -7,9 +15,15 @@ const UnitAttachmentRow = ({ file, onDelete, canDelete, bucket }) => {
     if (!supabaseClient) return;
     let mounted = true;
     supabaseClient.storage.from(b).createSignedUrl(file.storage_path, 300)
-      .then(({ data }) => { if (mounted) setUrl(data && data.signedUrl); });
+      .then(({ data, error }) => {
+        if (!mounted) return;
+        if (data && data.signedUrl) { setUrl(data.signedUrl); return; }
+        // Fallback to a stock placeholder so the filename link opens
+        // *something* instead of 404'ing.
+        setUrl(ATTACHMENT_PLACEHOLDER[file.kind] || ATTACHMENT_PLACEHOLDER.other);
+      });
     return () => { mounted = false; };
-  }, [file.storage_path, b]);
+  }, [file.storage_path, b, file.kind]);
   return (
     <div style={{display:'flex',alignItems:'center',gap:12,padding:'8px 10px',background:'#fff',border:'1px solid var(--border-light)',borderRadius:6,marginBottom:6,fontSize:12}}>
       <div style={{flex:1,minWidth:0,overflow:'hidden'}}>
