@@ -30,6 +30,13 @@ BEGIN
   END LOOP;
 END $$;
 
+-- Drop our own policies if a previous run already created them, so the
+-- script is safe to re-run end-to-end.
+DROP POLICY IF EXISTS demo_storage_read   ON storage.objects;
+DROP POLICY IF EXISTS demo_storage_insert ON storage.objects;
+DROP POLICY IF EXISTS demo_storage_update ON storage.objects;
+DROP POLICY IF EXISTS demo_storage_delete ON storage.objects;
+
 -- Read: any authenticated user
 CREATE POLICY demo_storage_read
   ON storage.objects FOR SELECT TO authenticated
