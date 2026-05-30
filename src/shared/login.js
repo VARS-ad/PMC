@@ -123,17 +123,17 @@ const LoginPage = ({ onLogin, syncStatus }) => {
   // after they explicitly signed out. The flag is set by handleLogout in
   // app.js and consumed here so the very next mount starts in 'ready'.
   const [splashStage, setSplashStage] = useState(() => {
-    // Skip the brand splash when arriving from an auth callback — the
-    // user is mid-flow and shouldn't be made to wait 3.7s before they
-    // can finish.
-    if (_authCallback) return 'ready';
+    // Brand splash skipped on URL load — user wants the login card
+    // immediately, no 3.7s VARS intro. The branded transition still
+    // plays AFTER successful sign-in (login → dashboard), which lives
+    // outside this component. Also map the auth-callback / just-logged-
+    // out paths to 'ready' for the same effect.
     try {
       if (sessionStorage.getItem('varspm_just_logged_out') === '1') {
         sessionStorage.removeItem('varspm_just_logged_out');
-        return 'ready';
       }
     } catch (_) {}
-    return 'splash';
+    return 'ready';
   });
   // Fire the post-callback banner once the splash has resolved (we set
   // splashStage='ready' immediately on callback so this fires right away).
