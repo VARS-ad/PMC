@@ -349,7 +349,11 @@ const ProfileCreationPage = () => {
   }
 
   const authRole = pmcSession?.user?.app_metadata?.role;
-  if (!pmcSession || authRole !== 'pmc') {
+  // On the demo build every signed-in user IS effectively their own PMC --
+  // they own all their portfolio data and there's no real Hassan account to
+  // promote them to. Skip the role gate entirely.
+  const IS_DEMO_BUILD = (typeof VARS_TARGET !== 'undefined' && VARS_TARGET === 'demo');
+  if (!IS_DEMO_BUILD && (!pmcSession || authRole !== 'pmc')) {
     return (
       <div>
         <div className="page-header"><div><h1>Database</h1></div></div>
@@ -358,6 +362,17 @@ const ProfileCreationPage = () => {
             {pmcSession ? 'Your account does not have PMC privileges.' : 'You are not signed in to a real VARS account yet.'}
           </div>
           <div style={{fontSize:12,color:'var(--text-muted)'}}>Log out (top-right) and sign in with email <strong>pmc@vars.ae</strong> / <strong>Welcome2026!</strong> to access this section.</div>
+        </div>
+      </div>
+    );
+  }
+  // Demo with no Supabase session at all — show a friendlier prompt.
+  if (IS_DEMO_BUILD && !pmcSession) {
+    return (
+      <div>
+        <div className="page-header"><div><h1>Database</h1></div></div>
+        <div className="card" style={{padding:32,textAlign:'center'}}>
+          <div style={{fontSize:13,color:'var(--text-secondary)'}}>Sign in to manage your sandbox.</div>
         </div>
       </div>
     );

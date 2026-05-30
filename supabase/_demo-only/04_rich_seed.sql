@@ -306,7 +306,10 @@ BEGIN
     inv_created date;
     inv_amount numeric;
   BEGIN
-    -- Paid (50)
+    -- Paid (50) — distributed so half land THIS month so the overview's
+    -- "Collected (selected period)" KPI isn't a sad AED 0 on a fresh
+    -- signup. First 25 in current month; remaining 25 in the previous
+    -- month so the "last month" comparison line has substance too.
     FOR rec IN
       SELECT ra.profile_id, ra.unit_id, ra.monthly_payment_aed
       FROM public.resident_assignments ra
@@ -315,8 +318,15 @@ BEGIN
       LIMIT 50
     LOOP
       i := i + 1;
-      inv_due     := current_date - 60 + (i % 30);
-      inv_created := inv_due - 10;
+      IF i <= 25 THEN
+        -- This month — created in the first half, due near today.
+        inv_created := date_trunc('month', current_date)::date + ((i * 1) % 14);
+        inv_due     := inv_created + 5;
+      ELSE
+        -- Last month — created mid-month, due before month-end.
+        inv_created := (date_trunc('month', current_date) - interval '1 month')::date + (((i-25) * 1) % 25);
+        inv_due     := inv_created + 5;
+      END IF;
       inv_amount  := COALESCE(rec.monthly_payment_aed, 9000);
       INSERT INTO public.invoices (invoice_number, unit_id, resident_profile_id, description, amount_aed, status, due_date, created_at, owner_id)
         VALUES ('RNT-2026-' || lpad((100+i)::text, 5, '0'), rec.unit_id, rec.profile_id,
