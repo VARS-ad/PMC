@@ -196,12 +196,6 @@ const AnnouncementsPage = () => {
     setShowComposer(true);
   };
 
-  // Compact rich-text toolbar button — was 32×32, dropped to 26×26 so the
-  // row doesn't dominate the body section vertically.
-  const ToolBtn = ({ children }) => (
-    <span style={{display:'inline-flex',alignItems:'center',justifyContent:'center',height:26,minWidth:26,padding:'0 6px',border:'1px solid #D0D6D5',borderRadius:4,cursor:'pointer',fontSize:11,fontWeight:600,color:'#131F23',background:'#fff'}}>{children}</span>
-  );
-
   // File picker for the Attachment block. Stores the chosen File object on
   // the form so it can be uploaded later; we only persist the metadata.
   const attachInputRef = useRef(null);
@@ -278,28 +272,26 @@ const AnnouncementsPage = () => {
               </div>
               <div style={{marginBottom:18}}>
                 <label style={{fontSize:11,fontWeight:600,letterSpacing:'0.06em',textTransform:'uppercase',color:'#131F23',display:'block',marginBottom:8}}>{t('pm.bodyLabel')}</label>
-                {/* Compact rich-text toolbar */}
-                <div style={{display:'flex',gap:4,marginBottom:6}}>
-                  <ToolBtn>B</ToolBtn>
-                  <ToolBtn><em>I</em></ToolBtn>
-                  <ToolBtn><u>U</u></ToolBtn>
-                  <ToolBtn>• List</ToolBtn>
-                  <ToolBtn>Link</ToolBtn>
-                </div>
                 <textarea className="form-input" rows={4} placeholder="Write your announcement here..." value={annForm.body} onChange={e => setAnnForm(p => ({...p, body: e.target.value}))} style={{resize:'vertical',padding:'12px 14px',fontSize:13}}/>
               </div>
-              {/* Priority — centered, max 360px so the pills don't stretch the modal */}
-              <div style={{marginBottom:18,textAlign:'center'}}>
+              {/* Priority — left-aligned, compact text pills (no filled "cover" button) */}
+              <div style={{marginBottom:18}}>
                 <label style={{fontSize:11,fontWeight:600,letterSpacing:'0.06em',textTransform:'uppercase',color:'#131F23',display:'block',marginBottom:8}}>{t('pm.announcePriority')}</label>
-                <div style={{display:'inline-flex',gap:8,maxWidth:360,width:'100%'}}>
-                  <div onClick={() => setAnnForm(p => ({...p, priority:'Normal'}))}
-                    style={{flex:1,padding:'10px 12px',textAlign:'center',border: annForm.priority==='Normal' ? '1.5px solid var(--bg-warm-dark)' : '1px solid var(--border-light)',borderRadius:8,cursor:'pointer',background: annForm.priority==='Normal' ? 'var(--bg-warm-dark)' : '#fff',color: annForm.priority==='Normal' ? '#fff' : 'var(--text-dark)',fontWeight:500,fontSize:13,transition:'all 0.15s'}}>
+                <div style={{display:'inline-flex',gap:6}}>
+                  <span onClick={() => setAnnForm(p => ({...p, priority:'Normal'}))}
+                    style={{padding:'6px 14px',fontSize:12,fontWeight:500,cursor:'pointer',borderRadius:14,userSelect:'none',
+                      border: annForm.priority==='Normal' ? '1px solid var(--text-dark)' : '1px solid var(--border-light)',
+                      background:'#fff',
+                      color: annForm.priority==='Normal' ? 'var(--text-dark)' : 'var(--text-secondary)'}}>
                     {t('pm.normalPriority')}
-                  </div>
-                  <div onClick={() => setAnnForm(p => ({...p, priority:'High'}))}
-                    style={{flex:1,padding:'10px 12px',textAlign:'center',border: annForm.priority==='High' ? '1.5px solid #8b4a42' : '1px solid var(--border-light)',borderRadius:8,cursor:'pointer',background: annForm.priority==='High' ? '#8b4a42' : '#fff',color: annForm.priority==='High' ? '#fff' : 'var(--text-dark)',fontWeight:500,fontSize:13,transition:'all 0.15s'}}>
+                  </span>
+                  <span onClick={() => setAnnForm(p => ({...p, priority:'High'}))}
+                    style={{padding:'6px 14px',fontSize:12,fontWeight:500,cursor:'pointer',borderRadius:14,userSelect:'none',
+                      border: annForm.priority==='High' ? '1px solid #8b4a42' : '1px solid var(--border-light)',
+                      background:'#fff',
+                      color: annForm.priority==='High' ? '#8b4a42' : 'var(--text-secondary)'}}>
                     △ {t('pm.highPriorityLabel')}
-                  </div>
+                  </span>
                 </div>
               </div>
               {/* Attachment — real file picker. Click anywhere on the box to open. */}
@@ -329,7 +321,9 @@ const AnnouncementsPage = () => {
                   )}
                 </div>
               </div>
-              <button className="btn btn-primary" style={{width:'100%',padding:'14px 0',fontSize:14,fontWeight:600,borderRadius:8}} onClick={()=>setComposerStep(2)}>{t('pm.continueAudience')}</button>
+              <div style={{textAlign:'right'}}>
+                <button className="btn btn-primary" style={{padding:'10px 22px',fontSize:13,fontWeight:600,borderRadius:8}} onClick={()=>setComposerStep(2)}>{t('pm.continueAudience')}</button>
+              </div>
             </div>)}
 
             {/* Step 2: Audience — Everyone OR specific (buildings + property types) */}
@@ -519,7 +513,6 @@ const AnnouncementsPage = () => {
               <div style={{background:'#E6EAE9',borderRadius:8,padding:20,marginBottom:20}}>
                 <div style={{display:'flex',gap:6,marginBottom:8}}>
                   <StatusBadge status={annForm.publishMode==='now'?'Live':annForm.publishMode==='schedule'?'Scheduled':'Draft'}/>
-                  {annForm.priority==='High' && <span style={{fontSize:11,border:'1px solid #D0D6D5',borderRadius:3,padding:'1px 8px',background:'#fff'}}>△ High Priority</span>}
                 </div>
                 <div style={{fontWeight:600,fontSize:15,marginBottom:4}}>{annForm.title || '[Untitled]'}</div>
                 {annForm.body && <p style={{fontSize:13,color:'#7a6f66',margin:'0 0 8px',lineHeight:1.5}}>{annForm.body}</p>}
