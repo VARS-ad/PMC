@@ -26,6 +26,24 @@ const App = () => {
     } catch (_) { /* ignore in non-browser contexts */ }
   }, [role]);
   const [page, setPage] = useState('overview');
+  // Track every internal navigation as a pageview so Vercel Analytics can
+  // tell us where prospects spend time. We can't use URL paths (the SPA
+  // hashes every route) so we fake one by sending a synthetic path that
+  // includes the role + page key. Also fire a `page_view` custom event
+  // with the raw page id for easy filtering in the Events tab.
+  useEffect(() => {
+    try {
+      if (typeof track === 'function') {
+        const path = '/' + (role || 'app') + '/' + (page || 'overview');
+        track('page_view', { role: role || 'app', page: page || 'overview', path });
+        if (typeof window !== 'undefined' && window.va) {
+          // Vercel's `pageview` event accepts a `url` so the Pages tab
+          // groups synthetic SPA routes correctly.
+          window.va('pageview', { url: window.location.origin + path });
+        }
+      }
+    } catch (_) {}
+  }, [page, role]);
   const [data, setData] = useState(loadPersistedData);
   // Lifted from TopBar so other PMC pages (Visitors, Guards, future Overview) can
   // filter their data by the currently-selected building ids.
