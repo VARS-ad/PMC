@@ -77,11 +77,19 @@ const PostLoginWelcome = ({ onDone, userName }) => {
 
         <p style={{
           fontSize:15, lineHeight:1.65, color:'var(--text-muted)',
+          margin:'0 0 14px', letterSpacing:'-0.003em',
+        }}>
+          Here you'll find every asset in your portfolio - buildings, units,
+          residents and each contract attached to them, with maintenance included.
+          You can also generate reports on anything you see. Operational activity -
+          service requests, announcements, visitors and guards - is also under
+          your control.
+        </p>
+        <p style={{
+          fontSize:15, lineHeight:1.65, color:'var(--text-muted)',
           margin:'0 0 36px', letterSpacing:'-0.003em',
         }}>
-          Here you'll find every asset in your portfolio — buildings, units,
-          residents and the contracts attached to each one. You can also generate
-          reports on anything you see. Take your time looking around.
+          Take your time looking around.
         </p>
 
         <button
@@ -89,14 +97,14 @@ const PostLoginWelcome = ({ onDone, userName }) => {
           style={{
             background:'var(--bg-warm-dark)', color:'#fff', border:'none',
             padding:'15px 48px', borderRadius:8,
-            fontSize:12, fontWeight:500, letterSpacing:'0.06em',
+            fontSize:12, fontWeight:700, letterSpacing:'0.08em',
             textTransform:'uppercase', cursor:'pointer',
             transition:'transform .2s, box-shadow .2s',
           }}
           onMouseEnter={e => { e.currentTarget.style.transform='translateY(-1px)'; e.currentTarget.style.boxShadow='0 10px 28px rgba(146,137,137,0.32)'; }}
           onMouseLeave={e => { e.currentTarget.style.transform=''; e.currentTarget.style.boxShadow=''; }}
         >
-          Let's go →
+          Let's go
         </button>
       </div>
 

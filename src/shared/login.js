@@ -578,17 +578,19 @@ const LoginPage = ({ onLogin, syncStatus }) => {
             <div style={{textAlign:'center',marginBottom:26,fontSize:30,fontWeight:400,color:'var(--text-muted)',letterSpacing:'-0.012em',lineHeight:1.15}}>
               What's your name?
             </div>
-            {/* Input + Start are both width-locked to the same 240px column
-                and centred. Makes them read as a stacked pair instead of a
-                wide input with a small disconnected button below it. */}
-            <div style={{display:'flex',flexDirection:'column',alignItems:'center',gap:14}}>
+            {/* Input + Start sit inside a 280px max-width column so they
+                read as a paired stack. The .form-input class has width:100%
+                which beats inline width on the bare element, so the outer
+                wrapper is what actually constrains the field — the children
+                then take width:100% of the 280px wrapper. */}
+            <div style={{maxWidth:280,margin:'0 auto',display:'flex',flexDirection:'column',gap:14}}>
               <input className="form-input" type="text" value={fullName}
                 onChange={e=>setFullName(e.target.value)}
                 placeholder="Your name" autoFocus
-                style={{width:240,borderColor:'var(--border-light)',fontSize:14,borderRadius:8,textAlign:'center',padding:'12px 14px'}}/>
+                style={{width:'100%',borderColor:'var(--border-light)',fontSize:14,borderRadius:8,textAlign:'center',padding:'13px 14px',boxSizing:'border-box'}}/>
               <button type="submit" className="btn btn-primary" disabled={submitting}
-                style={{width:240,padding:'14px 0',fontSize:12,background:'var(--bg-warm-dark)',border:'none',borderRadius:8,color:'#fff',fontWeight:500,letterSpacing:'0.06em',textTransform:'uppercase',cursor: submitting ? 'default' : 'pointer',opacity: submitting ? 0.7 : 1,transition:'all .2s'}}>
-                {submitting ? 'Starting…' : 'Start'}
+                style={{width:'100%',padding:'14px 0',fontSize:13,background:'var(--bg-warm-dark)',border:'none',borderRadius:8,color:'#fff',fontWeight:700,letterSpacing:'0.08em',textTransform:'uppercase',textAlign:'center',cursor: submitting ? 'default' : 'pointer',opacity: submitting ? 0.7 : 1,transition:'all .2s',boxSizing:'border-box'}}>
+                {submitting ? 'STARTING…' : 'START'}
               </button>
             </div>
             {error && <p style={{color:'#8b4a42',fontSize:12,marginTop:14,marginBottom:0,textAlign:'center'}}>{typeof error === 'string' ? error : 'Something went wrong. Please try again.'}</p>}
