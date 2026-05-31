@@ -575,10 +575,7 @@ const LoginPage = ({ onLogin, syncStatus }) => {
             visitor in their data. No email, no password, no recovery. */}
         {IS_DEMO && (
           <form onSubmit={handleStart}>
-            <div style={{textAlign:'center',marginBottom:6,fontSize:22,fontWeight:500,color:'var(--text-dark)',letterSpacing:'-0.01em'}}>
-              Welcome to VARS
-            </div>
-            <div style={{textAlign:'center',marginBottom:24,fontSize:13,color:'var(--text-muted)',letterSpacing:'-0.005em'}}>
+            <div style={{textAlign:'center',marginBottom:24,fontSize:32,fontWeight:500,color:'var(--text-muted)',letterSpacing:'-0.015em',lineHeight:1.15}}>
               What's your name?
             </div>
             <div className="form-group">
@@ -588,10 +585,12 @@ const LoginPage = ({ onLogin, syncStatus }) => {
                 style={{borderColor:'var(--border-light)',fontSize:14,borderRadius:8,textAlign:'center'}}/>
             </div>
             {error && <p style={{color:'#8b4a42',fontSize:12,marginBottom:12,textAlign:'center'}}>{typeof error === 'string' ? error : 'Something went wrong. Please try again.'}</p>}
-            <button type="submit" className="btn btn-primary" disabled={submitting}
-              style={{width:'100%',padding:'14px',fontSize:12,marginTop:4,background:'var(--bg-warm-dark)',border:'none',borderRadius:8,color:'#fff',fontWeight:500,letterSpacing:'0.04em',textTransform:'uppercase',cursor: submitting ? 'default' : 'pointer',opacity: submitting ? 0.7 : 1,transition:'all .2s'}}>
-              {submitting ? 'Starting…' : 'Start'}
-            </button>
+            <div style={{display:'flex',justifyContent:'center',marginTop:4}}>
+              <button type="submit" className="btn btn-primary" disabled={submitting}
+                style={{padding:'14px 44px',fontSize:12,background:'var(--bg-warm-dark)',border:'none',borderRadius:8,color:'#fff',fontWeight:500,letterSpacing:'0.04em',textTransform:'uppercase',cursor: submitting ? 'default' : 'pointer',opacity: submitting ? 0.7 : 1,transition:'all .2s'}}>
+                {submitting ? 'Starting…' : 'Start'}
+              </button>
+            </div>
             <div style={{textAlign:'center',marginTop:18,fontSize:11,color:'var(--text-muted)',letterSpacing:'0.02em'}}>
               No signup. No password. Just go.
             </div>
