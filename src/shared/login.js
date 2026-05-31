@@ -565,7 +565,7 @@ const LoginPage = ({ onLogin, syncStatus }) => {
             </svg>
             <h1 style={{fontSize:50,fontWeight:500,letterSpacing:'-0.01em',margin:0,color:'#131F23',lineHeight:1,paddingTop:11}}>VARS</h1>
           </div>
-          <p style={{fontSize:13,letterSpacing:'0.15em',textTransform:'uppercase',color:'var(--text-secondary)',margin:'18px 0 0',fontWeight:500,textAlign:'center',whiteSpace:'nowrap'}}>{IS_DEMO ? 'Welcome to VARS' : t('login.subtitle')}</p>
+          <p style={{fontSize: IS_DEMO ? 16 : 13,letterSpacing:'0.16em',textTransform:'uppercase',color:'var(--text-secondary)',margin:'18px 0 0',fontWeight:500,textAlign:'center',whiteSpace:'nowrap'}}>{IS_DEMO ? 'Welcome to VARS' : t('login.subtitle')}</p>
         </div>
 
         {/* IS_DEMO has ONE surface: type your name, hit Start, you're in.
@@ -575,7 +575,7 @@ const LoginPage = ({ onLogin, syncStatus }) => {
             visitor in their data. No email, no password, no recovery. */}
         {IS_DEMO && (
           <form onSubmit={handleStart}>
-            <div style={{textAlign:'center',marginBottom:26,fontSize:30,fontWeight:400,color:'var(--text-muted)',letterSpacing:'-0.012em',lineHeight:1.15}}>
+            <div style={{textAlign:'center',marginBottom:24,fontSize:22,fontWeight:400,color:'var(--text-muted)',letterSpacing:'-0.01em',lineHeight:1.2}}>
               Please enter your name
             </div>
             {/* Input + Start sit inside a 280px max-width column so they
