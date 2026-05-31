@@ -103,28 +103,8 @@ const DemoBanner = ({ showToast }) => {
     >
       <span style={{width:8,height:8,borderRadius:'50%',background:'#a07d3c',display:'inline-block',flexShrink:0}}></span>
       <span>
-        Demo data only — this is a sandbox. Nothing here is real client information.
+        Demo data is only for illustrative purposes. All similarities with the actual data are on purpose.
       </span>
-      <button
-        type="button"
-        onClick={handleReset}
-        disabled={busy}
-        style={{
-          background: 'none',
-          border: 'none',
-          padding: 0,
-          color: '#5a4416',
-          textDecoration: 'underline',
-          fontSize: 13,
-          fontWeight: 600,
-          cursor: busy ? 'wait' : 'pointer',
-          letterSpacing: '0.005em',
-          fontFamily: 'inherit',
-          marginLeft: 4
-        }}
-      >
-        {busy ? 'Resetting…' : 'Reset to fresh data'}
-      </button>
     </div>
   );
 };

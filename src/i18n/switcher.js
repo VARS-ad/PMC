@@ -16,10 +16,10 @@ const LanguageSwitcher = ({ compact }) => {
   return (
     <div ref={ref} style={{position:'relative',display:'inline-block'}}>
       <button onClick={() => setOpen(!open)}
-        style={{display:'inline-flex',alignItems:'center',gap:7,padding: compact?'6px 11px':'7px 13px',background:'#fff',border:'1px solid #e4dfd8',borderRadius:20,fontSize:12,fontWeight:500,color:'#1a1a1a',cursor:'pointer',fontFamily:'inherit',lineHeight:1,whiteSpace:'nowrap'}}>
-        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#7a6f66" strokeWidth="1.6" style={{display:'block',flexShrink:0}}><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 014 10 15.3 15.3 0 01-4 10 15.3 15.3 0 01-4-10 15.3 15.3 0 014-10z"/></svg>
+        style={{display:'inline-flex',alignItems:'center',gap: compact?7:10,padding: compact?'6px 11px':'11px 18px',background:'#fff',border:'1px solid #e4dfd8',borderRadius:24,fontSize: compact?12:16,fontWeight:500,color:'#1a1a1a',cursor:'pointer',fontFamily:'inherit',lineHeight:1,whiteSpace:'nowrap'}}>
+        <svg width={compact?13:18} height={compact?13:18} viewBox="0 0 24 24" fill="none" stroke="#7a6f66" strokeWidth="1.6" style={{display:'block',flexShrink:0}}><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 014 10 15.3 15.3 0 01-4 10 15.3 15.3 0 01-4-10 15.3 15.3 0 014-10z"/></svg>
         <span style={{display:'inline-block',lineHeight:1}}>{current.short}</span>
-        <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="#a89a92" strokeWidth="2.5" style={{display:'block',flexShrink:0}}><polyline points="6 9 12 15 18 9"/></svg>
+        <svg width={compact?9:13} height={compact?9:13} viewBox="0 0 24 24" fill="none" stroke="#a89a92" strokeWidth="2.5" style={{display:'block',flexShrink:0}}><polyline points="6 9 12 15 18 9"/></svg>
       </button>
       {open && (
         <div style={{position:'absolute',top:'calc(100% + 6px)',right:0,background:'#fff',border:'1px solid #ebe7e3',borderRadius:8,boxShadow:'0 8px 24px rgba(0,0,0,0.12)',zIndex:9999,minWidth:140,overflow:'hidden'}}>
