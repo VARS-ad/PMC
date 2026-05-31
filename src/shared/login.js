@@ -487,7 +487,7 @@ const LoginPage = ({ onLogin, syncStatus }) => {
           </div>
           {/* Tag line + supporting copy */}
           <div style={{textAlign:'center',maxWidth:480,animation:'vars-splash-tag-in .7s .35s cubic-bezier(.2,.7,.2,1) both'}}>
-            <div style={{fontSize:11,letterSpacing:'0.18em',textTransform:'uppercase',color:'var(--text-secondary)',fontWeight:500,marginBottom:14,textAlign:'center'}}>Property Management Software</div>
+            <div style={{fontSize:11,letterSpacing:'0.18em',textTransform:'uppercase',color:'var(--text-secondary)',fontWeight:500,marginBottom:14,textAlign:'center'}}>Portfolio Management Software</div>
             <div style={{fontSize:16,color:'var(--text-dark)',fontWeight:400,letterSpacing:'-0.003em',lineHeight:1.5,textAlign:'center',margin:'0 auto'}}>
               Welcome - your buildings, residents and ops in one place.
             </div>
@@ -506,7 +506,7 @@ const LoginPage = ({ onLogin, syncStatus }) => {
       <div style={{position:'absolute',top:20,right:20,zIndex:10,opacity: splashStage === 'ready' ? 1 : 0,transition:'opacity .4s ease'}}>
         <LanguageSwitcher/>
       </div>
-      <div className="login-card" style={{maxWidth:460,padding:'40px 44px',border:'1px solid var(--border-light)',boxShadow:'0 8px 40px rgba(146,137,137,0.18)',borderRadius:14,
+      <div className="login-card" style={{maxWidth:540,padding:'56px 60px',border:'1px solid var(--border-light)',boxShadow:'0 8px 40px rgba(146,137,137,0.18)',borderRadius:14,
         animation: splashStage === 'ready' ? 'vars-login-in .55s cubic-bezier(.2,.7,.2,1) both' : 'none',
         visibility: splashStage === 'ready' ? 'visible' : 'hidden'}}>
         {/* Header — VARS brand mark side-by-side (icon + wordmark in a row).
@@ -525,7 +525,7 @@ const LoginPage = ({ onLogin, syncStatus }) => {
                 line-height:1 puts the glyph in the upper 70% of the box
                 (caps top, no descenders); padding-top:5 compensates so
                 both phone and desktop read as truly centred. */}
-            <h1 style={{fontSize:36,fontWeight:500,letterSpacing:'-0.01em',margin:0,color:'#131F23',lineHeight:1,paddingTop:5}}>VARS</h1>
+            <h1 style={{fontSize:42,fontWeight:500,letterSpacing:'-0.01em',margin:0,color:'#131F23',lineHeight:1,paddingTop:9}}>VARS</h1>
           </div>
           <p style={{fontSize:10,letterSpacing:'0.16em',textTransform:'uppercase',color:'var(--text-secondary)',margin:'14px 0 0',fontWeight:400,textAlign:'center'}}>{t('login.subtitle')}</p>
         </div>

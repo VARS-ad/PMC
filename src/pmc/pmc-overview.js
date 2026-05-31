@@ -952,6 +952,10 @@ const PMCOverviewPage = ({ setPage }) => {
           <div style={{marginTop:6,fontSize:14,color:'var(--text-secondary)',fontWeight:500,letterSpacing:'-0.01em'}}>
             {explicitRange}
           </div>
+          <div style={{marginTop:10,display:'inline-flex',alignItems:'center',gap:8,padding:'5px 11px',background:'#fdf5e6',border:'1px solid #efe1be',borderRadius:999,fontSize:11,color:'#7a6230',letterSpacing:'0.01em',fontWeight:500}}>
+            <span style={{width:6,height:6,borderRadius:'50%',background:'#a07d3c',display:'inline-block'}}></span>
+            Demo data — for illustration only. Not real client information.
+          </div>
         </div>
         <TimeRangePicker/>
       </div>
@@ -1011,21 +1015,18 @@ const PMCOverviewPage = ({ setPage }) => {
                 )}
               </div>
               <div className="pmc-overview-hero-row" style={{display:'flex',gap:24,flexWrap:'wrap'}}>
-                <Stat label={<span>Collected <span title="Rent + service charges paid in the period. e.g. AED 1,850,000 received from 48 paid invoices." style={{display:'inline-flex',alignItems:'center',justifyContent:'center',width:14,height:14,borderRadius:'50%',border:'1px solid var(--text-muted)',color:'var(--text-muted)',fontSize:9,fontWeight:600,fontStyle:'normal',letterSpacing:0,cursor:'help',marginLeft:6,verticalAlign:'middle'}}>i</span></span>}
+                <Stat label="Collected"
                       value={fmt(stats.headlineCollected)} color="#5a6b4f"
                       sub={'For the selected period · last month ' + fmt(stats.headlineLastMonth)}
                       onClick={onTileClick}/>
-                <Stat label={<span>Overdue <span title="Invoices past their due date and still unpaid. e.g. AED 50,000 owed by 3 accounts, 20+ days late." style={{display:'inline-flex',alignItems:'center',justifyContent:'center',width:14,height:14,borderRadius:'50%',border:'1px solid var(--text-muted)',color:'var(--text-muted)',fontSize:9,fontWeight:600,fontStyle:'normal',letterSpacing:0,cursor:'help',marginLeft:6,verticalAlign:'middle'}}>i</span></span>}
+                <Stat label="Overdue"
                       value={fmt(stats.headlineOverdue)}  color="#8b4a42"
                       sub="Past due, in the selected period"
                       onClick={onTileClick}/>
-                <Stat label={<span>Upcoming · 30 days <span title="Invoices due in the next 30 days, not yet paid. e.g. AED 350,000 expected from 25 tenants by end of month." style={{display:'inline-flex',alignItems:'center',justifyContent:'center',width:14,height:14,borderRadius:'50%',border:'1px solid var(--text-muted)',color:'var(--text-muted)',fontSize:9,fontWeight:600,fontStyle:'normal',letterSpacing:0,cursor:'help',marginLeft:6,verticalAlign:'middle'}}>i</span></span>}
+                <Stat label="Upcoming · 30 days"
                       value={fmt(stats.headlineUpcoming)} color="#a07d3c"
                       sub="Due within 30 days, in the selected period"
                       onClick={onTileClick}/>
-              </div>
-              <div style={{marginTop:14,fontSize:11,color:'var(--text-muted)',fontStyle:'italic'}}>
-                Past due = Overdue. Upcoming = due in the next 30 days. Future = due more than 30 days out.
               </div>
             </div>
           );

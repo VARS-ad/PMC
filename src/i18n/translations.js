@@ -2,7 +2,7 @@
 const TRANSLATIONS = {
   en: {
     // Login
-    'login.subtitle': 'Property Management Software',
+    'login.subtitle': 'Portfolio Management Software',
     'login.selectRole': 'Select Access Role',
     'login.email': 'Email',
     'login.emailPlaceholder': 'Email',
@@ -1402,7 +1402,7 @@ const TRANSLATIONS = {
   },
   ar: {
     // Login
-    'login.subtitle': 'برنامج إدارة العقارات',
+    'login.subtitle': 'برنامج إدارة المحافظ',
     'login.selectRole': 'اختر نوع المستخدم',
     'login.email': 'البريد الإلكتروني',
     'login.emailPlaceholder': 'البريد الإلكتروني',
