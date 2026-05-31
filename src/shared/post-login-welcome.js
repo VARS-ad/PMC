@@ -79,11 +79,11 @@ const PostLoginWelcome = ({ onDone, userName }) => {
           fontSize:15, lineHeight:1.65, color:'var(--text-muted)',
           margin:'0 0 14px', letterSpacing:'-0.003em',
         }}>
-          Here you'll find every asset in your portfolio - buildings, units,
-          residents and each contract attached to them, with maintenance included.
-          You can also generate reports on anything you see. Operational activity -
-          service requests, announcements, visitors and guards - is also under
-          your control.
+          You'll find every asset in your portfolio - residential and commercial
+          buildings, villas, land plots - with full detail on units, residents,
+          contracts and maintenance for each one. Operational activity is here
+          too: service requests, announcements, visitors and guards, plus
+          reports on demand for anything you see.
         </p>
         <p style={{
           fontSize:15, lineHeight:1.65, color:'var(--text-muted)',
