@@ -71,6 +71,7 @@ const BUILDING_NAME_PHOTOS = {
   'skyline heights':      'assets/buildings/skyline-heights.jpg',
   'aljil tower':          'assets/buildings/aljil-tower.jpg',
   'al qurm view':         'assets/buildings/al-qurm-view.jpg',
+  'boulevard plaza':      'assets/buildings/boulevard-plaza.jpg',
   'palm frond m-23':      'assets/buildings/palm-frond-m23.jpg',
   'emirates hills v-14':  'assets/buildings/emirates-hills-v14.jpg',
   'coral bay villa':      'assets/buildings/coral-bay-villa.jpg',
