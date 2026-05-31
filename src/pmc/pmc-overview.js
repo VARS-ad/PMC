@@ -114,9 +114,16 @@ const AssetCardPhoto = React.memo(({ storagePath, assetId, typeChipColor, proper
   // Also make the name-pinned cover beat `stockUrl` (the group-deduped
   // per-row pick from the caller) so an asset always lands its pinned
   // UAE photo, not the random pool slot the deduper picked.
+  // Name-pinned UAE photos win over EVERYTHING — including a Supabase
+  // signed URL on the asset itself. The demo seed (and possibly past user
+  // uploads) attach storage_paths to buildings, so `url` is populated and
+  // would otherwise mask our curated cover. For the 7 pinned demo
+  // buildings the user expects the pinned photo unconditionally; on
+  // working customer data nothing matches the pinned names so this is a
+  // no-op there.
   const namePinned = pickStockPhoto(assetId, propertyType, name);
   const isNamePinned = !!BUILDING_NAME_PHOTOS[_normName(name)];
-  const candidateUrl = url || (isNamePinned ? namePinned : (stockUrl || namePinned));
+  const candidateUrl = isNamePinned ? namePinned : (url || stockUrl || namePinned);
   const [imgOk, setImgOk] = useState(true);
   useEffect(() => {
     if (!candidateUrl) { setImgOk(false); return; }
