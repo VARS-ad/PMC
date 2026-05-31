@@ -72,13 +72,13 @@ const STOCK_BUILDING_PHOTOS = {
 // jpg at the parameterless URL even in incognito. Bumping the filename
 // itself forces a brand-new URL the CDN has never cached.
 const BUILDING_NAME_PHOTOS = {
-  'skyline heights':      'assets/buildings/skyline-heights-v2.jpg',
-  'aljil tower':          'assets/buildings/aljil-tower-v2.jpg',
-  'al qurm view':         'assets/buildings/al-qurm-view-v2.jpg',
-  'boulevard plaza':      'assets/buildings/boulevard-plaza-v2.jpg',
-  'palm frond m-23':      'assets/buildings/palm-frond-m23-v2.jpg',
-  'emirates hills v-14':  'assets/buildings/emirates-hills-v14-v2.jpg',
-  'coral bay villa':      'assets/buildings/coral-bay-villa-v2.jpg',
+  'skyline heights':      'src/assets/buildings/skyline-heights-v2.jpg',
+  'aljil tower':          'src/assets/buildings/aljil-tower-v2.jpg',
+  'al qurm view':         'src/assets/buildings/al-qurm-view-v2.jpg',
+  'boulevard plaza':      'src/assets/buildings/boulevard-plaza-v2.jpg',
+  'palm frond m-23':      'src/assets/buildings/palm-frond-m23-v2.jpg',
+  'emirates hills v-14':  'src/assets/buildings/emirates-hills-v14-v2.jpg',
+  'coral bay villa':      'src/assets/buildings/coral-bay-villa-v2.jpg',
 };
 const _normName = (name) => (name || '').toLowerCase().replace(/\s+/g, ' ').trim();
 const pickStockPhoto = (assetId, propertyType, name) => {
