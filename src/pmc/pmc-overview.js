@@ -67,14 +67,18 @@ const STOCK_BUILDING_PHOTOS = {
 // curated UAE photo that lives in src/assets/buildings/ and is copied to
 // dist/ at build time. Keys are lowercased + whitespace-normalised so a
 // building rename in the seed doesn't silently break the mapping.
+// `?v=N` is a cache-buster — bump the number whenever the underlying file
+// changes so users' browsers re-fetch rather than serving the old cached
+// jpg (the URL didn't change before, so Chrome/Safari kept showing the
+// previous photo even after a deploy).
 const BUILDING_NAME_PHOTOS = {
-  'skyline heights':      'assets/buildings/skyline-heights.jpg',
-  'aljil tower':          'assets/buildings/aljil-tower.jpg',
-  'al qurm view':         'assets/buildings/al-qurm-view.jpg',
-  'boulevard plaza':      'assets/buildings/boulevard-plaza.jpg',
-  'palm frond m-23':      'assets/buildings/palm-frond-m23.jpg',
-  'emirates hills v-14':  'assets/buildings/emirates-hills-v14.jpg',
-  'coral bay villa':      'assets/buildings/coral-bay-villa.jpg',
+  'skyline heights':      'assets/buildings/skyline-heights.jpg?v=2',
+  'aljil tower':          'assets/buildings/aljil-tower.jpg?v=2',
+  'al qurm view':         'assets/buildings/al-qurm-view.jpg?v=2',
+  'boulevard plaza':      'assets/buildings/boulevard-plaza.jpg?v=2',
+  'palm frond m-23':      'assets/buildings/palm-frond-m23.jpg?v=2',
+  'emirates hills v-14':  'assets/buildings/emirates-hills-v14.jpg?v=2',
+  'coral bay villa':      'assets/buildings/coral-bay-villa.jpg?v=2',
 };
 const _normName = (name) => (name || '').toLowerCase().replace(/\s+/g, ' ').trim();
 const pickStockPhoto = (assetId, propertyType, name) => {
