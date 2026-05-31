@@ -25,7 +25,7 @@ const LanguageSwitcher = ({ compact }) => {
             visual mass aligns with the other two. Same trick used in the
             VARS+logo lockup on the login card. */}
         <svg width={compact?13:15} height={compact?13:15} viewBox="0 0 24 24" fill="none" stroke="#7a6f66" strokeWidth="1.6" style={{display:'block',flexShrink:0}}><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 014 10 15.3 15.3 0 01-4 10 15.3 15.3 0 01-4-10 15.3 15.3 0 014-10z"/></svg>
-        <span style={{display:'inline-block',lineHeight:1,position:'relative',top:1}}>{current.short}</span>
+        <span style={{display:'inline-block',lineHeight:1,position:'relative',top:3}}>{current.short}</span>
         <svg width={compact?9:11} height={compact?9:11} viewBox="0 0 24 24" fill="none" stroke="#a89a92" strokeWidth="2.5" style={{display:'block',flexShrink:0,position:'relative',top:-1}}><polyline points="6 9 12 15 18 9"/></svg>
       </button>
       {open && (
