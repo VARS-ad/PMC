@@ -16,7 +16,18 @@ import { promises as fs } from 'node:fs';
 import fsSync from 'node:fs';
 import path from 'node:path';
 import http from 'node:http';
+import { execSync } from 'node:child_process';
 import * as esbuild from 'esbuild';
+
+// Stamp the build with the current git SHA + ISO timestamp so the running
+// app can render "build: abc1234" in the corner — gives the user a quick
+// way to verify which version of the code their browser is actually on.
+// Falls back to 'dev' if not in a git checkout.
+const BUILD_SHA = (() => {
+  try { return execSync('git rev-parse --short HEAD').toString().trim(); }
+  catch { return 'dev'; }
+})();
+const BUILD_TIME = new Date().toISOString().replace(/\.\d{3}Z$/, 'Z');
 
 const SRC_DIR = 'src';
 const DIST_DIR = 'dist';
@@ -58,6 +69,10 @@ const PLACEHOLDER_REPLACEMENTS = {
     [/@@SUPABASE_URL@@/g, TARGET.url],
     [/@@SUPABASE_KEY@@/g, TARGET.key],
     [/@@VARS_TARGET@@/g,  TARGET_KEY],
+  ],
+  'src/shared/global-overlays.js': [
+    [/@@BUILD_SHA@@/g,  BUILD_SHA],
+    [/@@BUILD_TIME@@/g, BUILD_TIME],
   ],
 };
 

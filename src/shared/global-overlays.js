@@ -11,6 +11,20 @@
 // sync with the build target.
 const __VARS_IS_DEMO = (typeof VARS_TARGET !== 'undefined' && VARS_TARGET === 'demo');
 
+// Build identity — stamped by build.mjs at compile time. The placeholders
+// stay as the literal strings during dev (no build step), so a fall-through
+// IIFE swaps them for 'dev' when nothing replaced them. This lets the
+// user verify which deployed bundle their browser is currently running by
+// looking at the chip in the banner / corner.
+const __VARS_BUILD_SHA = (() => {
+  const s = '@@BUILD_SHA@@';
+  return s.startsWith('@@') ? 'dev' : s;
+})();
+const __VARS_BUILD_TIME = (() => {
+  const s = '@@BUILD_TIME@@';
+  return s.startsWith('@@') ? '' : s;
+})();
+
 // Inject the small bit of CSS the overlays need (banner-aware body
 // padding). Done once, on first load, so every page benefits without
 // per-component style tags.
@@ -103,6 +117,24 @@ const DemoBanner = ({ showToast }) => {
     >
       <span>
         Demo data is only for illustrative purposes.
+      </span>
+      {/* Build identity — quiet right-aligned chip. Lets the user instantly
+          verify which deployed bundle they're on by hovering for the full
+          ISO time, or just reading the short SHA. */}
+      <span
+        title={'Build ' + __VARS_BUILD_SHA + (__VARS_BUILD_TIME ? ' · ' + __VARS_BUILD_TIME : '')}
+        style={{
+          position: 'absolute',
+          right: 14,
+          fontSize: 11,
+          fontWeight: 500,
+          color: '#7a5a1f',
+          opacity: 0.7,
+          letterSpacing: '0.02em',
+          fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
+        }}
+      >
+        build {__VARS_BUILD_SHA}
       </span>
     </div>
   );
