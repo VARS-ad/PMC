@@ -952,10 +952,6 @@ const PMCOverviewPage = ({ setPage }) => {
           <div style={{marginTop:6,fontSize:14,color:'var(--text-secondary)',fontWeight:500,letterSpacing:'-0.01em'}}>
             {explicitRange}
           </div>
-          <div style={{marginTop:10,display:'inline-flex',alignItems:'center',gap:8,padding:'5px 11px',background:'#fdf5e6',border:'1px solid #efe1be',borderRadius:999,fontSize:11,color:'#7a6230',letterSpacing:'0.01em',fontWeight:500}}>
-            <span style={{width:6,height:6,borderRadius:'50%',background:'#a07d3c',display:'inline-block'}}></span>
-            Demo data — for illustration only. Not real client information.
-          </div>
         </div>
         <TimeRangePicker/>
       </div>
@@ -988,7 +984,7 @@ const PMCOverviewPage = ({ setPage }) => {
               onMouseEnter={e => { if (onClick) { e.currentTarget.style.background = 'rgba(122,90,31,0.06)'; } }}
               onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}>
               <div style={{fontSize:11,letterSpacing:'0.06em',textTransform:'uppercase',color:'var(--text-secondary)',fontWeight:600,marginBottom:6}}>{label}</div>
-              <div className="pmc-overview-hero-value" style={{fontSize:30,fontWeight:600,letterSpacing:'-0.02em',color:color || 'var(--text-dark)',lineHeight:1}}>{value}</div>
+              <div className="pmc-overview-hero-value" style={{fontSize:40,fontWeight:600,letterSpacing:'-0.02em',color:color || 'var(--text-dark)',lineHeight:1}}>{value}</div>
               {sub && <div style={{fontSize:11,color:'var(--text-muted)',marginTop:6}}>{sub}</div>}
             </div>
           );

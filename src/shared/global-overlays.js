@@ -20,10 +20,10 @@ const __VARS_IS_DEMO = (typeof VARS_TARGET !== 'undefined' && VARS_TARGET === 'd
   const css =
     // When the demo banner is mounted, push the entire app down 32px so the
     // banner doesn't sit on top of the topbar / login splash.
-    'body.vars-has-demo-banner{padding-top:32px!important}' +
+    'body.vars-has-demo-banner{padding-top:40px!important}' +
     // The fixed topbar in PMC/resident/security needs to shift down too.
-    'body.vars-has-demo-banner .topbar{top:32px!important}' +
-    'body.vars-has-demo-banner .sidebar{top:32px!important}';
+    'body.vars-has-demo-banner .topbar{top:40px!important}' +
+    'body.vars-has-demo-banner .sidebar{top:40px!important}';
   const style = document.createElement('style');
   style.id = 'vars-global-overlays-css';
   style.textContent = css;
@@ -86,22 +86,24 @@ const DemoBanner = ({ showToast }) => {
         top: 0,
         left: 0,
         right: 0,
-        height: 32,
-        background: '#fdf5e6',
-        borderBottom: '1px solid #efe1be',
-        color: '#7a5a1f',
-        fontSize: 12,
+        height: 40,
+        background: '#f6e4be',
+        borderBottom: '1px solid #d9bf7e',
+        color: '#5a4416',
+        fontSize: 14,
+        fontWeight: 600,
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        gap: 8,
+        gap: 10,
         padding: '0 16px',
         zIndex: 250,
-        letterSpacing: '0.01em'
+        letterSpacing: '0.005em'
       }}
     >
+      <span style={{width:8,height:8,borderRadius:'50%',background:'#a07d3c',display:'inline-block',flexShrink:0}}></span>
       <span>
-        Demo mode — every action is sandboxed. Click anything safely.
+        Demo data only — this is a sandbox. Nothing here is real client information.
       </span>
       <button
         type="button"
@@ -111,13 +113,14 @@ const DemoBanner = ({ showToast }) => {
           background: 'none',
           border: 'none',
           padding: 0,
-          color: '#7a5a1f',
+          color: '#5a4416',
           textDecoration: 'underline',
-          fontSize: 12,
+          fontSize: 13,
           fontWeight: 600,
           cursor: busy ? 'wait' : 'pointer',
-          letterSpacing: '0.01em',
-          fontFamily: 'inherit'
+          letterSpacing: '0.005em',
+          fontFamily: 'inherit',
+          marginLeft: 4
         }}
       >
         {busy ? 'Resetting…' : 'Reset to fresh data'}
@@ -126,8 +129,10 @@ const DemoBanner = ({ showToast }) => {
   );
 };
 
-// Single host component — render once per role-app. Currently empty:
-// the WhatsApp help button and demo banner were both removed at user
-// request. Kept as a thin scaffold so future always-on widgets have a
-// stable mount point.
-const GlobalOverlays = ({ showToast }) => null;
+// Single host component — renders the demo banner on the demo build so the
+// "this isn't real data" notice shows on every page (login, PMC overview,
+// resident, security). Returns null on the working build.
+const GlobalOverlays = ({ showToast }) => {
+  if (!__VARS_IS_DEMO) return null;
+  return <DemoBanner showToast={showToast}/>;
+};
