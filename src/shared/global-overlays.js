@@ -101,9 +101,8 @@ const DemoBanner = ({ showToast }) => {
         letterSpacing: '0.005em'
       }}
     >
-      <span style={{width:8,height:8,borderRadius:'50%',background:'#a07d3c',display:'inline-block',flexShrink:0}}></span>
       <span>
-        Demo data is only for illustrative purposes. All similarities with the actual data are on purpose.
+        Demo data is only for illustrative purposes.
       </span>
     </div>
   );

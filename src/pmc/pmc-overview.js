@@ -63,7 +63,22 @@ const STOCK_BUILDING_PHOTOS = {
     'https://images.unsplash.com/photo-1500382017468-9049fed747ef?w=900&auto=format&fit=crop&q=70', // open development land
   ],
 };
-const pickStockPhoto = (assetId, propertyType) => {
+// Name-keyed override map. Each entry pins a specific demo asset to a
+// curated UAE photo that lives in src/assets/buildings/ and is copied to
+// dist/ at build time. Keys are lowercased + whitespace-normalised so a
+// building rename in the seed doesn't silently break the mapping.
+const BUILDING_NAME_PHOTOS = {
+  'skyline heights':      'assets/buildings/skyline-heights.jpg',
+  'aljil tower':          'assets/buildings/aljil-tower.jpg',
+  'al qurm view':         'assets/buildings/al-qurm-view.jpg',
+  'palm frond m-23':      'assets/buildings/palm-frond-m23.jpg',
+  'emirates hills v-14':  'assets/buildings/emirates-hills-v14.jpg',
+  'coral bay villa':      'assets/buildings/coral-bay-villa.jpg',
+};
+const _normName = (name) => (name || '').toLowerCase().replace(/\s+/g, ' ').trim();
+const pickStockPhoto = (assetId, propertyType, name) => {
+  const pinned = BUILDING_NAME_PHOTOS[_normName(name)];
+  if (pinned) return pinned;
   const pool = STOCK_BUILDING_PHOTOS[propertyType] || STOCK_BUILDING_PHOTOS['Residential'];
   const idx = Math.abs((assetId || '').split('').reduce((a, c) => a + c.charCodeAt(0), 0)) % pool.length;
   return pool[idx];
