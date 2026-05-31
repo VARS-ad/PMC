@@ -405,6 +405,46 @@ const LoginPage = ({ onLogin, syncStatus }) => {
     }
   };
 
+  // Anonymous demo entry — the only sign-in surface on IS_DEMO. Creates a
+  // fresh Supabase anon user (so RLS + the on_demo_user_signup trigger that
+  // seeds the portfolio fire exactly as they do for email users) and then
+  // overrides the trigger's generic 'Property Manager' name default with
+  // whatever the visitor typed. Each click is a brand-new identity; there
+  // is no account recovery because there is nothing to recover to.
+  const handleStart = async (e) => {
+    e.preventDefault();
+    safeSetError(null);
+    const name = (fullName || '').trim();
+    if (!name) { safeSetError('Please enter your name to continue.'); return; }
+    if (!supabaseClient) { safeSetError('Demo is not available right now.'); return; }
+    setSubmitting(true);
+    try {
+      const { data, error: authErr } = await supabaseClient.auth.signInAnonymously({
+        options: { data: { full_name: name } },
+      });
+      if (authErr) { safeSetError(authErr); setSubmitting(false); return; }
+      const u = data && data.user;
+      if (!u) { safeSetError('Could not start your demo. Please try again.'); setSubmitting(false); return; }
+      // Override the trigger's email-derived default. Non-blocking — if the
+      // profiles row hasn't been inserted by the trigger yet, the UI falls
+      // back to user_metadata.full_name below.
+      try {
+        await supabaseClient.from('profiles').update({ full_name: name }).eq('id', u.id);
+      } catch (_) {}
+      if (setData) {
+        setData(prev => ({
+          ...prev,
+          currentUser: { ...prev.currentUser, name, email: '', phone: '', role: 'Property Manager' },
+        }));
+      }
+      try { track('demo_started', { name_len: name.length }); } catch (_) {}
+      onLogin('manager');
+    } catch (err) {
+      safeSetError(err);
+      setSubmitting(false);
+    }
+  };
+
   const roleIcons = {
     resident: (active) => (
       <svg width="30" height="30" viewBox="0 0 32 32" fill="none">
@@ -528,11 +568,39 @@ const LoginPage = ({ onLogin, syncStatus }) => {
           <p style={{fontSize:13,letterSpacing:'0.15em',textTransform:'uppercase',color:'var(--text-secondary)',margin:'18px 0 0',fontWeight:500,textAlign:'center',whiteSpace:'nowrap'}}>{t('login.subtitle')}</p>
         </div>
 
-        {/* Password recovery — the user landed here from a reset-password
-            email link. Show a focused "set new password" form; everything
-            else (choose surface, role picker, signin form) is suppressed
-            below by the mode !== 'reset' guards. */}
-        {mode === 'reset' && (
+        {/* IS_DEMO has ONE surface: type your name, hit Start, you're in.
+            Each click creates a fresh anonymous Supabase user via
+            signInAnonymously(); the on_demo_user_signup trigger seeds the
+            portfolio; sticky localStorage session means a refresh keeps the
+            visitor in their data. No email, no password, no recovery. */}
+        {IS_DEMO && (
+          <form onSubmit={handleStart}>
+            <div style={{textAlign:'center',marginBottom:6,fontSize:22,fontWeight:500,color:'var(--text-dark)',letterSpacing:'-0.01em'}}>
+              Welcome to VARS
+            </div>
+            <div style={{textAlign:'center',marginBottom:24,fontSize:13,color:'var(--text-muted)',letterSpacing:'-0.005em'}}>
+              What's your name?
+            </div>
+            <div className="form-group">
+              <input className="form-input" type="text" value={fullName}
+                onChange={e=>setFullName(e.target.value)}
+                placeholder="e.g. Hassan Al-Mansoori" autoFocus
+                style={{borderColor:'var(--border-light)',fontSize:14,borderRadius:8,textAlign:'center'}}/>
+            </div>
+            {error && <p style={{color:'#8b4a42',fontSize:12,marginBottom:12,textAlign:'center'}}>{typeof error === 'string' ? error : 'Something went wrong. Please try again.'}</p>}
+            <button type="submit" className="btn btn-primary" disabled={submitting}
+              style={{width:'100%',padding:'14px',fontSize:12,marginTop:4,background:'var(--bg-warm-dark)',border:'none',borderRadius:8,color:'#fff',fontWeight:500,letterSpacing:'0.04em',textTransform:'uppercase',cursor: submitting ? 'default' : 'pointer',opacity: submitting ? 0.7 : 1,transition:'all .2s'}}>
+              {submitting ? 'Starting…' : 'Start'}
+            </button>
+            <div style={{textAlign:'center',marginTop:18,fontSize:11,color:'var(--text-muted)',letterSpacing:'0.02em'}}>
+              No signup. No password. Just go.
+            </div>
+          </form>
+        )}
+
+        {/* Password recovery — working build only. Demo users never hit
+            this because they have no password to reset. */}
+        {!IS_DEMO && mode === 'reset' && (
           <form onSubmit={handleResetSubmit}>
             <div style={{fontSize:14,fontWeight:600,letterSpacing:'-0.005em',color:'var(--text-dark)',marginBottom:18}}>
               Set a new password
@@ -552,49 +620,10 @@ const LoginPage = ({ onLogin, syncStatus }) => {
           </form>
         )}
 
-        {/* Demo landing — two white-box choices. Pick one to reveal that
-            path's form. Both buttons use the exact same style; the user
-            picks based on intent, not visual hierarchy. */}
-        {mode !== 'reset' && IS_DEMO && mode === 'choose' && (
-          <div style={{display:'flex',flexDirection:'column',gap:12}}>
-            {[
-              {id:'signup', label:'Create a free demo account'},
-              {id:'signin', label:'Sign in'},
-            ].map(opt => (
-              <div key={opt.id}
-                onClick={() => {
-                  try { track(opt.id === 'signup' ? 'demo_signup_click' : 'demo_signin_click'); } catch (_) {}
-                  setMode(opt.id); safeSetError(null);
-                }}
-                style={{
-                  display:'flex',alignItems:'center',justifyContent:'center',gap:8,
-                  padding:'17px 20px',cursor:'pointer',
-                  background:'#fff',border:'1px solid var(--border-light)',borderRadius:9,
-                  transition:'border-color .15s, background .15s',
-                }}
-                onMouseEnter={e => { e.currentTarget.style.borderColor='var(--bg-warm-dark)'; e.currentTarget.style.background='var(--bg-surface)'; }}
-                onMouseLeave={e => { e.currentTarget.style.borderColor='var(--border-light)'; e.currentTarget.style.background='#fff'; }}>
-                <span style={{fontSize:16,fontWeight:500,color:'var(--text-dark)',letterSpacing:'-0.005em'}}>
-                  {opt.label}
-                </span>
-              </div>
-            ))}
-          </div>
-        )}
-
-        {/* Back to choose link — shown on demo when in the signin or signup
-            form so the user can flip path. Hidden in reset mode (no path
-            to flip — they're mid password change). */}
-        {IS_DEMO && mode !== 'choose' && mode !== 'reset' && (
-          <div style={{marginBottom:18,fontSize:12}}>
-            <span onClick={() => { setMode('choose'); safeSetError(null); }}
-              style={{color:'var(--text-muted)',cursor:'pointer'}}>
-              ← Back
-            </span>
-          </div>
-        )}
-
-        {IS_DEMO || mode === 'reset' ? null : (
+        {/* Working-build role picker + email/password form. Untouched by
+            the demo refactor — keeps the legacy flow available for any
+            real PMCs we eventually onboard via the working deployment. */}
+        {!IS_DEMO && mode !== 'reset' && (
           <>
             <div style={{fontSize:10,letterSpacing:'0.1em',textTransform:'uppercase',color:'var(--text-secondary)',marginBottom:10,fontWeight:500}}>{t('login.selectRole')}</div>
             <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:10,marginBottom:28}}>
@@ -627,60 +656,22 @@ const LoginPage = ({ onLogin, syncStatus }) => {
                 );
               })}
             </div>
+
+            <form onSubmit={handleSubmit}>
+              <div className="form-group">
+                <label style={{fontSize:10,letterSpacing:'0.08em',textTransform:'uppercase',color:'var(--text-secondary)',fontWeight:500}}>{t('login.email')}</label>
+                <input className="form-input" type="email" value={email} onChange={e=>setEmail(e.target.value)} placeholder={t('login.emailPlaceholder')} style={{borderColor:'var(--border-light)',fontSize:13,borderRadius:8}}/>
+              </div>
+              <div className="form-group">
+                <label style={{fontSize:10,letterSpacing:'0.08em',textTransform:'uppercase',color:'var(--text-secondary)',fontWeight:500}}>{t('login.password')}</label>
+                <input className="form-input" type="password" value={password} onChange={e=>setPassword(e.target.value)} placeholder={t('login.passwordPlaceholder')} style={{borderColor:'var(--border-light)',fontSize:13,borderRadius:8}}/>
+              </div>
+              {error && <p style={{color:'#8b4a42',fontSize:12,marginBottom:12}}>{typeof error === 'string' ? error : 'Something went wrong. Please try again.'}</p>}
+              <button type="submit" className="btn btn-primary" disabled={submitting} style={{width:'100%',padding:'13px',fontSize:12,marginTop:4,background:'var(--bg-warm-dark)',border:'none',borderRadius:8,color:'#fff',fontWeight:500,letterSpacing:'0.02em',textTransform:'uppercase',cursor: submitting ? 'default' : 'pointer',opacity: submitting ? 0.7 : 1,transition:'all .2s'}}>
+                {submitting ? 'Working…' : t('login.signIn')}
+              </button>
+            </form>
           </>
-        )}
-
-        {/* Form — hidden on demo while the user is still on the choose
-            surface or in the reset-password flow. Once they pick "Create
-            a free demo account" or "Sign in" the matching form renders. */}
-        {!(IS_DEMO && mode === 'choose') && mode !== 'reset' && (
-        <form onSubmit={IS_DEMO && mode === 'signup' ? handleSignup : handleSubmit}>
-          {IS_DEMO && mode === 'signup' && (
-            <div className="form-group">
-              <label style={{fontSize:10,letterSpacing:'0.08em',textTransform:'uppercase',color:'var(--text-secondary)',fontWeight:500}}>Full name</label>
-              <input className="form-input" type="text" value={fullName} onChange={e=>setFullName(e.target.value)} placeholder="e.g. Hassan Al-Mansoori" style={{borderColor:'var(--border-light)',fontSize:13,borderRadius:8}}/>
-            </div>
-          )}
-          <div className="form-group">
-            <label style={{fontSize:10,letterSpacing:'0.08em',textTransform:'uppercase',color:'var(--text-secondary)',fontWeight:500}}>{t('login.email')}</label>
-            <input className="form-input" type="email" value={email} onChange={e=>setEmail(e.target.value)} placeholder={t('login.emailPlaceholder')} style={{borderColor:'var(--border-light)',fontSize:13,borderRadius:8}}/>
-          </div>
-          <div className="form-group">
-            <label style={{fontSize:10,letterSpacing:'0.08em',textTransform:'uppercase',color:'var(--text-secondary)',fontWeight:500}}>{t('login.password')}</label>
-            <input className="form-input" type="password" value={password} onChange={e=>setPassword(e.target.value)} placeholder={IS_DEMO && mode==='signup' ? 'Choose a password (min 6 characters)' : t('login.passwordPlaceholder')} style={{borderColor:'var(--border-light)',fontSize:13,borderRadius:8}}/>
-          </div>
-          {IS_DEMO && mode === 'signup' && (
-            <div className="form-group">
-              <label style={{fontSize:10,letterSpacing:'0.08em',textTransform:'uppercase',color:'var(--text-secondary)',fontWeight:500}}>Confirm password</label>
-              <input className="form-input" type="password" value={confirmPassword} onChange={e=>setConfirmPassword(e.target.value)} placeholder="Re-enter the same password" style={{borderColor:'var(--border-light)',fontSize:13,borderRadius:8}}/>
-            </div>
-          )}
-
-          {error && <p style={{color:'#8b4a42',fontSize:12,marginBottom:12}}>{typeof error === 'string' ? error : 'Something went wrong. Please try again.'}</p>}
-          <button type="submit" className="btn btn-primary" disabled={submitting} style={{width:'100%',padding:'13px',fontSize:12,marginTop:4,background:'var(--bg-warm-dark)',border:'none',borderRadius:8,color:'#fff',fontWeight:500,letterSpacing:'0.02em',textTransform:'uppercase',cursor: submitting ? 'default' : 'pointer',opacity: submitting ? 0.7 : 1,transition:'all .2s'}}>
-            {submitting ? 'Working…' : (IS_DEMO && mode === 'signup' ? 'Create account' : t('login.signIn'))}
-          </button>
-          {/* Signin mode: just Forgot password? on the right. The
-              "Create account" affordance now lives in the pill above
-              the form, so no duplicate link here. */}
-          {IS_DEMO && mode === 'signin' && (
-            <div style={{display:'flex',justifyContent:'flex-end',alignItems:'center',marginTop:14,gap:10,fontSize:12}}>
-              <span onClick={handleForgotPassword}
-                style={{color:'var(--text-muted)',cursor:'pointer'}}>
-                Forgot password?
-              </span>
-            </div>
-          )}
-          {IS_DEMO && mode === 'signup' && (
-            <div style={{marginTop:14,fontSize:12,textAlign:'left'}}>
-              <span style={{color:'var(--text-muted)'}}>Already have an account? </span>
-              <span onClick={() => { setMode('signin'); safeSetError(null); }}
-                style={{color:'var(--bg-warm-dark)',cursor:'pointer',fontWeight:500}}>
-                Sign in
-              </span>
-            </div>
-          )}
-        </form>
         )}
 
         {/* Footer — kept on the working build. The demo build drops it
