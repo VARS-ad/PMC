@@ -118,24 +118,6 @@ const DemoBanner = ({ showToast }) => {
       <span>
         Demo data is only for illustrative purposes.
       </span>
-      {/* Build identity — quiet right-aligned chip. Lets the user instantly
-          verify which deployed bundle they're on by hovering for the full
-          ISO time, or just reading the short SHA. */}
-      <span
-        title={'Build ' + __VARS_BUILD_SHA + (__VARS_BUILD_TIME ? ' · ' + __VARS_BUILD_TIME : '')}
-        style={{
-          position: 'absolute',
-          right: 14,
-          fontSize: 11,
-          fontWeight: 500,
-          color: '#7a5a1f',
-          opacity: 0.7,
-          letterSpacing: '0.02em',
-          fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
-        }}
-      >
-        build {__VARS_BUILD_SHA}
-      </span>
     </div>
   );
 };
