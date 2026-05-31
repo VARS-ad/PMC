@@ -110,7 +110,13 @@ const AssetCardPhoto = React.memo(({ storagePath, assetId, typeChipColor, proper
   // `stockUrl` (when given) is a group-deduped pick from the caller so two
   // cards in the same property-type row never share a cover; fall back to the
   // per-asset deterministic pick when no override is supplied.
-  const candidateUrl = url || stockUrl || pickStockPhoto(assetId, propertyType);
+  // Pass `name` so pickStockPhoto can hit BUILDING_NAME_PHOTOS first.
+  // Also make the name-pinned cover beat `stockUrl` (the group-deduped
+  // per-row pick from the caller) so an asset always lands its pinned
+  // UAE photo, not the random pool slot the deduper picked.
+  const namePinned = pickStockPhoto(assetId, propertyType, name);
+  const isNamePinned = !!BUILDING_NAME_PHOTOS[_normName(name)];
+  const candidateUrl = url || (isNamePinned ? namePinned : (stockUrl || namePinned));
   const [imgOk, setImgOk] = useState(true);
   useEffect(() => {
     if (!candidateUrl) { setImgOk(false); return; }
