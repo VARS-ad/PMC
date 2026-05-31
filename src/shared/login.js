@@ -575,23 +575,24 @@ const LoginPage = ({ onLogin, syncStatus }) => {
             visitor in their data. No email, no password, no recovery. */}
         {IS_DEMO && (
           <form onSubmit={handleStart}>
-            <div style={{textAlign:'center',marginBottom:24,fontSize:32,fontWeight:500,color:'var(--text-muted)',letterSpacing:'-0.015em',lineHeight:1.15}}>
+            <div style={{textAlign:'center',marginBottom:26,fontSize:30,fontWeight:400,color:'var(--text-muted)',letterSpacing:'-0.012em',lineHeight:1.15}}>
               What's your name?
             </div>
-            <div className="form-group">
+            {/* Input + Start are both width-locked to the same 240px column
+                and centred. Makes them read as a stacked pair instead of a
+                wide input with a small disconnected button below it. */}
+            <div style={{display:'flex',flexDirection:'column',alignItems:'center',gap:14}}>
               <input className="form-input" type="text" value={fullName}
                 onChange={e=>setFullName(e.target.value)}
-                placeholder="e.g. Hassan Al-Mansoori" autoFocus
-                style={{borderColor:'var(--border-light)',fontSize:14,borderRadius:8,textAlign:'center'}}/>
-            </div>
-            {error && <p style={{color:'#8b4a42',fontSize:12,marginBottom:12,textAlign:'center'}}>{typeof error === 'string' ? error : 'Something went wrong. Please try again.'}</p>}
-            <div style={{display:'flex',justifyContent:'center',marginTop:4}}>
+                placeholder="Your name" autoFocus
+                style={{width:240,borderColor:'var(--border-light)',fontSize:14,borderRadius:8,textAlign:'center',padding:'12px 14px'}}/>
               <button type="submit" className="btn btn-primary" disabled={submitting}
-                style={{padding:'14px 44px',fontSize:12,background:'var(--bg-warm-dark)',border:'none',borderRadius:8,color:'#fff',fontWeight:500,letterSpacing:'0.04em',textTransform:'uppercase',cursor: submitting ? 'default' : 'pointer',opacity: submitting ? 0.7 : 1,transition:'all .2s'}}>
+                style={{width:240,padding:'14px 0',fontSize:12,background:'var(--bg-warm-dark)',border:'none',borderRadius:8,color:'#fff',fontWeight:500,letterSpacing:'0.06em',textTransform:'uppercase',cursor: submitting ? 'default' : 'pointer',opacity: submitting ? 0.7 : 1,transition:'all .2s'}}>
                 {submitting ? 'Starting…' : 'Start'}
               </button>
             </div>
-            <div style={{textAlign:'center',marginTop:18,fontSize:11,color:'var(--text-muted)',letterSpacing:'0.02em'}}>
+            {error && <p style={{color:'#8b4a42',fontSize:12,marginTop:14,marginBottom:0,textAlign:'center'}}>{typeof error === 'string' ? error : 'Something went wrong. Please try again.'}</p>}
+            <div style={{textAlign:'center',marginTop:22,fontSize:11,color:'var(--text-muted)',letterSpacing:'0.02em'}}>
               No signup. No password. Just go.
             </div>
           </form>
