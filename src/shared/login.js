@@ -249,7 +249,11 @@ const LoginPage = ({ onLogin, syncStatus }) => {
               currentUser: { ...prev.currentUser, name: fullName, email: u.email || prev.currentUser?.email, phone: phone || prev.currentUser?.phone, role },
             }));
           }
-          if (mapped) { onLogin(mapped); return; }
+          if (mapped) {
+            try { track('signin_success', { role: mapped }); } catch (_) {}
+            onLogin(mapped);
+            return;
+          }
         }
       } catch (err) {
         // fall through to demo credentials
@@ -322,6 +326,7 @@ const LoginPage = ({ onLogin, syncStatus }) => {
           ...prev,
           currentUser: { ...prev.currentUser, name: displayName, email: u.email, phone: '', role: 'Property Manager' },
         }));
+        try { track('signup_completed', { autosignin: true }); } catch (_) {}
         onLogin('manager');
         return;
       }
@@ -331,6 +336,7 @@ const LoginPage = ({ onLogin, syncStatus }) => {
       // Stash the email so the confirm callback can pre-fill the sign-in
       // form once they come back from clicking the confirm link.
       try { sessionStorage.setItem('varspm_pending_confirm_email', email); } catch (_) {}
+      try { track('signup_email_sent'); } catch (_) {}
       flashNotice('Account created. Check your email to confirm, then sign in.');
       setMode('signin');
       setPassword('');
@@ -556,7 +562,10 @@ const LoginPage = ({ onLogin, syncStatus }) => {
               {id:'signin', label:'Sign in'},
             ].map(opt => (
               <div key={opt.id}
-                onClick={() => { setMode(opt.id); safeSetError(null); }}
+                onClick={() => {
+                  try { track(opt.id === 'signup' ? 'demo_signup_click' : 'demo_signin_click'); } catch (_) {}
+                  setMode(opt.id); safeSetError(null);
+                }}
                 style={{
                   display:'flex',alignItems:'center',justifyContent:'center',gap:8,
                   padding:'17px 20px',cursor:'pointer',

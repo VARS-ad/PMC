@@ -22,6 +22,15 @@
 <link rel="stylesheet" href="src/styles/base.css">
 <link rel="stylesheet" href="src/styles/resident.css">
 <link rel="stylesheet" href="src/styles/security.css">
+
+<!-- Vercel Web Analytics — privacy-friendly pageview tracking + custom
+     events (see src/lib/analytics.js wrapper). The inline stub queues
+     any va('event', …) calls fired before the deferred script finishes
+     loading, so no events get dropped during cold start. -->
+<script>
+  window.va = window.va || function () { (window.vaq = window.vaq || []).push(arguments); };
+</script>
+<script defer src="/_vercel/insights/script.js"></script>
 </head>
 <body>
 <div id="root"></div>
@@ -34,6 +43,7 @@ const AppContext = createContext();
 const useApp = () => useContext(AppContext);
 </script>
 
+<script type="text/babel" src="src/lib/analytics.js"></script>
 <script type="text/babel" src="src/lib/lazy-libs.js"></script>
 <script type="text/babel" src="src/data/units.js"></script>
 <script type="text/babel" src="src/data/residents.js"></script>
