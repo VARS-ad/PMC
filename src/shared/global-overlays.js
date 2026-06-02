@@ -250,6 +250,32 @@ const WhatsAppHelpWidget = () => {
         </div>
       )}
 
+      {/* Caption above the closed bubble — invites the visitor to click. */}
+      {!open && (
+        <div
+          aria-hidden="true"
+          style={{
+            position: 'fixed',
+            right: 24,
+            bottom: bottomOffset + 72,
+            maxWidth: 220,
+            background: '#fff',
+            color: '#1a1a1a',
+            fontSize: 13,
+            lineHeight: 1.35,
+            padding: '8px 12px',
+            borderRadius: 12,
+            border: '1px solid #e6e2dd',
+            boxShadow: '0 6px 16px rgba(0,0,0,0.10), 0 1px 2px rgba(0,0,0,0.06)',
+            textAlign: 'right',
+            zIndex: 260,
+            pointerEvents: 'none',
+          }}
+        >
+          We are happy for any feedback and any comments
+        </div>
+      )}
+
       {/* Floating launcher button */}
       <button
         onClick={() => setOpen(o => !o)}
