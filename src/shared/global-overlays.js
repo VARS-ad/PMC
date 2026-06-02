@@ -129,7 +129,7 @@ const DemoBanner = ({ showToast }) => {
 // Feedback path keeps the visitor inside the page (just a thank-you screen);
 // WhatsApp path hands them to their app for a live chat.
 const WA_PHONE   = '971504967084';   // E.164 without the '+', as wa.me expects
-const WA_PROMPT  = 'Hi! Got any questions or suggestions? Drop us a message — we’ll get back to you within 10 minutes.';
+const WA_PROMPT  = 'We love your feedback and suggestions - it makes our software better. We really appreciate it.';
 // Form endpoint — formsubmit.co relays the POST as an email to this address.
 // First submission triggers a one-time activation email to the inbox; click
 // the "Activate" link inside it and all future submits arrive normally.
@@ -222,8 +222,7 @@ const WhatsAppHelpWidget = () => {
               <WhatsAppIcon size={22}/>
             </div>
             <div style={{flex:1, minWidth:0}}>
-              <div style={{fontSize:14, fontWeight:600, lineHeight:1.2}}>VARS Team</div>
-              <div style={{fontSize:12, opacity:0.85, lineHeight:1.3, marginTop:2}}>Replies within 10 minutes</div>
+              <div style={{fontSize:15, fontWeight:600, lineHeight:1.2}}>VARS Team</div>
             </div>
             <button
               onClick={closePanel}
@@ -245,7 +244,7 @@ const WhatsAppHelpWidget = () => {
               marginBottom:12,
             }}>
               {stage === 'sent'
-                ? '✓ Thanks for your feedback — it’s really valuable to us. We read every message. 😊'
+                ? '✓ Thanks for your feedback - it’s really valuable to us. We read every message. 😊'
                 : WA_PROMPT}
             </div>
 
@@ -281,7 +280,7 @@ const WhatsAppHelpWidget = () => {
                   disabled={!msg.trim() || stage === 'sending'}
                   style={{
                     marginTop:10, width:'100%',
-                    background:'#25D366', color:'#fff', border:'none',
+                    background:'#075E54', color:'#fff', border:'none',
                     borderRadius:10, padding:'11px 14px',
                     fontSize:14, fontWeight:600,
                     cursor: (msg.trim() && stage !== 'sending') ? 'pointer' : 'not-allowed',
