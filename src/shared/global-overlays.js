@@ -121,13 +121,19 @@ const DemoBanner = ({ showToast }) => {
   );
 };
 
-// ---- WhatsApp help bubble ---------------------------------------------------
-// Floating green circle at bottom-right; tap to open a small panel with a
-// textarea + Send button. Send opens wa.me with the message pre-typed so the
-// visitor's WhatsApp jumps straight into a chat with the VARS team — no
-// backend required.
+// ---- Feedback / WhatsApp help bubble ----------------------------------------
+// Floating green circle at bottom-right; tap to open a small panel. Visitor
+// can either:
+//   1) Send feedback — POST to formsubmit.co which emails the VARS team
+//   2) Contact on WhatsApp — opens wa.me with their typed message pre-filled
+// Feedback path keeps the visitor inside the page (just a thank-you screen);
+// WhatsApp path hands them to their app for a live chat.
 const WA_PHONE   = '971504967084';   // E.164 without the '+', as wa.me expects
-const WA_PROMPT  = 'Hi! Got any questions or suggestions? Send us a message and we’ll get back to you within 10 minutes.';
+const WA_PROMPT  = 'Hi! Got any questions or suggestions? Drop us a message — we’ll get back to you within 10 minutes.';
+// Form endpoint — formsubmit.co relays the POST as an email to this address.
+// First submission triggers a one-time activation email to the inbox; click
+// the "Activate" link inside it and all future submits arrive normally.
+const FEEDBACK_ENDPOINT = 'https://formsubmit.co/ajax/aleksandrov.hse@gmail.com';
 
 const WhatsAppIcon = ({ size = 30 }) => (
   // Official-style glyph, white on transparent so it sits on the green button.
@@ -137,25 +143,46 @@ const WhatsAppIcon = ({ size = 30 }) => (
 );
 
 const WhatsAppHelpWidget = () => {
-  const [open, setOpen] = React.useState(false);
-  const [msg, setMsg]   = React.useState('');
+  const [open, setOpen]   = React.useState(false);
+  const [msg, setMsg]     = React.useState('');
+  // 'compose' | 'sending' | 'sent' | 'error'
+  const [stage, setStage] = React.useState('compose');
 
-  const send = () => {
+  const sendFeedback = async () => {
     const text = (msg || '').trim();
-    // Wa.me opens fine without a text param, but we encourage at least a
-    // hint so the user lands in WhatsApp with something to send.
-    const url = 'https://wa.me/' + WA_PHONE + (text ? ('?text=' + encodeURIComponent(text)) : '');
-    try { window.open(url, '_blank', 'noopener,noreferrer'); } catch (_) {}
-    setMsg('');
-    setOpen(false);
+    if (!text || stage === 'sending') return;
+    setStage('sending');
+    try {
+      const res = await fetch(FEEDBACK_ENDPOINT, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+        body: JSON.stringify({
+          _subject: 'VARS demo — feedback',
+          _captcha: 'false',
+          source:   'demo.vars.live',
+          page:     (typeof window !== 'undefined') ? window.location.href : '',
+          message:  text,
+        }),
+      });
+      if (!res.ok) throw new Error('http ' + res.status);
+      setStage('sent');
+      setMsg('');
+    } catch (e) {
+      console.log('Feedback send error:', e);
+      setStage('error');
+    }
   };
 
-  // Keyboard: Enter sends, Shift+Enter inserts newline — matches WhatsApp.
-  const onKeyDown = (e) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      send();
-    }
+  const openWhatsApp = () => {
+    const text = (msg || '').trim();
+    const url  = 'https://wa.me/' + WA_PHONE + (text ? ('?text=' + encodeURIComponent(text)) : '');
+    try { window.open(url, '_blank', 'noopener,noreferrer'); } catch (_) {}
+  };
+
+  // Close + reset to compose so the next open is a clean panel.
+  const closePanel = () => {
+    setOpen(false);
+    setTimeout(() => { setStage('compose'); setMsg(''); }, 250);
   };
 
   // Bottom offset bumps up on mobile so the bubble doesn't overlap the
@@ -199,7 +226,7 @@ const WhatsAppHelpWidget = () => {
               <div style={{fontSize:12, opacity:0.85, lineHeight:1.3, marginTop:2}}>Replies within 10 minutes</div>
             </div>
             <button
-              onClick={() => setOpen(false)}
+              onClick={closePanel}
               aria-label="Close"
               style={{
                 background:'transparent', border:'none', color:'#fff',
@@ -210,55 +237,89 @@ const WhatsAppHelpWidget = () => {
 
           {/* Body */}
           <div style={{padding:'16px', background:'#ECE5DD'}}>
+            {/* Chat-bubble prompt — swaps to a thank-you after feedback is sent */}
             <div style={{
               background:'#fff', borderRadius:10, padding:'10px 12px',
               fontSize:13, lineHeight:1.45, color:'#1a1a1a',
               boxShadow:'0 1px 1px rgba(0,0,0,0.06)',
               marginBottom:12,
             }}>
-              {WA_PROMPT}
+              {stage === 'sent'
+                ? '✓ Thanks for your feedback — it’s really valuable to us. We read every message. 😊'
+                : WA_PROMPT}
             </div>
 
-            <textarea
-              value={msg}
-              onChange={e => setMsg(e.target.value)}
-              onKeyDown={onKeyDown}
-              placeholder="Type your message…"
-              rows={3}
-              style={{
-                width:'100%', boxSizing:'border-box',
-                border:'1px solid #d6cfc7', borderRadius:10,
-                padding:'10px 12px', fontSize:13, fontFamily:'inherit',
-                resize:'none', outline:'none', background:'#fff',
-              }}
-            />
+            {/* Compose UI — hidden once feedback has been sent successfully */}
+            {stage !== 'sent' && (
+              <React.Fragment>
+                <textarea
+                  value={msg}
+                  onChange={e => setMsg(e.target.value)}
+                  placeholder="Type your message…"
+                  rows={3}
+                  disabled={stage === 'sending'}
+                  style={{
+                    width:'100%', boxSizing:'border-box',
+                    border:'1px solid #d6cfc7', borderRadius:10,
+                    padding:'10px 12px', fontSize:13, fontFamily:'inherit',
+                    resize:'none', outline:'none', background:'#fff',
+                  }}
+                />
 
+                {stage === 'error' && (
+                  <div style={{
+                    marginTop:8,
+                    background:'#fff3f0', border:'1px solid #f5cabb', color:'#a4310e',
+                    borderRadius:8, padding:'8px 10px', fontSize:12,
+                  }}>
+                    Couldn’t send right now — please try again or message us on WhatsApp.
+                  </div>
+                )}
+
+                <button
+                  onClick={sendFeedback}
+                  disabled={!msg.trim() || stage === 'sending'}
+                  style={{
+                    marginTop:10, width:'100%',
+                    background:'#25D366', color:'#fff', border:'none',
+                    borderRadius:10, padding:'11px 14px',
+                    fontSize:14, fontWeight:600,
+                    cursor: (msg.trim() && stage !== 'sending') ? 'pointer' : 'not-allowed',
+                    opacity: (msg.trim() && stage !== 'sending') ? 1 : 0.55,
+                  }}
+                >
+                  {stage === 'sending' ? 'Sending…' : 'Send feedback'}
+                </button>
+              </React.Fragment>
+            )}
+
+            {/* WhatsApp contact — always visible, both before and after sending */}
             <button
-              onClick={send}
+              onClick={openWhatsApp}
               style={{
                 marginTop:10, width:'100%',
-                background:'#25D366', color:'#fff', border:'none',
+                background:'#075E54', color:'#fff', border:'none',
                 borderRadius:10, padding:'11px 14px',
                 fontSize:14, fontWeight:600, cursor:'pointer',
                 display:'flex', alignItems:'center', justifyContent:'center', gap:8,
               }}
             >
               <WhatsAppIcon size={18}/>
-              <span>Send on WhatsApp</span>
+              <span>Contact us on WhatsApp</span>
             </button>
           </div>
         </div>
       )}
 
-      {/* Caption above the closed bubble — invites the visitor to click. */}
+      {/* Caption to the LEFT of the closed bubble — invites the visitor to click. */}
       {!open && (
         <div
           aria-hidden="true"
           style={{
             position: 'fixed',
-            right: 24,
-            bottom: bottomOffset + 72,
-            maxWidth: 220,
+            right: 96,                  // 24 (bubble right) + 60 (bubble) + 12 (gap)
+            bottom: bottomOffset + 8,   // roughly centred against the 60px bubble
+            maxWidth: 230,
             background: '#fff',
             color: '#1a1a1a',
             fontSize: 13,
@@ -272,7 +333,7 @@ const WhatsAppHelpWidget = () => {
             pointerEvents: 'none',
           }}
         >
-          We are happy for any feedback and any comments
+          Thank you for feedback — <span style={{color:'#7a6f66'}}>especially what we can improve</span> 😊
         </div>
       )}
 
