@@ -129,7 +129,7 @@ const DemoBanner = ({ showToast }) => {
 // Feedback path keeps the visitor inside the page (just a thank-you screen);
 // WhatsApp path hands them to their app for a live chat.
 const WA_PHONE   = '971504967084';   // E.164 without the '+', as wa.me expects
-const WA_PROMPT  = 'We love your feedback and suggestions - it makes our software better. We really appreciate it.';
+const WA_PROMPT  = 'We love your feedback and suggestions - it makes our software better.';
 // Form endpoint — formsubmit.co relays the POST as an email to this address.
 // First submission triggers a one-time activation email to the inbox; click
 // the "Activate" link inside it and all future submits arrive normally.
@@ -244,7 +244,7 @@ const WhatsAppHelpWidget = () => {
               marginBottom:12,
             }}>
               {stage === 'sent'
-                ? '✓ You made our app better. Much appreciated. 😊'
+                ? '✓ Alhamdulillah, you made our app better. 😊'
                 : WA_PROMPT}
             </div>
 
@@ -289,6 +289,19 @@ const WhatsAppHelpWidget = () => {
                 >
                   {stage === 'sending' ? 'Sending…' : 'Send feedback'}
                 </button>
+
+                {/* "or" divider sits between the two CTAs so it's clear they're
+                    alternatives, not a sequence. */}
+                <div style={{
+                  display:'flex', alignItems:'center', gap:10,
+                  marginTop:12,
+                  fontSize:12, color:'#7a6f66', fontWeight:500,
+                  textTransform:'lowercase', letterSpacing:'0.02em',
+                }}>
+                  <div style={{flex:1, height:1, background:'#c9c0b8'}}/>
+                  <span>or</span>
+                  <div style={{flex:1, height:1, background:'#c9c0b8'}}/>
+                </div>
               </React.Fragment>
             )}
 
