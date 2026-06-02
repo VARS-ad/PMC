@@ -244,7 +244,7 @@ const WhatsAppHelpWidget = () => {
               marginBottom:12,
             }}>
               {stage === 'sent'
-                ? '✓ Thanks for your feedback - it’s really valuable to us. We read every message. 😊'
+                ? '✓ Alhamdulillah, you made our app better. 😊'
                 : WA_PROMPT}
             </div>
 
