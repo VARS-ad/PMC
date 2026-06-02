@@ -333,7 +333,7 @@ const WhatsAppHelpWidget = () => {
             pointerEvents: 'none',
           }}
         >
-          Thank you for feedback — <span style={{color:'#7a6f66'}}>especially what we can improve</span> 😊
+          Thank you for feedback - <span style={{color:'#7a6f66'}}>especially what we can improve</span> 😊
         </div>
       )}
 
