@@ -290,8 +290,9 @@ const App = () => {
   };
 
   // If not logged in, show login page (with scan notice if QR was scanned).
-  // GlobalOverlays (WhatsApp help button) is intentionally NOT mounted here
-  // — support chat lives inside the app, not on the public splash.
+  // GlobalOverlays mounts here too on the demo build so the demo banner +
+  // WhatsApp help bubble are visible before sign-in — visitors can ping us
+  // straight from the splash.
   if (!role) return (
     <AppContext.Provider value={{ data, setData, showToast, language, setLanguage, t, selectedProperties, setSelectedProperties, timeRange, setTimeRange, customStart, setCustomStart, customEnd, setCustomEnd }}>
       <LoginPage onLogin={(selectedRole) => {
@@ -299,6 +300,8 @@ const App = () => {
         setRole(selectedRole);
         setShowWelcome(true);
       }} syncStatus={syncStatus}/>
+      <GlobalOverlays showToast={showToast}/>
+      {toast && <div className="toast">{toast}</div>}
     </AppContext.Provider>
   );
 

@@ -1,10 +1,9 @@
 // ==================== GLOBAL OVERLAYS ====================
-// Host for always-on widgets that float above every page across all three
-// role apps (PMC / Resident / Security). Currently a thin scaffold —
-// historically also rendered a WhatsApp help button and a demo banner;
-// both have been removed at user request.
-// Rendered from src/app.js once per role-app so it stays above route
-// changes and isn't re-mounted per page.
+// Host for always-on widgets that float above every page on the demo
+// build: the slim "demo data" banner at the top, and a floating
+// WhatsApp help bubble at the bottom-right that lets visitors message
+// the team directly. Rendered from src/app.js for the login splash AND
+// each role app (PMC / Resident / Security) so it survives route changes.
 
 // IS_DEMO is derived the same way the rest of the codebase does it (see
 // src/shared/login.js, src/pmc/profile-creation.js) so behaviour stays in
@@ -122,10 +121,169 @@ const DemoBanner = ({ showToast }) => {
   );
 };
 
-// Single host component — renders the demo banner on the demo build so the
-// "this isn't real data" notice shows on every page (login, PMC overview,
-// resident, security). Returns null on the working build.
+// ---- WhatsApp help bubble ---------------------------------------------------
+// Floating green circle at bottom-right; tap to open a small panel with a
+// textarea + Send button. Send opens wa.me with the message pre-typed so the
+// visitor's WhatsApp jumps straight into a chat with the VARS team — no
+// backend required.
+const WA_PHONE   = '971504967084';   // E.164 without the '+', as wa.me expects
+const WA_PROMPT  = 'Hi! Got any questions or suggestions? Send us a message and we’ll get back to you within 10 minutes.';
+
+const WhatsAppIcon = ({ size = 30 }) => (
+  // Official-style glyph, white on transparent so it sits on the green button.
+  <svg width={size} height={size} viewBox="0 0 32 32" fill="none" aria-hidden="true">
+    <path d="M16.02 3.2c-7.07 0-12.8 5.73-12.8 12.8 0 2.26.6 4.47 1.73 6.4L3.2 28.8l6.6-1.72a12.74 12.74 0 0 0 6.22 1.6h.01c7.06 0 12.8-5.74 12.8-12.8 0-3.42-1.33-6.63-3.75-9.05A12.71 12.71 0 0 0 16.02 3.2zm0 23.34h-.01a10.6 10.6 0 0 1-5.4-1.48l-.39-.23-3.92 1.03 1.05-3.82-.25-.4a10.59 10.59 0 0 1-1.62-5.64c0-5.86 4.77-10.63 10.64-10.63 2.84 0 5.51 1.11 7.52 3.12a10.56 10.56 0 0 1 3.11 7.52c0 5.87-4.77 10.63-10.63 10.63zm5.83-7.96c-.32-.16-1.89-.93-2.18-1.04-.29-.11-.5-.16-.72.16-.21.32-.82 1.04-1 1.26-.18.21-.37.24-.69.08-.32-.16-1.35-.5-2.57-1.59-.95-.85-1.59-1.89-1.77-2.21-.18-.32-.02-.49.14-.65.14-.14.32-.37.48-.56.16-.18.21-.32.32-.53.11-.21.05-.4-.03-.56-.08-.16-.72-1.73-.99-2.37-.26-.62-.52-.54-.72-.55h-.61c-.21 0-.56.08-.85.4-.29.32-1.12 1.1-1.12 2.67 0 1.58 1.15 3.1 1.31 3.32.16.21 2.27 3.47 5.5 4.86.77.33 1.37.53 1.83.68.77.24 1.47.21 2.02.13.62-.09 1.89-.77 2.16-1.52.27-.74.27-1.38.19-1.52-.08-.13-.29-.21-.61-.37z" fill="#fff"/>
+  </svg>
+);
+
+const WhatsAppHelpWidget = () => {
+  const [open, setOpen] = React.useState(false);
+  const [msg, setMsg]   = React.useState('');
+
+  const send = () => {
+    const text = (msg || '').trim();
+    // Wa.me opens fine without a text param, but we encourage at least a
+    // hint so the user lands in WhatsApp with something to send.
+    const url = 'https://wa.me/' + WA_PHONE + (text ? ('?text=' + encodeURIComponent(text)) : '');
+    try { window.open(url, '_blank', 'noopener,noreferrer'); } catch (_) {}
+    setMsg('');
+    setOpen(false);
+  };
+
+  // Keyboard: Enter sends, Shift+Enter inserts newline — matches WhatsApp.
+  const onKeyDown = (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      send();
+    }
+  };
+
+  // Bottom offset bumps up on mobile so the bubble doesn't overlap the
+  // mobile-bottom-nav inside Resident / Security. The nav is hidden on
+  // desktop via CSS, so on wider screens we sit closer to the corner.
+  const bottomOffset = (typeof window !== 'undefined' && window.innerWidth < 720) ? 86 : 24;
+
+  return (
+    <React.Fragment>
+      {/* Expanded panel */}
+      {open && (
+        <div
+          role="dialog"
+          aria-label="Message VARS support on WhatsApp"
+          style={{
+            position: 'fixed',
+            right: 24,
+            bottom: bottomOffset + 78,
+            width: 320,
+            maxWidth: 'calc(100vw - 32px)',
+            background: '#fff',
+            borderRadius: 14,
+            boxShadow: '0 12px 32px rgba(0,0,0,0.18), 0 2px 6px rgba(0,0,0,0.08)',
+            border: '1px solid #e6e2dd',
+            zIndex: 260,
+            overflow: 'hidden',
+            fontFamily: 'inherit',
+          }}
+        >
+          {/* Header — WhatsApp green */}
+          <div style={{background:'#075E54', color:'#fff', padding:'14px 16px', display:'flex', alignItems:'center', gap:12}}>
+            <div style={{
+              width:40, height:40, borderRadius:'50%',
+              background:'#25D366', display:'flex', alignItems:'center', justifyContent:'center',
+              flexShrink:0,
+            }}>
+              <WhatsAppIcon size={22}/>
+            </div>
+            <div style={{flex:1, minWidth:0}}>
+              <div style={{fontSize:14, fontWeight:600, lineHeight:1.2}}>VARS Team</div>
+              <div style={{fontSize:12, opacity:0.85, lineHeight:1.3, marginTop:2}}>Replies within 10 minutes</div>
+            </div>
+            <button
+              onClick={() => setOpen(false)}
+              aria-label="Close"
+              style={{
+                background:'transparent', border:'none', color:'#fff',
+                fontSize:22, lineHeight:1, cursor:'pointer', padding:4,
+              }}
+            >×</button>
+          </div>
+
+          {/* Body */}
+          <div style={{padding:'16px', background:'#ECE5DD'}}>
+            <div style={{
+              background:'#fff', borderRadius:10, padding:'10px 12px',
+              fontSize:13, lineHeight:1.45, color:'#1a1a1a',
+              boxShadow:'0 1px 1px rgba(0,0,0,0.06)',
+              marginBottom:12,
+            }}>
+              {WA_PROMPT}
+            </div>
+
+            <textarea
+              value={msg}
+              onChange={e => setMsg(e.target.value)}
+              onKeyDown={onKeyDown}
+              placeholder="Type your message…"
+              rows={3}
+              style={{
+                width:'100%', boxSizing:'border-box',
+                border:'1px solid #d6cfc7', borderRadius:10,
+                padding:'10px 12px', fontSize:13, fontFamily:'inherit',
+                resize:'none', outline:'none', background:'#fff',
+              }}
+            />
+
+            <button
+              onClick={send}
+              style={{
+                marginTop:10, width:'100%',
+                background:'#25D366', color:'#fff', border:'none',
+                borderRadius:10, padding:'11px 14px',
+                fontSize:14, fontWeight:600, cursor:'pointer',
+                display:'flex', alignItems:'center', justifyContent:'center', gap:8,
+              }}
+            >
+              <WhatsAppIcon size={18}/>
+              <span>Send on WhatsApp</span>
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Floating launcher button */}
+      <button
+        onClick={() => setOpen(o => !o)}
+        aria-label={open ? 'Close WhatsApp chat' : 'Chat with VARS on WhatsApp'}
+        style={{
+          position: 'fixed',
+          right: 24,
+          bottom: bottomOffset,
+          width: 60, height: 60, borderRadius: '50%',
+          background: '#25D366',
+          border: 'none',
+          boxShadow: '0 6px 18px rgba(37,211,102,0.45), 0 2px 4px rgba(0,0,0,0.12)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          cursor: 'pointer',
+          zIndex: 260,
+        }}
+      >
+        {open
+          ? <span style={{color:'#fff', fontSize:28, lineHeight:1, fontWeight:300}}>×</span>
+          : <WhatsAppIcon size={30}/>}
+      </button>
+    </React.Fragment>
+  );
+};
+
+// Single host component — renders the demo banner + WhatsApp help bubble on
+// the demo build (login splash, PMC, resident, security). Returns null on
+// the working build so production stays clean.
 const GlobalOverlays = ({ showToast }) => {
   if (!__VARS_IS_DEMO) return null;
-  return <DemoBanner showToast={showToast}/>;
+  return (
+    <React.Fragment>
+      <DemoBanner showToast={showToast}/>
+      <WhatsAppHelpWidget/>
+    </React.Fragment>
+  );
 };
